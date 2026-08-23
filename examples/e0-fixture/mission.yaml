@@ -1,0 +1,34 @@
+schemaVersion: missionbraid.dev/mission/v1
+title: Complete the controlled Effect Ledger through a process interruption
+objective: >-
+  Complete the dependency-free JSONL Effect Ledger in the disposable workspace,
+  preserving meaningful work across a real Codex process interruption and
+  satisfying the original public verification contract after resume.
+workspace: '${WORKSPACE}'
+acceptanceCriteria:
+  - id: effect-ledger-public-contract
+    description: >-
+      The unchanged public tests pass for record, replay, idempotency, payload
+      conflict, deterministic serialization, incomplete-tail recovery, and CLI behavior.
+    verifier:
+      kind: command
+      executable: node
+      args:
+        - verify.mjs
+      cwd: '${MISSION_FILE_DIR}'
+      timeoutMs: 30000
+attemptPlan:
+  - stageId: codex-completion
+    profile:
+      harness: codex
+      model: gpt-5.6-sol
+      reasoningEffort: medium
+      injectionBudgetTokens: 1600
+      permissionMode: workspace-write
+    onFailure: stop
+    instruction: >-
+      Read AGENTS.md, README.md, and all public tests first. Complete the
+      dependency-free JSONL Effect Ledger and CLI so every public test passes.
+      Preserve the single-writer scope and incomplete-final-line recovery
+      boundary. Do not edit tests, install dependencies, use the network, or
+      create any external side effect.

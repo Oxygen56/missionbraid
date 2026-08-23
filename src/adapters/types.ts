@@ -1,0 +1,107 @@
+export type RuntimeId = 'codex' | 'qoder';
+
+export type OutputStream = 'stdout' | 'stderr';
+
+export interface ProcessOutputLine {
+  readonly sequence: number;
+  readonly stream: OutputStream;
+  readonly line: string;
+  readonly receivedAt: string;
+}
+
+export interface RuntimeOutputLine extends ProcessOutputLine {
+  readonly runtime: RuntimeId;
+  readonly value?: unknown;
+}
+
+export type OutputLineObserver = (event: ProcessOutputLine) => void | Promise<void>;
+
+export type ProcessStartObserver = (pid: number) => void | Promise<void>;
+
+export type RuntimeOutputObserver = (event: RuntimeOutputLine) => void | Promise<void>;
+
+export interface ProcessInvocation {
+  readonly command: string;
+  readonly args: readonly string[];
+  readonly cwd: string;
+  /** Written to stdin but intentionally omitted from the execution record. */
+  readonly stdin?: string;
+}
+
+export interface RecordedProcessInvocation {
+  readonly command: string;
+  readonly args: readonly string[];
+  readonly cwd: string;
+}
+
+export interface SerializedProcessError {
+  readonly name: string;
+  readonly message: string;
+  readonly code?: string;
+}
+
+export interface ProcessRunOptions {
+  readonly signal?: AbortSignal;
+  readonly onStart?: ProcessStartObserver;
+  readonly onOutput?: OutputLineObserver;
+  readonly abortGraceMs?: number;
+}
+
+export interface ProcessRunResult {
+  readonly invocation: RecordedProcessInvocation;
+  readonly pid: number | null;
+  readonly exitCode: number | null;
+  readonly signal: NodeJS.Signals | null;
+  readonly startedAt: string;
+  readonly endedAt: string;
+  readonly durationMs: number;
+  readonly aborted: boolean;
+  readonly stdoutLineCount: number;
+  readonly stderrLineCount: number;
+  readonly spawnError?: SerializedProcessError;
+  readonly startError?: SerializedProcessError;
+  readonly observerError?: SerializedProcessError;
+}
+
+export type RuntimeDetectionStatus = 'ready' | 'present-unresponsive' | 'present-error' | 'missing';
+
+export interface RuntimeDetection {
+  readonly runtime: RuntimeId;
+  readonly command: string;
+  readonly executablePath: string | null;
+  readonly available: boolean;
+  readonly responsive: boolean;
+  readonly status: RuntimeDetectionStatus;
+  readonly version: string | null;
+  readonly versionSource: 'output' | 'path' | null;
+  readonly checkedAt: string;
+  readonly durationMs: number;
+  readonly probeExitCode: number | null;
+  readonly probeSignal: NodeJS.Signals | null;
+}
+
+export interface AdapterRunRequest {
+  readonly workspace: string;
+  readonly prompt: string;
+  readonly signal?: AbortSignal;
+  readonly onStart?: ProcessStartObserver;
+  readonly onOutput?: RuntimeOutputObserver;
+}
+
+export interface RuntimeInvocation extends ProcessInvocation {
+  readonly runtime: RuntimeId;
+  readonly outputProtocol: 'codex-jsonl' | 'qoder-stream-json';
+}
+
+export interface RuntimeRunResult {
+  readonly runtime: RuntimeId;
+  readonly outputProtocol: RuntimeInvocation['outputProtocol'];
+  readonly process: ProcessRunResult;
+}
+
+export interface RuntimeAdapter<Request extends AdapterRunRequest = AdapterRunRequest> {
+  readonly runtime: RuntimeId;
+  detect(): Promise<RuntimeDetection>;
+  buildInvocation(request: Request): RuntimeInvocation;
+  run(request: Request): Promise<RuntimeRunResult>;
+}

@@ -1,0 +1,56 @@
+schemaVersion: missionbraid.dev/mission/v1
+title: Complete the controlled interrupted-tail-recovering Effect Ledger
+objective: >-
+  Complete the dependency-free JSONL Effect Ledger in the disposable workspace
+  through a real Codex-to-Qoder handoff, preserving the first Attempt's work and
+  satisfying the original public and hidden verification contract.
+workspace: '${WORKSPACE}'
+acceptanceCriteria:
+  - id: effect-ledger-contract
+    description: >-
+      Public and independent hidden tests pass for record, replay, idempotency,
+      payload conflict, deterministic serialization, incomplete-tail recovery,
+      CLI behavior, and controller-recorded Codex-to-Qoder provenance.
+    verifier:
+      kind: command
+      executable: node
+      args:
+        - hidden-verifier/verify.mjs
+      cwd: '${MISSION_FILE_DIR}'
+      timeoutMs: 30000
+attemptPlan:
+  - stageId: codex-core
+    profile:
+      harness: codex
+      model: gpt-5.6-sol
+      reasoningEffort: medium
+      injectionBudgetTokens: 1600
+      permissionMode: workspace-write
+    onFailure: handoff
+    instruction: >-
+      Read AGENTS.md, README.md, and the public tests first. Implement only the
+      record, replay, deterministic serialization, and same-key/same-payload
+      idempotency core. Create src/effect-core.mjs with the API specified in
+      README.md and use it from src/ledger.mjs. Make `node --test
+      test/core.test.mjs` pass. Leave src/cli.mjs, payload-conflict behavior, and
+      incomplete-tail recovery as explicit remaining work for the next runtime.
+      Do not edit tests, install dependencies, use the network, or create any
+      external side effect.
+  - stageId: qoder-completion
+    profile:
+      harness: qoder
+      model: Qwen3.8-Max
+      reasoningEffort: medium
+      injectionBudgetTokens: 1600
+      permissionMode: bypass_permissions
+    onFailure: stop
+    instruction: >-
+      Continue from the existing workspace; do not replace the previous
+      runtime's working implementation. Read AGENTS.md, README.md, the current
+      diff, and every public test. Finish payload-conflict detection,
+      incomplete-final-line recovery, corruption handling, and the record/replay
+      CLI by extending src/ledger.mjs and src/cli.mjs. Preserve
+      src/effect-core.mjs byte-for-byte and keep src/ledger.mjs dependent on it.
+      Run `node --test` and leave the workspace satisfying the full public
+      contract. Do not edit tests, install dependencies, use the network, or
+      create any external side effect.

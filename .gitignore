@@ -1,0 +1,12 @@
+node_modules/
+dist/
+coverage/
+.missionbraid/
+*.db
+*.db-shm
+*.db-wal
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example
