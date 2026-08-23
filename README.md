@@ -130,9 +130,10 @@ Controller state must remain outside the target workspace.
   original Contract passed, and a verified Receipt was issued against
   implementation commit `9d5b4d3`.
 - [E1 blocked local real-runtime evidence](evidence/e1-blocked-local-2026-08-24.json):
-  Codex produced a checkpoint and Capsule for Qoder, but Qoder exited before
-  acknowledgement with observed provider code `118`, classified as
-  `CREDIT_LIMIT` at the runtime-account layer. No Receipt was issued.
+  MissionBraid captured Codex's workspace changes as a checkpoint and prepared
+  a Capsule for Qoder, but Qoder exited before acknowledgement with observed
+  provider code `118`, classified as `CREDIT_LIMIT` at the runtime-account
+  layer. No Receipt was issued.
 
 These are local, commit-bound records, not an independent reproduction,
 hostile-runtime isolation result, production deployment, or verified E1 result.
