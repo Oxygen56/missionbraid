@@ -48,5 +48,7 @@ and recursively sorted payload object keys:
 
 The terminating newline is the commit marker. A final fragment without that
 marker is discarded during recovery; malformed committed lines are corruption
-and must not be silently ignored. The fixture assumes one writer and makes no
-claim about concurrent writers or sudden power loss.
+and must not be silently ignored. A committed record must contain exactly the
+top-level fields `schemaVersion`, `key`, and `payload`; extra fields are also
+corruption. The fixture assumes one writer and makes no claim about concurrent
+writers or sudden power loss.

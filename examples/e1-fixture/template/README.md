@@ -47,8 +47,10 @@ and must not append another line.
 Every committed JSONL record ends with `\n`; the newline is its commit marker.
 Before replaying or appending, discard only a non-empty final fragment that has
 no newline. A newline-terminated line with malformed JSON, an unknown schema,
-or an invalid effect shape is committed corruption and must raise
-`LedgerCorruptionError`. This controlled task assumes a single writer.
+an extra top-level field, or any other invalid effect shape is committed
+corruption and must raise `LedgerCorruptionError`. A valid committed record has
+exactly the top-level fields `schemaVersion`, `key`, and `payload`. This
+controlled task assumes a single writer.
 
 ## CLI
 

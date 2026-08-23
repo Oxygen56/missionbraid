@@ -65,3 +65,17 @@ test('a committed record with an unknown schema is corruption', async (t) => {
     (error) => error instanceof LedgerCorruptionError && error.code === 'LEDGER_CORRUPT',
   );
 });
+
+test('a committed record with an extra top-level field is corruption', async (t) => {
+  const filePath = await disposableLedger(t);
+  await writeFile(
+    filePath,
+    '{"schemaVersion":1,"key":"effect","payload":{},"unexpected":true}\n',
+    'utf8',
+  );
+
+  await assert.rejects(
+    new EffectLedger(filePath).replay(),
+    (error) => error instanceof LedgerCorruptionError && error.code === 'LEDGER_CORRUPT',
+  );
+});

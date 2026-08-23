@@ -48,8 +48,9 @@ attemptPlan:
       Continue from the existing workspace; do not replace the previous
       runtime's working implementation. Read AGENTS.md, README.md, the current
       diff, and every public test. Finish payload-conflict detection,
-      incomplete-final-line recovery, corruption handling, and the record/replay
-      CLI by extending src/ledger.mjs and src/cli.mjs. Preserve
+      incomplete-final-line recovery, strict corruption handling for records
+      with unknown or extra top-level fields, and the record/replay CLI by
+      extending src/ledger.mjs and src/cli.mjs. Preserve
       src/effect-core.mjs byte-for-byte and keep src/ledger.mjs dependent on it.
       Run `node --test` and leave the workspace satisfying the full public
       contract. Do not edit tests, install dependencies, use the network, or
