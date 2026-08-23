@@ -58,7 +58,7 @@
     "capsuleId": "capsule-e47679dcefe83988d3a47bbfc663522e36d5e8ebe82e8482ea3f307f0b529cfb",
     "capsuleBudgetTokens": 1600,
     "capsuleEstimatedTokens": 506,
-    "acknowledgedBeforeWorkspaceMutation": true,
+    "controllerObservedWorkspaceMatchedCheckpointAtAcknowledgement": true,
     "targetChangedPaths": []
   },
   "verification": {

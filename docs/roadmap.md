@@ -86,7 +86,8 @@ E1 is complete only when one real Mission demonstrates all of the following:
 - the target receives a budgeted Capsule, acknowledges its critical
   identifiers, and uses the existing workspace and evidence;
 - the user copies no context between runtimes;
-- controlled, confirmed Effects are not repeated;
+- confirmed Effect identities are disclosed and not duplicated; enforced or
+  guarded Effect deduplication remains a later evidence gate;
 - the same Mission closes against the original Contract with a verified
   Receipt.
 
@@ -95,9 +96,10 @@ actually own that run's workspace or execution lifecycle.
 
 [One controlled local run](../evidence/e1-local-2026-08-24.json) satisfies this
 gate for commit `b16bd0b`: Codex was interrupted with `SIGTERM` after meaningful
-work, Qoder acknowledged the budgeted Capsule before mutation, continued in the
-same workspace without manual context transfer, and the original Contract
-produced a verified Receipt with no unresolved items. The [earlier blocked
+work, Qoder acknowledged the budgeted Capsule while its workspace digest still
+matched the recorded handoff baseline, continued there without manual context
+transfer, and the original Contract produced a verified Receipt with no
+unresolved items. The [earlier blocked
 run](../evidence/e1-blocked-local-2026-08-24.json) is retained as failure
 history. Neither record establishes independent reproducibility, production
 readiness, or compatibility beyond the controlled Codex-to-Qoder fixture.

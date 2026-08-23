@@ -276,7 +276,9 @@ adoption are different evidence levels. A [single controlled E0 run](../evidence
 closed against its original Contract and is bound to implementation commit
 `9d5b4d3`. A [single controlled E1 run](../evidence/e1-local-2026-08-24.json)
 then crossed from an interrupted Codex Attempt to a Qoder Attempt, received a
-pre-mutation acknowledgement, and closed against its original Contract with a
-verified Receipt bound to commit `b16bd0b`. These are local results, not
+Capsule acknowledgement while the controller still observed the workspace
+digest matching the recorded handoff baseline, and closed against its original
+Contract with a verified Receipt bound to commit `b16bd0b`. These are local
+results, not
 independent reproductions, hostile-runtime isolation, production adoption, or
 broad runtime compatibility evidence.

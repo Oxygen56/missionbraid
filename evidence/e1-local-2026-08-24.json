@@ -56,7 +56,7 @@
     "estimatedTokens": 516,
     "targetBaselineWorkspaceDigest": "07a42c414196bce64fdef6fa4cf48d811d5693f1256a6bda615555f69f3feae2",
     "acknowledgementId": "ack-737107a6fbe0d609b59d58eb",
-    "acknowledgedBeforeWorkspaceMutation": true
+    "controllerObservedWorkspaceMatchedCheckpointAtAcknowledgement": true
   },
   "targetAttempt": {
     "attemptId": "attempt-945cab1d-1a61-46b8-a58f-36bfbf436db5",
@@ -69,8 +69,9 @@
     "checkpointStatus": "succeeded",
     "afterWorkspaceDigest": "454929f9dcca1503ca74ca8a4af8896ea461c07bd32dd46676d41647f7d3ef19",
     "changedPaths": ["src/cli.mjs", "src/ledger.mjs"],
-    "sourceOwnedCoreSha256": "08b7846c94483f130587a09bc47f96cca9b1d78ab1c22f896524fbc23fc17c3f",
-    "sourceOwnedCorePreserved": true
+    "sourceCheckpointCoreSha256": "08b7846c94483f130587a09bc47f96cca9b1d78ab1c22f896524fbc23fc17c3f",
+    "finalCoreSha256": "08b7846c94483f130587a09bc47f96cca9b1d78ab1c22f896524fbc23fc17c3f",
+    "finalCoreMatchesSourceCheckpoint": true
   },
   "verification": {
     "criterionId": "effect-ledger-contract",
@@ -109,5 +110,5 @@
     "eventCount": 26,
     "finalHeadHash": "16c0344404bc253c5164f750d3627b2c298c03bbd5b3e1218bccf6875b95d9f3"
   },
-  "claimBoundary": "This verifies one controlled local E1 run against the named revision: a real Codex Attempt was interrupted, Qoder acknowledged the Capsule before mutation, continued in the same workspace, and the original Contract produced a verified Receipt. It is not an independent reproduction, hostile-runtime isolation result, production-readiness claim, or broad runtime compatibility result."
+  "claimBoundary": "This verifies one controlled local E1 run against the named revision: a real Codex Attempt was interrupted, Qoder acknowledged the Capsule while its workspace digest still matched the recorded handoff baseline, continued there, and the original Contract produced a verified Receipt. The observed Effects were advisory records with no duplicate Effect identity; this does not establish enforced or guarded Effect deduplication. It is not an independent reproduction, hostile-runtime isolation result, production-readiness claim, or broad runtime compatibility result."
 }

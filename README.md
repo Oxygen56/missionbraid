@@ -9,8 +9,9 @@ coding agents.
 > implemented in code. One controlled local E0 run is verified against
 > implementation commit `9d5b4d3`. One controlled local E1 run is verified
 > against commit `b16bd0b`: Codex was interrupted after meaningful work, Qoder
-> acknowledged the Capsule before mutation, continued in the same workspace,
-> and the original Contract produced a verified Receipt. These results do not
+> acknowledged the Capsule while its workspace still matched the recorded
+> handoff baseline, continued there, and the original Contract produced a
+> verified Receipt. These results do not
 > establish broad runtime compatibility or production readiness.
 
 ## Why MissionBraid
@@ -132,9 +133,10 @@ Controller state must remain outside the target workspace.
   original Contract passed, and a verified Receipt was issued against
   implementation commit `9d5b4d3`.
 - [E1 local real-runtime evidence](evidence/e1-local-2026-08-24.json): Codex was
-  interrupted with `SIGTERM` after its stage-owned core passed, MissionBraid
-  captured its checkpoint and projected a Capsule, Qoder acknowledged that
-  Capsule before mutation, completed the remaining files, and the original
+  interrupted with `SIGTERM` after meaningful stage-owned changes,
+  MissionBraid captured its checkpoint and projected a Capsule, Qoder
+  acknowledged that Capsule while its workspace digest still matched the
+  recorded handoff baseline, completed the remaining files, and the original
   Contract issued a verified Receipt against commit `b16bd0b`.
 - [Earlier blocked E1 evidence](evidence/e1-blocked-local-2026-08-24.json) is
   retained as failure history: the prior Qoder account session stopped before

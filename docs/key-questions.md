@@ -110,8 +110,10 @@ run. Until then, Kandev compatibility is a target, not a supported claim.
 
 **Current position:** the flagship result is not a schema, UI, adapter count, or
 test count. It is one repeatable Mission that survives a real process and then a
-real runtime boundary with no manual context movement, no repeated controlled
-effect, and an independently verified outcome.
+real runtime boundary with no manual context movement, no duplicate disclosed
+Effect identity, and an independently verified outcome. Preventing repeated
+mutable Effects through guarded or enforced controls remains a separate
+evidence gate.
 
 **Evidence status:** single controlled local E0 and E1 runs satisfy the public
 gates in the [roadmap](roadmap.md). Independent reproduction and matched
