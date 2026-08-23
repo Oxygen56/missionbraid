@@ -1,9 +1,10 @@
 # MissionBraid Architecture
 
 > **Status:** accepted target architecture with a pre-alpha local vertical
-> slice. Commit-bound real-runtime evidence for the current revision has not yet
-> been published. The design below includes target semantics that are not fully
-> implemented.
+> slice. One controlled local E0 run is verified against implementation commit
+> `9d5b4d3`; E1 reached a real Codex-to-Qoder boundary but did not reach target
+> acknowledgement or a Receipt. The design below includes target semantics that
+> are not fully implemented.
 
 ## Product contract
 
@@ -271,7 +272,9 @@ compatibility directions until demonstrated by code and reproducible evidence.
 ## Evidence boundary
 
 Architecture, local tests, real-runtime trials, published code, and production
-adoption are different evidence levels. Commit-bound E0 and E1 evidence is
-pending. MissionBraid will not describe either gate as verified until the
-corresponding real Mission closes against its original Contract and the evidence
-is bound to the tested revision.
+adoption are different evidence levels. A [single controlled E0 run](../evidence/e0-local-2026-08-24.json)
+closed against its original Contract and is bound to implementation commit
+`9d5b4d3`; it is not an independent reproduction. The [current E1 run](../evidence/e1-blocked-local-2026-08-24.json)
+stopped at an observed Qoder account-layer blocker before acknowledgement or
+Receipt issuance. MissionBraid therefore does not describe cross-runtime
+continuity as verified.

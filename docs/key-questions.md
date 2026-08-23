@@ -1,8 +1,9 @@
 # Key Questions
 
-> **Status:** pre-alpha design and local implementation. Commit-bound
-> real-runtime evidence is pending; these answers do not represent verified
-> process or cross-runtime continuity.
+> **Status:** pre-alpha design and local implementation. One controlled local E0
+> run is verified against implementation commit `9d5b4d3`. E1 reached a real
+> Codex-to-Qoder boundary but stopped before target acknowledgement or Receipt,
+> so these answers do not represent verified cross-runtime continuity.
 
 MissionBraid is intentionally organized around questions that must be answered
 with code and reproducible evidence, not feature-count claims.

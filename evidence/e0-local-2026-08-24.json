@@ -1,0 +1,99 @@
+{
+  "schemaVersion": "missionbraid.dev/local-evidence/v1",
+  "evidenceId": "e0-controller-recovery-9d5b4d3-2026-08-24",
+  "evidenceLevel": "local-real-runtime",
+  "capturedAt": "2026-08-23T20:53:38Z",
+  "publicationStateAtRun": "local-unpushed-empty-remote",
+  "implementation": {
+    "revision": "9d5b4d34bc42399663f67603ea7023f3871528eb",
+    "tree": "d2f084a8b030c7346d48c98da82fd342e49a9dd8",
+    "archiveSha256": "753fd531ed1bb790ab1f16dfb9358a236887c4c47e66c1808f0500113607a568",
+    "workingTreeAtRun": "clean",
+    "nodeVersion": "26.4.0"
+  },
+  "fixture": {
+    "missionSpec": "examples/e0-fixture/mission.yaml",
+    "missionSpecSha256": "38bcf9a784a8d46d426b747c28d963e42264c003880870d411b734060a93a46d",
+    "preparerSha256": "0a1edf5795f92a6c356342db86bd1076a4f5cea854b9eb1859aa0574522b30a8",
+    "baselineCommit": "0f911983d0551c0022bab7804ecbd4847ff37477",
+    "baseline": "failing-as-designed"
+  },
+  "mission": {
+    "missionId": "mission-c9c925f9-273d-499a-a433-62246034e3ba",
+    "contractId": "contract-66b2d45e27d24527226501f268aa",
+    "kernelSpecSnapshotHash": "5fdbeade3a21f9566aae1d399ba5106a74b0711aaedf740a5c737867d9d391f4",
+    "startedAt": "2026-08-23T20:46:35.011Z",
+    "completedAt": "2026-08-23T20:51:03.294Z",
+    "elapsedSeconds": 268.283,
+    "finalStatus": "succeeded"
+  },
+  "runtime": {
+    "harness": "codex",
+    "runtimeVersion": "0.149.0-alpha.4.1",
+    "model": "gpt-5.6-sol",
+    "reasoningEffort": "medium"
+  },
+  "interruption": {
+    "controllerSignal": "SIGKILL",
+    "controllerExitCode": 137,
+    "directRuntimePidPresentAfterControllerExit": false,
+    "changedPathsPresentBeforeInterruption": [
+      "src/cli.mjs",
+      "src/effect-core.mjs",
+      "src/ledger.mjs"
+    ],
+    "processTreeBoundary": "Only the recorded direct runtime PID and workspace-matching process list were checked; descendant termination is not claimed."
+  },
+  "recovery": {
+    "resumedByMissionIdOnly": true,
+    "userTaskRestated": false,
+    "internalStorageEdited": false,
+    "leaseExpiredBeforeTakeover": true,
+    "sourceAttemptId": "attempt-d22e785b-2bb2-4e1a-a629-8882e6bb8716",
+    "sourceAttemptStatus": "abandoned",
+    "recoveredCheckpointId": "checkpoint-918d8e64d69b9726ac583334102c",
+    "checkpointOrigin": "controller-recovery",
+    "checkpointChangedPaths": ["src/cli.mjs", "src/effect-core.mjs", "src/ledger.mjs"],
+    "targetAttemptId": "attempt-1a7bd111-c2e0-4b4a-8e17-8a631bbc0e51",
+    "capsuleId": "capsule-e47679dcefe83988d3a47bbfc663522e36d5e8ebe82e8482ea3f307f0b529cfb",
+    "capsuleBudgetTokens": 1600,
+    "capsuleEstimatedTokens": 506,
+    "acknowledgedBeforeWorkspaceMutation": true,
+    "targetChangedPaths": []
+  },
+  "verification": {
+    "criterionId": "effect-ledger-public-contract",
+    "passed": true,
+    "verifierExitCode": 0,
+    "verifierLocation": "controller-owned mission fixture outside the target workspace",
+    "manualReplayTests": {
+      "passed": 11,
+      "failed": 0
+    }
+  },
+  "receipt": {
+    "receiptId": "receipt-d3642ded-e46b-4eb5-a8cc-9b11eed81395",
+    "outcome": "verified",
+    "verifiedThroughSeq": 23,
+    "verifiedHeadHash": "1ef1e591ca0a1c101c82cf4d23bd65fc635372d2bbea3ef0ee627cb0279b4131",
+    "effects": [
+      {
+        "effectId": "effect-attempt-d22e785b-2bb2-4e1a-a629-8882e6bb8716",
+        "status": "confirmed",
+        "controlLevel": "advisory"
+      },
+      {
+        "effectId": "effect-attempt-1a7bd111-c2e0-4b4a-8e17-8a631bbc0e51",
+        "status": "skipped",
+        "controlLevel": "advisory"
+      }
+    ],
+    "unresolvedItems": []
+  },
+  "eventChain": {
+    "valid": true,
+    "eventCount": 24,
+    "finalHeadHash": "f4aa3403066598413918b3c26e57c5fd937502c63723054d1044ffb5dda2ca4e"
+  },
+  "claimBoundary": "This verifies one controlled local E0 run against the named implementation revision. It is not an independent reproduction, hostile-runtime isolation result, production-readiness claim, or cross-runtime E1 result."
+}

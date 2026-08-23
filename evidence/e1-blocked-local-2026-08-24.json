@@ -1,0 +1,83 @@
+{
+  "schemaVersion": "missionbraid.dev/local-evidence/v1",
+  "evidenceId": "e1-codex-qoder-credit-block-9d5b4d3-2026-08-24",
+  "evidenceLevel": "local-real-runtime-blocked",
+  "capturedAt": "2026-08-23T20:53:38Z",
+  "publicationStateAtRun": "local-unpushed-empty-remote",
+  "implementation": {
+    "revision": "9d5b4d34bc42399663f67603ea7023f3871528eb",
+    "tree": "d2f084a8b030c7346d48c98da82fd342e49a9dd8",
+    "archiveSha256": "753fd531ed1bb790ab1f16dfb9358a236887c4c47e66c1808f0500113607a568",
+    "workingTreeAtRun": "clean",
+    "nodeVersion": "26.4.0"
+  },
+  "fixture": {
+    "missionSpec": "examples/e1-fixture/mission.yaml",
+    "missionSpecSha256": "6f7a9e7c2eca26589cdd8ac78f59089d297bb44e0741f037e5ee56628c1300c4",
+    "preparerSha256": "0a1edf5795f92a6c356342db86bd1076a4f5cea854b9eb1859aa0574522b30a8",
+    "baselineCommit": "9de19f70b41e581c8876784bccd94e75b4c1279f",
+    "baseline": "failing-as-designed"
+  },
+  "mission": {
+    "missionId": "mission-ca3344e7-e866-4b3d-a165-f97be83dfb99",
+    "contractId": "contract-80dea736bf2c1648f6303bb19ebb",
+    "kernelSpecSnapshotHash": "1e5fd78214244928b15cb4db3fe6f83014a8f1f713092899821855cf14c90934",
+    "startedAt": "2026-08-23T20:51:35.969Z",
+    "blockedAt": "2026-08-23T20:53:09.795Z",
+    "elapsedSeconds": 93.826,
+    "finalStatus": "waiting",
+    "receiptIssued": false
+  },
+  "sourceAttempt": {
+    "attemptId": "attempt-f8cbf3fe-e5ec-4f9f-af0c-d2c222fb521f",
+    "harness": "codex",
+    "runtimeVersion": "0.149.0-alpha.4.1",
+    "model": "gpt-5.6-sol",
+    "reasoningEffort": "medium",
+    "interruptionSignal": "SIGTERM",
+    "checkpointId": "checkpoint-6d9b3ad3387a950bf96d4f617c60",
+    "checkpointStatus": "handed_off",
+    "changedPaths": ["src/effect-core.mjs", "src/ledger.mjs"],
+    "coreTests": {
+      "passed": 4,
+      "failed": 0
+    }
+  },
+  "handoff": {
+    "capsuleId": "capsule-94c5bee359f7831976e771901785d995c9556beae235270ef83154cce777d3d1",
+    "sourceAttemptId": "attempt-f8cbf3fe-e5ec-4f9f-af0c-d2c222fb521f",
+    "targetAttemptId": "attempt-3a0b3bd5-f299-4631-85ad-a4d3a3608280",
+    "checkpointId": "checkpoint-6d9b3ad3387a950bf96d4f617c60",
+    "budgetTokens": 1600,
+    "estimatedTokens": 516
+  },
+  "targetAttempt": {
+    "attemptId": "attempt-3a0b3bd5-f299-4631-85ad-a4d3a3608280",
+    "harness": "qoder",
+    "runtimeVersion": "1.1.6",
+    "model": "Qwen3.8-Max",
+    "reasoningEffort": "medium",
+    "processStarted": true,
+    "processExitCode": 1,
+    "acknowledgedCapsule": false,
+    "changedPaths": [],
+    "checkpointId": "checkpoint-12834c2dbfc4682039280a4ffabf",
+    "checkpointStatus": "failed"
+  },
+  "failure": {
+    "classification": "observed",
+    "layer": "runtime-account",
+    "code": "CREDIT_LIMIT",
+    "runtime": "qoder",
+    "providerCode": 118,
+    "rawProviderTextPublished": false,
+    "interpretationBoundary": "MissionBraid observed code 118 in Qoder output and classified it deterministically; it does not claim an independently confirmed provider root cause."
+  },
+  "eventChain": {
+    "valid": true,
+    "eventCount": 24,
+    "finalHeadHash": "9a42bcba9a549f56b330265821c91d5e3a0aa45e8fa73b80e10b3e38daba476d"
+  },
+  "nextRequiredAction": "Restore usable Qoder account credits, then rerun or resume the E1 Mission without manual context transfer.",
+  "claimBoundary": "This proves that the named revision reached one real Codex-to-Qoder process boundary and recorded the blocker without workspace mutation or a false Receipt. It does not verify E1 continuity or Qoder completion."
+}

@@ -6,9 +6,10 @@ MissionBraid is a pre-alpha, mission-centric control plane for long-running
 coding agents.
 
 > **Project status:** pre-alpha. The thin direct-adapter E0/E1 paths are
-> implemented in code. Commit-bound real-runtime evidence for the current
-> revision has not yet been published, so MissionBraid does not claim verified
-> process or cross-runtime continuity.
+> implemented in code. One controlled local E0 run is verified against
+> implementation commit `9d5b4d3`; E1 reached a real Codex-to-Qoder boundary
+> but stopped before target acknowledgement or a Receipt. MissionBraid does not
+> yet claim verified cross-runtime continuity or production readiness.
 
 ## Why MissionBraid
 
@@ -124,9 +125,17 @@ Controller state must remain outside the target workspace.
 
 ## Evidence status
 
-Commit-bound E0 and E1 real-runtime evidence is pending. The current repository
-demonstrates implementation and fixture-level tests, not a published continuity
-result.
+- [E0 local real-runtime evidence](evidence/e0-local-2026-08-24.json): a
+  controlled controller `SIGKILL` was recovered by Mission ID alone, the
+  original Contract passed, and a verified Receipt was issued against
+  implementation commit `9d5b4d3`.
+- [E1 blocked local real-runtime evidence](evidence/e1-blocked-local-2026-08-24.json):
+  Codex produced a checkpoint and Capsule for Qoder, but Qoder exited before
+  acknowledgement with observed provider code `118`, classified as
+  `CREDIT_LIMIT` at the runtime-account layer. No Receipt was issued.
+
+These are local, commit-bound records, not an independent reproduction,
+hostile-runtime isolation result, production deployment, or verified E1 result.
 
 ## Current scope
 
@@ -137,7 +146,8 @@ The evidence scope is deliberately narrow:
 - **E1 gate:** the same real Mission crosses two runtime profiles without manual
   context transfer and closes with a verified Receipt.
 
-Neither gate currently has published, revision-bound evidence.
+E0 is locally satisfied for the single controlled run bound to implementation
+commit `9d5b4d3`; independent reproduction remains open. E1 is not satisfied.
 
 Until E1 is demonstrated, this repository should be read as a pre-alpha local
 vertical slice, not as a production system or a verified multi-runtime product.

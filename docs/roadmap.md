@@ -1,8 +1,9 @@
 # MissionBraid Roadmap
 
 > **Current status:** pre-alpha. The thin direct-adapter E0/E1 paths are
-> implemented in code. Commit-bound real-runtime evidence for the current
-> revision has not yet been published.
+> implemented in code. One controlled local E0 run is verified against
+> implementation commit `9d5b4d3`. E1 reached a real Codex-to-Qoder boundary
+> but remains blocked before target acknowledgement and Receipt issuance.
 
 This roadmap separates implementation order from evidence. A module existing in
 the repository does not prove the corresponding product outcome.
@@ -70,7 +71,11 @@ E0 is complete only when one real Mission demonstrates all of the following:
 - the original Outcome Contract passes independent verification and produces a
   Receipt.
 
-Commit-bound real-runtime evidence for this gate is pending.
+[One controlled local run](../evidence/e0-local-2026-08-24.json) satisfies this
+gate for implementation commit `9d5b4d3`: the controller was terminated with
+`SIGKILL`, recovery used the Mission ID without task restatement or storage
+editing, and the original Contract produced a verified Receipt. This is not an
+independent reproduction or production-readiness result.
 
 ### E1 — The Mission survives a runtime
 
@@ -90,7 +95,12 @@ actually own that run's workspace or execution lifecycle.
 
 Before E1, MissionBraid does not claim verified cross-runtime continuity.
 
-Commit-bound real-runtime evidence for this gate is pending.
+[The current E1 record](../evidence/e1-blocked-local-2026-08-24.json) reached a
+real Codex-to-Qoder process boundary and preserved the source checkpoint and
+Capsule. Qoder exited before acknowledgement with observed provider code `118`,
+which MissionBraid classified as `CREDIT_LIMIT` at the runtime-account layer.
+No target continuation or Receipt occurred, so E1 remains open; the recorded
+classification is not an independently confirmed provider root cause.
 
 ### E2 — The Mission can replan, replay, and fork
 
