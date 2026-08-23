@@ -1,9 +1,10 @@
 # Key Questions
 
 > **Status:** pre-alpha design and local implementation. One controlled local E0
-> run is verified against implementation commit `9d5b4d3`. E1 reached a real
-> Codex-to-Qoder boundary but stopped before target acknowledgement or Receipt,
-> so these answers do not represent verified cross-runtime continuity.
+> run is verified against implementation commit `9d5b4d3`; one controlled local
+> Codex-to-Qoder E1 run is verified against commit `b16bd0b`. These results do
+> not represent independent reproduction, production readiness, or broad
+> cross-runtime compatibility.
 
 MissionBraid is intentionally organized around questions that must be answered
 with code and reproducible evidence, not feature-count claims.
@@ -15,8 +16,9 @@ CLIs it can start. Its proposed value is the portable Mission contract that owns
 planning, evidence handoff, mutable-effect state, and verified completion across
 runtime boundaries.
 
-**Evidence required:** one real Mission must cross runtimes without manual
-context transfer and close against its original Outcome Contract.
+**Evidence status:** the [controlled local E1 run](../evidence/e1-local-2026-08-24.json)
+crossed from Codex to Qoder without manual context transfer and closed against
+its original Outcome Contract. Independent reproduction remains required.
 
 ## 2. What exactly is portable across runtimes?
 
@@ -111,9 +113,9 @@ test count. It is one repeatable Mission that survives a real process and then a
 real runtime boundary with no manual context movement, no repeated controlled
 effect, and an independently verified outcome.
 
-**Evidence required:** E0 and E1 must satisfy the public gates in the
-[roadmap](roadmap.md), followed by matched evaluation against manual transfer
-and relevant overlapping baselines.
+**Evidence status:** single controlled local E0 and E1 runs satisfy the public
+gates in the [roadmap](roadmap.md). Independent reproduction and matched
+evaluation against manual transfer and relevant overlapping baselines remain.
 
 ## 11. Which claims are intentionally excluded?
 
@@ -124,7 +126,7 @@ MissionBraid does not currently claim:
 - perfect or universal root-cause attribution;
 - globally optimal runtime selection;
 - production readiness;
-- verified cross-runtime continuity.
+- cross-runtime continuity beyond the controlled local Codex-to-Qoder fixture.
 
 These are not marketing caveats. They define the boundary between accepted
 architecture and demonstrated capability.

@@ -7,9 +7,11 @@ coding agents.
 
 > **Project status:** pre-alpha. The thin direct-adapter E0/E1 paths are
 > implemented in code. One controlled local E0 run is verified against
-> implementation commit `9d5b4d3`; E1 reached a real Codex-to-Qoder boundary
-> but stopped before target acknowledgement or a Receipt. MissionBraid does not
-> yet claim verified cross-runtime continuity or production readiness.
+> implementation commit `9d5b4d3`. One controlled local E1 run is verified
+> against commit `b16bd0b`: Codex was interrupted after meaningful work, Qoder
+> acknowledged the Capsule before mutation, continued in the same workspace,
+> and the original Contract produced a verified Receipt. These results do not
+> establish broad runtime compatibility or production readiness.
 
 ## Why MissionBraid
 
@@ -129,14 +131,18 @@ Controller state must remain outside the target workspace.
   controlled controller `SIGKILL` was recovered by Mission ID alone, the
   original Contract passed, and a verified Receipt was issued against
   implementation commit `9d5b4d3`.
-- [E1 blocked local real-runtime evidence](evidence/e1-blocked-local-2026-08-24.json):
-  MissionBraid captured Codex's workspace changes as a checkpoint and prepared
-  a Capsule for Qoder, but Qoder exited before acknowledgement with observed
-  provider code `118`, classified as `CREDIT_LIMIT` at the runtime-account
-  layer. No Receipt was issued.
+- [E1 local real-runtime evidence](evidence/e1-local-2026-08-24.json): Codex was
+  interrupted with `SIGTERM` after its stage-owned core passed, MissionBraid
+  captured its checkpoint and projected a Capsule, Qoder acknowledged that
+  Capsule before mutation, completed the remaining files, and the original
+  Contract issued a verified Receipt against commit `b16bd0b`.
+- [Earlier blocked E1 evidence](evidence/e1-blocked-local-2026-08-24.json) is
+  retained as failure history: the prior Qoder account session stopped before
+  acknowledgement, and MissionBraid issued no false Receipt.
 
 These are local, commit-bound records, not an independent reproduction,
-hostile-runtime isolation result, production deployment, or verified E1 result.
+hostile-runtime isolation result, production deployment, or broad compatibility
+result.
 
 ## Current scope
 
@@ -147,11 +153,12 @@ The evidence scope is deliberately narrow:
 - **E1 gate:** the same real Mission crosses two runtime profiles without manual
   context transfer and closes with a verified Receipt.
 
-E0 is locally satisfied for the single controlled run bound to implementation
-commit `9d5b4d3`; independent reproduction remains open. E1 is not satisfied.
+E0 and E1 are locally satisfied for the single controlled runs bound to commits
+`9d5b4d3` and `b16bd0b`; independent reproduction remains open.
 
-Until E1 is demonstrated, this repository should be read as a pre-alpha local
-vertical slice, not as a production system or a verified multi-runtime product.
+This repository should still be read as a pre-alpha local vertical slice. The
+verified Codex-to-Qoder fixture is evidence for that exact path, not a production
+system or a claim about arbitrary projects and runtimes.
 
 ## License
 

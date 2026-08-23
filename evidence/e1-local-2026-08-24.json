@@ -1,0 +1,113 @@
+{
+  "schemaVersion": "missionbraid.dev/local-evidence/v1",
+  "evidenceId": "e1-codex-qoder-handoff-b16bd0b-2026-08-24",
+  "evidenceLevel": "local-real-runtime",
+  "capturedAt": "2026-08-23T21:47:15.050Z",
+  "publicationStateAtRun": "local-unpushed-empty-remote",
+  "implementation": {
+    "revision": "b16bd0b78a4d0993cd6499dd0aec7a1f5a3e0372",
+    "tree": "162e83e817bb154d3240cd81ec91dec1f565cd35",
+    "archiveSha256": "3a29154137a27ad87e26976a9b3b1119e1ebbd16e2f5280d33858a76dbdc75c8",
+    "workingTreeAtRun": "clean",
+    "nodeVersion": "26.4.0"
+  },
+  "fixture": {
+    "missionSpec": "examples/e1-fixture/mission.yaml",
+    "missionSpecSha256": "66ad7ff5355fae45d2546e7cdb995aa3e261179f4cede369824033bb797b62b9",
+    "preparerSha256": "0a1edf5795f92a6c356342db86bd1076a4f5cea854b9eb1859aa0574522b30a8",
+    "baselineCommit": "24b4318efe3c4277e2782dd1227b7e1782e29758",
+    "baseline": "failing-as-designed"
+  },
+  "mission": {
+    "missionId": "mission-8c3af0b7-333b-4e15-aee1-2f1acb95df5a",
+    "contractId": "contract-d3c38068edbbd323dd2414c8d5c3",
+    "kernelSpecSnapshotHash": "65ad4f4996aa6273404253e3904c107e458aa08bf2e1687524558478181b8830",
+    "contractCreatedAt": "2026-08-23T21:43:53.187Z",
+    "createdAt": "2026-08-23T21:43:53.340Z",
+    "completedAt": "2026-08-23T21:47:15.050Z",
+    "elapsedSeconds": 201.71,
+    "finalStatus": "succeeded"
+  },
+  "sourceAttempt": {
+    "attemptId": "attempt-f5434ef9-654f-48d9-9b2f-ad1f8fd9128a",
+    "harness": "codex",
+    "runtimeVersion": "0.149.0-alpha.4.1",
+    "model": "gpt-5.6-sol",
+    "reasoningEffort": "medium",
+    "interruptionSignal": "SIGTERM",
+    "processExitCode": null,
+    "checkpointId": "checkpoint-9cd9da6a8b6daf0850593e7c7584",
+    "checkpointStatus": "handed_off",
+    "afterWorkspaceDigest": "07a42c414196bce64fdef6fa4cf48d811d5693f1256a6bda615555f69f3feae2",
+    "changedPaths": ["src/effect-core.mjs", "src/ledger.mjs"],
+    "operatorObservedCoreTestsBeforeInterruption": {
+      "passed": 4,
+      "failed": 0
+    }
+  },
+  "handoff": {
+    "capsuleId": "capsule-12494b258c4804c51015e2ab994727356347f30cc2ed8cc6d868159d103de8d9",
+    "capsuleHash": "12494b258c4804c51015e2ab994727356347f30cc2ed8cc6d868159d103de8d9",
+    "projectionHash": "389df813ac60fcae8ba3d4e0026d3ec9f04397ee37924ffad6b7721056bd06d8",
+    "checkpointId": "checkpoint-9cd9da6a8b6daf0850593e7c7584",
+    "sourceAttemptId": "attempt-f5434ef9-654f-48d9-9b2f-ad1f8fd9128a",
+    "targetAttemptId": "attempt-945cab1d-1a61-46b8-a58f-36bfbf436db5",
+    "budgetTokens": 1600,
+    "estimatedTokens": 516,
+    "targetBaselineWorkspaceDigest": "07a42c414196bce64fdef6fa4cf48d811d5693f1256a6bda615555f69f3feae2",
+    "acknowledgementId": "ack-737107a6fbe0d609b59d58eb",
+    "acknowledgedBeforeWorkspaceMutation": true
+  },
+  "targetAttempt": {
+    "attemptId": "attempt-945cab1d-1a61-46b8-a58f-36bfbf436db5",
+    "harness": "qoder",
+    "runtimeVersion": "1.1.6",
+    "model": "Qwen3.8-Max",
+    "reasoningEffort": "medium",
+    "processExitCode": 0,
+    "checkpointId": "checkpoint-303f2ae1f4667af89d2a77f8bc57",
+    "checkpointStatus": "succeeded",
+    "afterWorkspaceDigest": "454929f9dcca1503ca74ca8a4af8896ea461c07bd32dd46676d41647f7d3ef19",
+    "changedPaths": ["src/cli.mjs", "src/ledger.mjs"],
+    "sourceOwnedCoreSha256": "08b7846c94483f130587a09bc47f96cca9b1d78ab1c22f896524fbc23fc17c3f",
+    "sourceOwnedCorePreserved": true
+  },
+  "verification": {
+    "criterionId": "effect-ledger-contract",
+    "passed": true,
+    "verifierExitCode": 0,
+    "verifierLocation": "controller-owned mission fixture outside the target workspace",
+    "publicFixtureIntegrity": true,
+    "independentBehavior": true,
+    "provenanceBound": true,
+    "manualReplayTests": {
+      "passed": 12,
+      "failed": 0
+    }
+  },
+  "receipt": {
+    "receiptId": "receipt-a9c0209a-5517-434e-aff9-a92188605c41",
+    "outcome": "verified",
+    "verifiedThroughSeq": 25,
+    "verifiedHeadHash": "510b7f24a0f4eb514c74d021bf0ba0ae088446e87d478966f365b87a9a2ad223",
+    "effects": [
+      {
+        "effectId": "effect-attempt-f5434ef9-654f-48d9-9b2f-ad1f8fd9128a",
+        "status": "confirmed",
+        "controlLevel": "advisory"
+      },
+      {
+        "effectId": "effect-attempt-945cab1d-1a61-46b8-a58f-36bfbf436db5",
+        "status": "confirmed",
+        "controlLevel": "advisory"
+      }
+    ],
+    "unresolvedItems": []
+  },
+  "eventChain": {
+    "valid": true,
+    "eventCount": 26,
+    "finalHeadHash": "16c0344404bc253c5164f750d3627b2c298c03bbd5b3e1218bccf6875b95d9f3"
+  },
+  "claimBoundary": "This verifies one controlled local E1 run against the named revision: a real Codex Attempt was interrupted, Qoder acknowledged the Capsule before mutation, continued in the same workspace, and the original Contract produced a verified Receipt. It is not an independent reproduction, hostile-runtime isolation result, production-readiness claim, or broad runtime compatibility result."
+}

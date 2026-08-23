@@ -2,8 +2,8 @@
 
 > **Current status:** pre-alpha. The thin direct-adapter E0/E1 paths are
 > implemented in code. One controlled local E0 run is verified against
-> implementation commit `9d5b4d3`. E1 reached a real Codex-to-Qoder boundary
-> but remains blocked before target acknowledgement and Receipt issuance.
+> implementation commit `9d5b4d3`; one controlled local Codex-to-Qoder E1 run
+> is verified against commit `b16bd0b`. Independent reproduction remains open.
 
 This roadmap separates implementation order from evidence. A module existing in
 the repository does not prove the corresponding product outcome.
@@ -93,14 +93,14 @@ E1 is complete only when one real Mission demonstrates all of the following:
 If an external execution provider is described as verified for the run, it must
 actually own that run's workspace or execution lifecycle.
 
-Before E1, MissionBraid does not claim verified cross-runtime continuity.
-
-[The current E1 record](../evidence/e1-blocked-local-2026-08-24.json) reached a
-real Codex-to-Qoder process boundary and preserved the source checkpoint and
-Capsule. Qoder exited before acknowledgement with observed provider code `118`,
-which MissionBraid classified as `CREDIT_LIMIT` at the runtime-account layer.
-No target continuation or Receipt occurred, so E1 remains open; the recorded
-classification is not an independently confirmed provider root cause.
+[One controlled local run](../evidence/e1-local-2026-08-24.json) satisfies this
+gate for commit `b16bd0b`: Codex was interrupted with `SIGTERM` after meaningful
+work, Qoder acknowledged the budgeted Capsule before mutation, continued in the
+same workspace without manual context transfer, and the original Contract
+produced a verified Receipt with no unresolved items. The [earlier blocked
+run](../evidence/e1-blocked-local-2026-08-24.json) is retained as failure
+history. Neither record establishes independent reproducibility, production
+readiness, or compatibility beyond the controlled Codex-to-Qoder fixture.
 
 ### E2 — The Mission can replan, replay, and fork
 
@@ -118,9 +118,9 @@ Before E2, MissionBraid does not claim automatic failover or time travel.
 
 ## Evaluation after the flagship path
 
-Once E1 is reproducible, evaluation will compare matched runs using the same
-repository revision, Outcome Contract, profiles, interruption point, and cost
-limits:
+The next evidence step is an independent reproduction of E1. Evaluation will
+then compare matched runs using the same repository revision, Outcome Contract,
+profiles, interruption point, and cost limits:
 
 - manual restart versus MissionBraid process recovery;
 - manual context transfer versus MissionBraid Capsule transfer;
@@ -133,7 +133,8 @@ Receipt replay.
 
 ## Scope discipline
 
-Until E0 and E1 are verified, the project will not prioritize:
+While E0 and E1 evidence remains limited to single controlled local runs, the
+project will not prioritize:
 
 - a dashboard-first experience;
 - a generic plugin marketplace;
@@ -142,7 +143,8 @@ Until E0 and E1 are verified, the project will not prioritize:
 - production-readiness claims;
 - additional reliability machinery not exposed by the real vertical path.
 
-The next work item is always the shortest missing part of the real E0/E1 path,
+The next work item is independent E1 reproduction, followed by the shortest
+provider-bound path that can validate Kandev's workspace and lifecycle contract,
 not the largest available feature list.
 
 ## Release policy

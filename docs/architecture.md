@@ -2,9 +2,9 @@
 
 > **Status:** accepted target architecture with a pre-alpha local vertical
 > slice. One controlled local E0 run is verified against implementation commit
-> `9d5b4d3`; E1 reached a real Codex-to-Qoder boundary but did not reach target
-> acknowledgement or a Receipt. The design below includes target semantics that
-> are not fully implemented.
+> `9d5b4d3`; one controlled local Codex-to-Qoder E1 run is verified against
+> commit `b16bd0b`. The design below includes target semantics that are not fully
+> implemented, and independent reproduction remains open.
 
 ## Product contract
 
@@ -274,7 +274,9 @@ compatibility directions until demonstrated by code and reproducible evidence.
 Architecture, local tests, real-runtime trials, published code, and production
 adoption are different evidence levels. A [single controlled E0 run](../evidence/e0-local-2026-08-24.json)
 closed against its original Contract and is bound to implementation commit
-`9d5b4d3`; it is not an independent reproduction. The [current E1 run](../evidence/e1-blocked-local-2026-08-24.json)
-stopped at an observed Qoder account-layer blocker before acknowledgement or
-Receipt issuance. MissionBraid therefore does not describe cross-runtime
-continuity as verified.
+`9d5b4d3`. A [single controlled E1 run](../evidence/e1-local-2026-08-24.json)
+then crossed from an interrupted Codex Attempt to a Qoder Attempt, received a
+pre-mutation acknowledgement, and closed against its original Contract with a
+verified Receipt bound to commit `b16bd0b`. These are local results, not
+independent reproductions, hostile-runtime isolation, production adoption, or
+broad runtime compatibility evidence.
