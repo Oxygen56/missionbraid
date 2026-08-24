@@ -1,0 +1,164 @@
+{
+  "schemaVersion": "missionbraid.dev/evidence/e1-context-isolated-reproduction/v1",
+  "evidenceLevel": "single same-host task-context-isolated fresh-clone reproduction",
+  "recordedOn": "2026-08-24",
+  "reproductionBoundary": {
+    "repositorySource": "public GitHub repository",
+    "freshClone": true,
+    "priorMissionStateUsed": false,
+    "priorWorkspaceUsed": false,
+    "reproducerInstructionsLimitedToPublicRepository": true,
+    "sameHostAsDevelopmentRun": true,
+    "hostRuntimeInstallationAndAuthenticationReused": true,
+    "hostLevelHarnessConfigurationIncludingInstructionsSkillsAndMcpMayBeReused": true,
+    "thirdPartyOrCrossHost": false,
+    "publicationStateAtRun": "public-main"
+  },
+  "implementation": {
+    "revision": "f73bc248504d109ff6a3574372d497f4890f5ff7",
+    "tree": "64caddad89ca15e3eed0101e1fe786941b93ccf2",
+    "archiveSha256": "5e58cb032f3f7eed275e1b311548668255f04d1340c4eaab0867e83b2a234de6",
+    "missionSpecSha256": "66ad7ff5355fae45d2546e7cdb995aa3e261179f4cede369824033bb797b62b9",
+    "fixturePreparerSha256": "0a1edf5795f92a6c356342db86bd1076a4f5cea854b9eb1859aa0574522b30a8",
+    "resolvedSpecSnapshotHash": "85e28816380cbb6e1bb7bc66403205b72833cac58f2eea29e4f60763d3d734bb"
+  },
+  "runtime": {
+    "node": "26.4.0",
+    "pnpm": "11.18.0",
+    "codexCli": "0.149.0-alpha.4.1",
+    "qoderCli": "1.1.6"
+  },
+  "mission": {
+    "missionId": "mission-ae887a79-8483-49be-9390-8686c970efd5",
+    "workspaceKey": "workspace-c02881c40689946103ee580a3145737c",
+    "contractId": "contract-1b4d23c4dfb920630984c4b64f54",
+    "contractCreatedAt": "2026-08-23T22:13:57.355Z",
+    "createdAt": "2026-08-23T22:13:57.555Z",
+    "firstReceiptAt": "2026-08-23T22:17:17.543Z",
+    "explicitReverificationReceiptAt": "2026-08-23T22:17:34.149Z",
+    "secondsToFirstReceipt": 199.988,
+    "secondsToExplicitReverification": 216.594,
+    "finalStatus": "succeeded"
+  },
+  "fixtureBaseline": {
+    "targetCommit": "b666731372f5b7200811ab840575d53f7ac0ddd8",
+    "workspaceDigest": "72817b1cc4b2e43511e1dfa92ed08a6bcfab51feb8d1ea09231c1882739f14f2",
+    "publicTests": {
+      "passed": 0,
+      "failed": 12,
+      "status": "failing-as-designed"
+    }
+  },
+  "sourceAttempt": {
+    "attemptId": "attempt-8fb5d8a4-5eec-47fa-8f48-3d886f02a620",
+    "checkpointId": "checkpoint-9a07788855e8272335bbfa4d0aef",
+    "checkpointStatus": "handed_off",
+    "harness": "codex",
+    "profileId": "profile-e822e7dabbcbd916f193a5c2bb0c",
+    "model": "gpt-5.6-sol",
+    "reasoningEffort": "medium",
+    "interruptionSignal": "SIGTERM",
+    "processExitCode": null,
+    "afterWorkspaceDigest": "bfe7efd2ba0183f4decdf1683d83032b4416d7aa3b980657b41bccc360eaa598",
+    "changedPaths": [
+      {
+        "path": "src/effect-core.mjs",
+        "sha256": "88520243da6096b55dbcf2324d9566bac7a3c9b669515eaa6fe0d07961fb8110"
+      },
+      {
+        "path": "src/ledger.mjs",
+        "sha256": "75944a25100396f0ebbc7f9fa8404e628c31aff7c106be7134bdf992ad30c224"
+      }
+    ],
+    "operatorObservedCoreTestsBeforeInterruption": {
+      "passed": 4,
+      "failed": 0
+    }
+  },
+  "handoff": {
+    "capsuleId": "capsule-532443922858fe7a848f67e052a2334b52755f48ed4c9a09eb5db10de1697db6",
+    "capsuleHash": "532443922858fe7a848f67e052a2334b52755f48ed4c9a09eb5db10de1697db6",
+    "projectionHash": "ff8d09880565e4b5dddba67e9161b43910f7c4ba4a4ab3bc52453191ef19020c",
+    "acknowledgementId": "ack-365295637e7db8c5c0486aca",
+    "sourceAttemptId": "attempt-8fb5d8a4-5eec-47fa-8f48-3d886f02a620",
+    "targetAttemptId": "attempt-7beaeff0-a76c-460a-b840-e9ebc41df5d9",
+    "checkpointId": "checkpoint-9a07788855e8272335bbfa4d0aef",
+    "budgetTokens": 1600,
+    "estimatedTokens": 516,
+    "targetBaselineWorkspaceDigest": "bfe7efd2ba0183f4decdf1683d83032b4416d7aa3b980657b41bccc360eaa598",
+    "controllerObservedWorkspaceMatchedCheckpointAtAcknowledgement": true,
+    "recordedOperatorProcedureKeptOriginalRunControllerAliveThroughTargetAttempt": true,
+    "recordedOperatorProcedureIncludedResumeCommand": false,
+    "recordedOperatorProcedureIncludedManualContextTransfer": false
+  },
+  "targetAttempt": {
+    "attemptId": "attempt-7beaeff0-a76c-460a-b840-e9ebc41df5d9",
+    "checkpointId": "checkpoint-f84052da8f4144b306e0cc4d6a97",
+    "checkpointStatus": "succeeded",
+    "harness": "qoder",
+    "profileId": "profile-67e07cda82607c428a281231de95",
+    "model": "Qwen3.8-Max",
+    "reasoningEffort": "medium",
+    "processExitCode": 0,
+    "afterWorkspaceDigest": "6c5bbf080dca6a4424ccc5bebc8200e947f9be8397759c40be7b04a9bc487ab0",
+    "changedPaths": [
+      {
+        "path": "src/cli.mjs",
+        "sha256": "64b8b607898701e9428060ad642fddc21296e88ef7f8e05937dbbbdb9fcf9962"
+      },
+      {
+        "path": "src/ledger.mjs",
+        "sha256": "228b07de925e36cc2353a15cfc1f1b58881b57a88783e4a992494b201aa5fbd3"
+      }
+    ],
+    "sourceCheckpointCoreSha256": "88520243da6096b55dbcf2324d9566bac7a3c9b669515eaa6fe0d07961fb8110",
+    "finalCoreSha256": "88520243da6096b55dbcf2324d9566bac7a3c9b669515eaa6fe0d07961fb8110",
+    "finalCoreMatchesSourceCheckpoint": true
+  },
+  "verification": {
+    "criterionId": "effect-ledger-contract",
+    "initialVerificationExitCode": 0,
+    "explicitReverificationExitCode": 0,
+    "publicFixtureIntegrity": true,
+    "outOfProcessBehaviorProbePassed": true,
+    "provenanceBound": true,
+    "finalPublicTests": {
+      "passed": 12,
+      "failed": 0
+    }
+  },
+  "receipts": {
+    "first": {
+      "receiptId": "receipt-7548e351-2360-43d6-84bb-63577728a921",
+      "outcome": "verified",
+      "verifiedThroughSeq": 25,
+      "verifiedHeadHash": "8f2b8b740139e285eabf3ce30b0123fb7e6059a3f5cd28804a827889acb5dede"
+    },
+    "explicitReverification": {
+      "receiptId": "receipt-df6f88e8-863a-411f-932d-d4443733ab68",
+      "outcome": "verified",
+      "verifiedThroughSeq": 28,
+      "verifiedHeadHash": "4569593c763b23abce588d37ec8c9cbe440c06dcac8119ab4ea049e1fb3b147b"
+    },
+    "effects": [
+      {
+        "effectId": "effect-attempt-8fb5d8a4-5eec-47fa-8f48-3d886f02a620",
+        "status": "confirmed",
+        "controlLevel": "advisory"
+      },
+      {
+        "effectId": "effect-attempt-7beaeff0-a76c-460a-b840-e9ebc41df5d9",
+        "status": "confirmed",
+        "controlLevel": "advisory"
+      }
+    ],
+    "unresolvedItems": []
+  },
+  "eventChain": {
+    "valid": true,
+    "eventCount": 29,
+    "eventLinkMismatches": 0,
+    "finalHeadHash": "43eedb8cb9c30d1ce90b054fc7a3d5da454ce30b8935bf13faebc11812ea1255"
+  },
+  "claimBoundary": "This records one same-host, task-context-isolated fresh-clone reproduction from the public repository: the reproducer received no prior Mission state or workspace, the recorded operator procedure contains no manual context-transfer or resume step, a real Codex Attempt was interrupted, and according to that recorded procedure the original run controller remained alive and automatically handed off to Qoder. Both the original verification and an explicit reverification produced verified Receipts. Existing host runtime installations, authentication, and host-level Harness configuration, including user instructions, Skills, and MCP, may have been reused. This is not a third-party or cross-host reproduction, controller-crash recovery result, proof that no transient action occurred before acknowledgement, production-readiness result, broad runtime compatibility result, or evidence of guarded or enforced Effect deduplication."
+}

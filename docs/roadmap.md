@@ -3,7 +3,10 @@
 > **Current status:** pre-alpha. The thin direct-adapter E0/E1 paths are
 > implemented in code. One controlled local E0 run is verified against
 > implementation commit `9d5b4d3`; one controlled local Codex-to-Qoder E1 run
-> is verified against commit `b16bd0b`. Independent reproduction remains open.
+> is verified against commit `b16bd0b`. A same-host, task-context-isolated run
+> from a clean public clone reproduced E1 against `f73bc24`; host-level Harness
+> configuration may have been reused, and third-party or cross-host
+> reproduction remains open.
 
 This roadmap separates implementation order from evidence. A module existing in
 the repository does not prove the corresponding product outcome.
@@ -99,10 +102,16 @@ gate for commit `b16bd0b`: Codex was interrupted with `SIGTERM` after meaningful
 work, Qoder acknowledged the budgeted Capsule while its workspace digest still
 matched the recorded handoff baseline, continued there without manual context
 transfer, and the original Contract produced a verified Receipt with no
-unresolved items. The [earlier blocked
+unresolved items. A [same-host, task-context-isolated fresh-clone
+run](../evidence/e1-context-isolated-reproduction-local-2026-08-24.json)
+reproduced the path against public commit `f73bc24` and explicitly replayed the
+verifier to issue another verified Receipt. The exact checkpoint-helper content
+also completed a [local real-runtime validation](../evidence/e1-checkpoint-helper-local-2026-08-24.json)
+with a second verified Receipt. The [earlier blocked
 run](../evidence/e1-blocked-local-2026-08-24.json) is retained as failure
-history. Neither record establishes independent reproducibility, production
-readiness, or compatibility beyond the controlled Codex-to-Qoder fixture.
+history. These records do not establish third-party or cross-host
+reproducibility, production readiness, or compatibility beyond the controlled
+Codex-to-Qoder fixture.
 
 ### E2 — The Mission can replan, replay, and fork
 
@@ -120,9 +129,10 @@ Before E2, MissionBraid does not claim automatic failover or time travel.
 
 ## Evaluation after the flagship path
 
-The next evidence step is an independent reproduction of E1. Evaluation will
-then compare matched runs using the same repository revision, Outcome Contract,
-profiles, interruption point, and cost limits:
+A same-host, task-context-isolated run from a clean public clone has reproduced
+E1. The next external evidence upgrade is a third-party or cross-host
+reproduction. Matched evaluation will use the same repository revision, Outcome
+Contract, profiles, interruption point, and cost limits:
 
 - manual restart versus MissionBraid process recovery;
 - manual context transfer versus MissionBraid Capsule transfer;
@@ -135,8 +145,8 @@ Receipt replay.
 
 ## Scope discipline
 
-While E0 and E1 evidence remains limited to single controlled local runs, the
-project will not prioritize:
+While E0 and E1 evidence remains limited to controlled local and same-host
+task-context-isolated runs, the project will not prioritize:
 
 - a dashboard-first experience;
 - a generic plugin marketplace;
@@ -145,9 +155,10 @@ project will not prioritize:
 - production-readiness claims;
 - additional reliability machinery not exposed by the real vertical path.
 
-The next work item is independent E1 reproduction, followed by the shortest
-provider-bound path that can validate Kandev's workspace and lifecycle contract,
-not the largest available feature list.
+The next implementation item is the shortest provider-bound path that can
+validate Kandev's workspace and lifecycle contract, not the largest available
+feature list. Third-party or cross-host E1 reproduction remains an external
+evidence target rather than a reason to expand the local framework first.
 
 ## Release policy
 

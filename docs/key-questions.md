@@ -2,9 +2,11 @@
 
 > **Status:** pre-alpha design and local implementation. One controlled local E0
 > run is verified against implementation commit `9d5b4d3`; one controlled local
-> Codex-to-Qoder E1 run is verified against commit `b16bd0b`. These results do
-> not represent independent reproduction, production readiness, or broad
-> cross-runtime compatibility.
+> Codex-to-Qoder E1 run is verified against commit `b16bd0b`; one same-host,
+> task-context-isolated fresh-clone run reproduced E1 against `f73bc24` while
+> host-level Harness configuration may have been reused. These results do not
+> represent third-party or cross-host reproduction, production readiness, or
+> broad cross-runtime compatibility.
 
 MissionBraid is intentionally organized around questions that must be answered
 with code and reproducible evidence, not feature-count claims.
@@ -18,7 +20,9 @@ runtime boundaries.
 
 **Evidence status:** the [controlled local E1 run](../evidence/e1-local-2026-08-24.json)
 crossed from Codex to Qoder without manual context transfer and closed against
-its original Outcome Contract. Independent reproduction remains required.
+its original Outcome Contract. A [same-host, task-context-isolated fresh-clone
+run](../evidence/e1-context-isolated-reproduction-local-2026-08-24.json)
+reproduced that path; third-party or cross-host reproduction remains required.
 
 ## 2. What exactly is portable across runtimes?
 
@@ -115,9 +119,11 @@ Effect identity, and an independently verified outcome. Preventing repeated
 mutable Effects through guarded or enforced controls remains a separate
 evidence gate.
 
-**Evidence status:** single controlled local E0 and E1 runs satisfy the public
-gates in the [roadmap](roadmap.md). Independent reproduction and matched
-evaluation against manual transfer and relevant overlapping baselines remain.
+**Evidence status:** controlled local E0 and E1 runs satisfy the public gates in
+the [roadmap](roadmap.md). A same-host, task-context-isolated run from a clean
+public clone reproduced E1 and explicitly replayed its verifier. Third-party or
+cross-host reproduction and matched evaluation against manual transfer and
+relevant overlapping baselines remain.
 
 ## 11. Which claims are intentionally excluded?
 

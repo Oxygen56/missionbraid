@@ -11,8 +11,11 @@ coding agents.
 > against commit `b16bd0b`: Codex was interrupted after meaningful work, Qoder
 > acknowledged the Capsule while its workspace still matched the recorded
 > handoff baseline, continued there, and the original Contract produced a
-> verified Receipt. These results do not
-> establish broad runtime compatibility or production readiness.
+> verified Receipt. A second E1 run from a clean public clone of commit
+> `f73bc24` reproduced that path in a separate task context on the same host;
+> host-level Harness configuration may still have been reused. These results do
+> not establish third-party reproduction, broad runtime compatibility, or
+> production readiness.
 
 ## Why MissionBraid
 
@@ -91,16 +94,27 @@ contract:
 
 This is a local vertical slice, not a broad runtime compatibility claim.
 
-## Try the controlled fixture
+## Try the controlled fixtures
 
-Requirements: Node.js 24–26, pnpm, Git, and the runtime CLI being tested.
+Common requirements: Node.js 24–26, pnpm, and Git. The commands below target a
+POSIX shell on macOS, Linux, or WSL; native Windows reproduction is not yet
+documented or verified.
 
 ```sh
-pnpm install
+pnpm install --frozen-lockfile
 pnpm build
+```
+
+### E0 process recovery
+
+E0 requires an installed and authenticated `codex` CLI that can access the
+profile in the Mission file.
+
+```sh
 RUN_ROOT="$(mktemp -d)"
 WORKSPACE_DIR="$RUN_ROOT/workspace"
 STATE_DIR="$RUN_ROOT/control/.missionbraid"
+printf 'WORKSPACE_DIR=%s\nSTATE_DIR=%s\n' "$WORKSPACE_DIR" "$STATE_DIR"
 node scripts/prepare-e1-fixture.mjs "$WORKSPACE_DIR"
 node dist/src/cli.js run examples/e0-fixture/mission.yaml \
   --workspace "$WORKSPACE_DIR" \
@@ -120,11 +134,71 @@ RUNTIME_PID='paste activeProcess.pid from status output'
 node dist/src/cli.js list --state-dir "$STATE_DIR"
 node dist/src/cli.js status "$MISSION_ID" --state-dir "$STATE_DIR"
 kill -TERM "$RUNTIME_PID"
+```
+
+Wait for the original `run` command to return a waiting result and release its
+workspace lease. Then resume the same Mission:
+
+```sh
 node dist/src/cli.js resume "$MISSION_ID" --state-dir "$STATE_DIR"
 ```
 
-Only use the included disposable fixture for this interruption exercise.
-Controller state must remain outside the target workspace.
+### E1 Codex-to-Qoder handoff
+
+E1 requires both installed CLIs, valid local authentication, and access to the
+models fixed in the Mission file:
+
+```sh
+command -v codex
+codex --version
+command -v qodercli
+qodercli --version
+```
+
+In the first terminal, create fresh, disjoint workspace and controller paths,
+then start the E1 Mission. Keep this `run` process alive:
+
+```sh
+RUN_ROOT="$(mktemp -d)"
+WORKSPACE_DIR="$RUN_ROOT/workspace"
+STATE_DIR="$RUN_ROOT/control/.missionbraid"
+printf 'WORKSPACE_DIR=%s\nSTATE_DIR=%s\n' "$WORKSPACE_DIR" "$STATE_DIR"
+
+node scripts/prepare-e1-fixture.mjs "$WORKSPACE_DIR"
+node dist/src/cli.js run examples/e1-fixture/mission.yaml \
+  --workspace "$WORKSPACE_DIR" \
+  --state-dir "$STATE_DIR"
+```
+
+In a second terminal, reuse the two printed absolute paths. Wait until `list`
+shows the single fresh Mission, then let the fixture helper enforce the exact
+Codex checkpoint boundary and signal only its persisted runtime PID:
+
+```sh
+WORKSPACE_DIR='/absolute/run-root/workspace'
+STATE_DIR='/absolute/run-root/control/.missionbraid'
+
+node dist/src/cli.js list --state-dir "$STATE_DIR"
+node scripts/interrupt-e1-at-checkpoint.mjs \
+  --workspace "$WORKSPACE_DIR" \
+  --state-dir "$STATE_DIR"
+```
+
+The original `run` controller automatically checkpoints Codex, projects the
+Capsule, and starts Qoder. Do **not** launch a concurrent `resume`. Wait for the
+first terminal to return `status: "succeeded"` with
+`receipt.outcome: "verified"`, then replay the original verifier:
+
+```sh
+MISSION_ID='paste missionId from the succeeded run output'
+node dist/src/cli.js status "$MISSION_ID" --state-dir "$STATE_DIR"
+node dist/src/cli.js verify "$MISSION_ID" --state-dir "$STATE_DIR"
+```
+
+`resume` is only for a controller that has exited or returned a waiting result
+and no longer owns the workspace lease. The E1 fixture's normal SIGTERM path
+does not require it. Only use the included disposable fixtures; controller
+state must remain outside the target workspace.
 
 ## Evidence status
 
@@ -138,13 +212,24 @@ Controller state must remain outside the target workspace.
   acknowledged that Capsule while its workspace digest still matched the
   recorded handoff baseline, completed the remaining files, and the original
   Contract issued a verified Receipt against commit `b16bd0b`.
+- [E1 task-context-isolated local reproduction](evidence/e1-context-isolated-reproduction-local-2026-08-24.json):
+  a separate task context used a clean public clone and fresh state/workspace,
+  reproduced the Codex-to-Qoder handoff against commit `f73bc24`, and replayed
+  the original verifier to issue a second verified Receipt.
+- [E1 checkpoint-helper local validation](evidence/e1-checkpoint-helper-local-2026-08-24.json):
+  the exact helper content bound the public E1 spec, clean baseline, Codex
+  process, and renewed controller lease before signaling; the resulting real
+  Codex-to-Qoder run and explicit reverification both issued verified Receipts.
 - [Earlier blocked E1 evidence](evidence/e1-blocked-local-2026-08-24.json) is
   retained as failure history: the prior Qoder account session stopped before
   acknowledgement, and MissionBraid issued no false Receipt.
 
-These are local, commit-bound records, not an independent reproduction,
-hostile-runtime isolation result, production deployment, or broad compatibility
-result.
+These are local, revision- or content-hash-bound records. The fresh-clone
+reproduction isolated the task context, Mission state, and workspace, but reused
+the same host and its authenticated runtime installations; user-level Harness
+instructions, Skills, MCP, and other configuration may also have been reused.
+It is not third-party or cross-host reproduction, hostile-runtime isolation,
+production deployment, or broad compatibility evidence.
 
 ## Current scope
 
@@ -155,8 +240,10 @@ The evidence scope is deliberately narrow:
 - **E1 gate:** the same real Mission crosses two runtime profiles without manual
   context transfer and closes with a verified Receipt.
 
-E0 and E1 are locally satisfied for the single controlled runs bound to commits
-`9d5b4d3` and `b16bd0b`; independent reproduction remains open.
+E0 and E1 are locally satisfied for the controlled runs bound to commits
+`9d5b4d3` and `b16bd0b`. A same-host, task-context-isolated fresh-clone run
+bound to `f73bc24` reproduced E1; third-party or cross-host reproduction remains
+open.
 
 This repository should still be read as a pre-alpha local vertical slice. The
 verified Codex-to-Qoder fixture is evidence for that exact path, not a production

@@ -3,8 +3,10 @@
 > **Status:** accepted target architecture with a pre-alpha local vertical
 > slice. One controlled local E0 run is verified against implementation commit
 > `9d5b4d3`; one controlled local Codex-to-Qoder E1 run is verified against
-> commit `b16bd0b`. The design below includes target semantics that are not fully
-> implemented, and independent reproduction remains open.
+> commit `b16bd0b`; one same-host, task-context-isolated fresh-clone run
+> reproduced E1 against `f73bc24`. Host-level Harness configuration may still
+> have been reused. The design below includes target semantics that are not
+> fully implemented, and third-party or cross-host reproduction remains open.
 
 ## Product contract
 
@@ -278,7 +280,11 @@ closed against its original Contract and is bound to implementation commit
 then crossed from an interrupted Codex Attempt to a Qoder Attempt, received a
 Capsule acknowledgement while the controller still observed the workspace
 digest matching the recorded handoff baseline, and closed against its original
-Contract with a verified Receipt bound to commit `b16bd0b`. These are local
-results, not
-independent reproductions, hostile-runtime isolation, production adoption, or
-broad runtime compatibility evidence.
+Contract with a verified Receipt bound to commit `b16bd0b`. A [second E1
+run](../evidence/e1-context-isolated-reproduction-local-2026-08-24.json) used a
+clean public clone and fresh state/workspace in a separate task context on the
+same host, then explicitly replayed the verifier to issue another verified
+Receipt against `f73bc24`. Host-level Harness instructions, Skills, MCP, and
+other configuration may have been reused. These are local results, not
+third-party or cross-host reproduction, hostile-runtime isolation, production
+adoption, or broad runtime compatibility evidence.

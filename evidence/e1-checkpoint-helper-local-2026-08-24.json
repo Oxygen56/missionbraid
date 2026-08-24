@@ -1,0 +1,173 @@
+{
+  "schemaVersion": "missionbraid.dev/evidence/e1-checkpoint-helper/v1",
+  "evidenceLevel": "single local real-runtime validation of exact helper content",
+  "recordedOn": "2026-08-24",
+  "implementation": {
+    "baseRevision": "f73bc248504d109ff6a3574372d497f4890f5ff7",
+    "missionCoreTree": "bf699bf2a91d94b2da3b6c468c435110b6a2f71d",
+    "checkpointHelperSha256": "f0743792fa7baf54a8eb288996e170733a409be34b7a4289ce8148ccca8c5b88",
+    "missionSpecSha256": "66ad7ff5355fae45d2546e7cdb995aa3e261179f4cede369824033bb797b62b9",
+    "fixturePreparerSha256": "0a1edf5795f92a6c356342db86bd1076a4f5cea854b9eb1859aa0574522b30a8",
+    "helperRuntimeDependencySha256": {
+      "dist/src/spec.js": "02f5d11cfcf00cf4f43b1f073ee802abb20e43adbb5690c0abf3b6af00aa23a6",
+      "dist/src/store.js": "6aa0bebbfc97995fdbbb27a0de05ea14ab70ceece12a86f4a777c118514644d0"
+    },
+    "freshBuildCompletedBeforeRun": true,
+    "publicationStateAtRun": "local-uncommitted-helper-exact-content"
+  },
+  "runtime": {
+    "node": "26.4.0",
+    "pnpm": "11.18.0",
+    "codexCli": "0.149.0-alpha.4.1",
+    "qoderCli": "1.1.6"
+  },
+  "helperResult": {
+    "status": "signaled",
+    "signal": "SIGTERM",
+    "missionId": "mission-cbbe72a5-ab18-4c84-933d-8a3257fbb170",
+    "attemptId": "attempt-7b8ec949-fc80-44e4-8902-7b23aa29a702",
+    "runtimePid": 82327,
+    "elapsedMs": 60570,
+    "stdoutSha256": "5f89355993762632bca5d7d0fc535bcfc7a5e9b835959afae4bc0f6ae4243e92",
+    "stdoutByteCountIncludingTrailingLf": 556,
+    "specSnapshotHash": "d2da4bed44cbd44c41ed36499c131584b1c95be40b5afc4fbdb0da2f345e2a26",
+    "baselineWorkspaceDigest": "397638046e2ef62eee7977fbcd5ec55deafb1a852fe396d887fd171efd25c43c",
+    "controllerLeaseRenewed": true,
+    "controllerLeaseTtlMsAtSignalBoundary": 23340,
+    "changedPaths": ["src/effect-core.mjs", "src/ledger.mjs"],
+    "coreTests": {
+      "passed": 4,
+      "failed": 0
+    }
+  },
+  "mission": {
+    "missionId": "mission-cbbe72a5-ab18-4c84-933d-8a3257fbb170",
+    "contractId": "contract-80dea736bf2c1648f6303bb19ebb",
+    "createdAt": "2026-08-23T23:48:28.399Z",
+    "firstReceiptAt": "2026-08-23T23:51:50.635Z",
+    "explicitReverificationReceiptAt": "2026-08-23T23:52:15.191Z",
+    "secondsToFirstReceipt": 202.236,
+    "secondsToExplicitReverification": 226.792,
+    "finalStatus": "succeeded"
+  },
+  "fixtureBaseline": {
+    "targetCommit": "180a0da5c733fd6e23683c0942d01f12b029ae05",
+    "workspaceDigest": "397638046e2ef62eee7977fbcd5ec55deafb1a852fe396d887fd171efd25c43c",
+    "statusDigest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "status": "clean-and-failing-as-designed"
+  },
+  "sourceAttempt": {
+    "attemptId": "attempt-7b8ec949-fc80-44e4-8902-7b23aa29a702",
+    "checkpointId": "checkpoint-0d43cf0345f1cd3a8b9949e2466d",
+    "checkpointStatus": "handed_off",
+    "harness": "codex",
+    "profileId": "profile-e822e7dabbcbd916f193a5c2bb0c",
+    "model": "gpt-5.6-sol",
+    "reasoningEffort": "medium",
+    "interruptionSignal": "SIGTERM",
+    "processOutputSha256": "dcb7e8267c3c8e0239966db33291b4b76bdee32637355de3d548d2a899b53b83",
+    "afterWorkspaceDigest": "2c20ea98d86be592822371bfcaf4fe1226dd6ce294703686627c877261a4a082",
+    "changedPaths": [
+      {
+        "path": "src/effect-core.mjs",
+        "sha256": "f0a5d2e79ab1e983700e1ae3c65953ea9b7b53b4f06502f1c3d77d28e7553532"
+      },
+      {
+        "path": "src/ledger.mjs",
+        "sha256": "92db496dfa333c7b626a8cefe389926c706fc3b618adf2e86b407f55954c44a5"
+      }
+    ]
+  },
+  "handoff": {
+    "capsuleId": "capsule-93cc276ab220f6934d2632be07059f0f00baed9f79810ca216be5cdfa72085d7",
+    "capsuleHash": "93cc276ab220f6934d2632be07059f0f00baed9f79810ca216be5cdfa72085d7",
+    "projectionHash": "704cd916574353610a8c5161d8c41dcd3d68a34802be23dee137dea9cf427732",
+    "projectionUtf8Bytes": 2061,
+    "projectionEstimatedTokens": 516,
+    "projectionBudgetTokens": 1600,
+    "acknowledgementId": "ack-122a3033c5d050fe41ce7d7f",
+    "acknowledgementEventSeq": 19,
+    "checkpointId": "checkpoint-0d43cf0345f1cd3a8b9949e2466d",
+    "sourceAttemptId": "attempt-7b8ec949-fc80-44e4-8902-7b23aa29a702",
+    "targetAttemptId": "attempt-c111ca7a-7eb9-4f38-877f-63510e1b6c97",
+    "targetBaselineWorkspaceDigest": "2c20ea98d86be592822371bfcaf4fe1226dd6ce294703686627c877261a4a082",
+    "controllerObservedWorkspaceMatchedCheckpointAtAcknowledgement": true
+  },
+  "targetAttempt": {
+    "attemptId": "attempt-c111ca7a-7eb9-4f38-877f-63510e1b6c97",
+    "checkpointId": "checkpoint-350a249b8854fa4f96c7efd41c93",
+    "checkpointStatus": "succeeded",
+    "harness": "qoder",
+    "profileId": "profile-67e07cda82607c428a281231de95",
+    "model": "Qwen3.8-Max",
+    "reasoningEffort": "medium",
+    "processExitCode": 0,
+    "processOutputSha256": "c81f5a169d632d199ba28800bf67531360ec01d042c884115efbe30da5bafde1",
+    "afterWorkspaceDigest": "9d529c121b1a4e73b1504d0f9b9371de17824ed3584b02ff5ae4938b47668296",
+    "changedPaths": [
+      {
+        "path": "src/cli.mjs",
+        "sha256": "91408e7984c1b5d5ef22ff01a5e9577497ec4f82d3f38eaffd69c2cfa9e34fb2"
+      },
+      {
+        "path": "src/ledger.mjs",
+        "sha256": "f893263c1dd8e57b14693d769a0d126bb9ae72354b69dda702bb4bbcfad673a2"
+      }
+    ],
+    "sourceCheckpointCoreSha256": "f0a5d2e79ab1e983700e1ae3c65953ea9b7b53b4f06502f1c3d77d28e7553532",
+    "finalCoreSha256": "f0a5d2e79ab1e983700e1ae3c65953ea9b7b53b4f06502f1c3d77d28e7553532",
+    "finalCoreMatchesSourceCheckpoint": true
+  },
+  "verification": {
+    "criterionId": "effect-ledger-contract",
+    "initialVerificationExitCode": 0,
+    "explicitReverificationExitCode": 0,
+    "publicFixtureIntegrity": true,
+    "outOfProcessBehaviorProbePassed": true,
+    "provenanceBound": true,
+    "provenanceProjectionSha256": "4856c143829212212ea168a40ce3bc035fc3c774d9f221f33a4f765c2621d6f7",
+    "verifierInvocationSha256": "e39f03507d08fc75ac59d1edf9f6619c6e62d6a0f3adc87e383b0a2b3536909b",
+    "verifierStdout": {
+      "byteCount": 436,
+      "sha256": "062458e0aca68bd1239d8c4fa7cc4318cbef141951043d862636a17aa530728a"
+    },
+    "verifierStderr": {
+      "byteCount": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "unresolvedItems": []
+  },
+  "receipts": {
+    "first": {
+      "receiptId": "receipt-6dc617f3-91d9-438c-b88b-84f1e02e8a67",
+      "outcome": "verified",
+      "verifiedThroughSeq": 25,
+      "verifiedHeadHash": "9c3a6ad489732a20fe9acae2c7524900c8ced108d3620e58e65926156b7883fd"
+    },
+    "explicitReverification": {
+      "receiptId": "receipt-84c420a6-fabb-493e-bc7e-8a8e6b853f14",
+      "outcome": "verified",
+      "verifiedThroughSeq": 28,
+      "verifiedHeadHash": "5c6a8957a08cc9a4b3b56f593e02616d58b10e0c5c8914d9a1a13d98697a6d8b",
+      "projectionFileSha256": "d5fa585d6c7ee1780c224ecbfed8104a23dba7645039ae1e6038fb553e08adcc"
+    },
+    "effects": [
+      {
+        "effectId": "effect-attempt-7b8ec949-fc80-44e4-8902-7b23aa29a702",
+        "status": "confirmed",
+        "controlLevel": "advisory"
+      },
+      {
+        "effectId": "effect-attempt-c111ca7a-7eb9-4f38-877f-63510e1b6c97",
+        "status": "confirmed",
+        "controlLevel": "advisory"
+      }
+    ]
+  },
+  "eventChain": {
+    "valid": true,
+    "eventCount": 29,
+    "finalHeadHash": "ac7e24bd5fc082543e3ae5eaa5fb9867f56684e30c15c28d4599865858372478"
+  },
+  "claimBoundary": "This validates one exact-content local checkpoint helper run on a working tree based on revision f73bc24 after a fresh build. The helper and its imported build artifacts are hash-bound; its raw result is bound by byte count and SHA-256. It bound the public E1 specification, clean fixture baseline and unchanged non-checkpoint paths, module dependency, exact changed paths, core tests, persisted Codex process identity, and a renewed controller lease before signaling that runtime. The Mission then completed one real Codex-to-Qoder handoff and both the original verification and an explicit reverification produced verified Receipts. The target workspace digest matched the source checkpoint when acknowledgement was observed; this does not prove that the target runtime performed no transient action before acknowledgement. This is not controller-crash recovery, a clean-clone validation of a published helper revision, third-party or cross-host reproduction, production readiness, broad runtime compatibility, or evidence of guarded or enforced Effect deduplication."
+}
