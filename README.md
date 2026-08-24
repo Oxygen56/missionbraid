@@ -2,20 +2,29 @@
 
 **One mission. Many runtimes. Verifiable outcomes.**
 
-MissionBraid is a pre-alpha, mission-centric control plane for long-running
-coding agents.
+MissionBraid keeps a coding task alive when work moves between agent tools. The
+user defines the objective and verifier once; MissionBraid preserves durable
+workspace evidence across Runtime Attempts and closes the task only when the
+original outcome is independently verified.
 
-> **Project status:** pre-alpha. The local unified Harness Workbench is
-> implemented at commit `c55dd54`. A clean public clone submitted one Mission
-> through the web form, ran real Codex and Qoder Attempts that both changed the
-> same workspace, transferred a hash-bound Capsule without manual context
-> copying, passed the original verifier, issued a verified Receipt, and restored
-> that result after the Workbench restarted. The catalog currently exposes six
-> target Harnesses, but only Codex and Qoder have execution adapters. Routing is
-> user-selected, not automatic or quota-aware. Earlier interruption-recovery and
-> Kandev v0.91.0 compatibility evidence is retained below.
+> **Status:** pre-alpha, local-first, source-only. Codex and Qoder are the two
+> execution adapters today. A clean public-clone run proved the complete
+> Workbench path; automatic routing, broad Harness support, and production
+> readiness are not claimed.
 
-![MissionBraid Workbench showing a verified Codex-to-Qoder Mission](docs/assets/missionbraid-workbench-verified.png)
+![MissionBraid local Workbench overview](docs/assets/missionbraid-workbench-overview.png)
+
+[Open the complete verified timeline and Receipt](docs/assets/missionbraid-workbench-verified.png).
+
+## At a glance
+
+|                  | Current answer                                                                                                                                                                                                                         |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| User problem     | Switching agent tools during a long task requires manual context transfer, side-effect reconstruction, and a separate judgement of whether the work is actually done.                                                                  |
+| Core abstraction | A durable **Mission** owns the objective, Attempt chain, handoff evidence, Effect state, and verified outcome; a Harness is an execution resource.                                                                                     |
+| Product today    | A local Workbench discovers the target Runtime catalog, lets the user choose Codex/Qoder profiles, runs ordered Attempts, and projects the authoritative timeline and Receipt.                                                         |
+| Strongest proof  | One web-form Mission crossed real Codex and Qoder Attempts; both changed the same disposable workspace, Qoder acknowledged the Capsule before mutation, 12 target tests passed, and the 26-event verified result survived app restart. |
+| Not yet          | Automatic profile selection, quota-aware routing, general failure replanning, third-party adapters, multi-host operation, or a packaged release.                                                                                       |
 
 ## Why MissionBraid
 
@@ -54,9 +63,48 @@ remain valid **across** those boundaries:
 - the Mission and its acceptance contract;
 - the chain of runtime-specific Attempts;
 - evidence-backed handoff between Attempts;
-- conditional protection against repeated mutable actions;
-- reproducible planning and failure evidence;
+- explicit control levels and evidence for repeated mutable actions;
+- a recorded route today and an explicit deterministic-planning contract for
+  future automation;
+- layered failure evidence without upgrading hypotheses to certainty;
 - completion verified independently from an agent's own report.
+
+This remains useful even when another product already launches many agents:
+MissionBraid does not compete on the launch surface. It owns the cross-runtime
+contract, continuity evidence, and completion decision that must remain stable
+when the executor changes.
+
+## How the implemented path works
+
+```mermaid
+flowchart LR
+  U[One user submission] --> W[Local Workbench]
+  W --> K[Mission Kernel]
+  K --> S[(SQLite event chain)]
+  K --> C[Codex Attempt]
+  C --> CP[Workspace Checkpoint]
+  CP --> H[Hash-bound Capsule]
+  H --> Q[Qoder Attempt]
+  Q --> V[Controller verifier]
+  V --> R[Outcome Receipt]
+  R --> S
+  S --> W
+```
+
+The route is user-selected in the current version. The diagram describes the
+real Codex-to-Qoder path, not the future deterministic planner.
+
+## Runtime support
+
+| Runtime or provider | Local discovery                | Executes Mission Attempts | Real public-revision evidence                       |
+| ------------------- | ------------------------------ | ------------------------- | --------------------------------------------------- |
+| Codex               | Probe implemented              | Yes                       | Single-runtime recovery and Codex-to-Qoder          |
+| Qoder               | Probe implemented              | Yes                       | Qoder continuation after Capsule acknowledgement    |
+| Claude Code         | Probe implemented              | No                        | Discovery only                                      |
+| OpenCode            | Probe implemented              | No                        | Discovery only                                      |
+| Hermes              | Probe implemented              | No                        | Discovery only                                      |
+| DeepSeek Harness    | Wrapper/bootstrap signal       | No                        | Discovery only                                      |
+| Kandev v0.91.0      | Separate compatibility command | No                        | Public task/worktree/custom-process interfaces only |
 
 ## Design principles
 
@@ -73,9 +121,13 @@ remain valid **across** those boundaries:
 
 ## Project documents
 
+- [Project tour for first-time readers](docs/project-tour.md)
 - [Product architecture](docs/architecture.md)
 - [Implementation and evidence roadmap](docs/roadmap.md)
+- [Evidence index and claim boundaries](evidence/README.md)
+- [Controlled reproduction procedures](docs/reproducing-evidence.md)
 - [Key product and technical questions](docs/key-questions.md)
+- [Contributing](CONTRIBUTING.md)
 
 ## Implemented vertical path
 
@@ -98,208 +150,77 @@ contract:
 
 This is a local vertical slice, not a broad runtime compatibility claim.
 
-## Run the unified Workbench
+## Five-minute Workbench path
 
 Requirements: Node.js 24–26, pnpm, Git, and at least one installed and
 authenticated supported Runtime. The real cross-Harness path currently requires
 both `codex` and `qodercli`.
 
+MissionBraid is currently run from source; there is no npm package or tagged
+release yet.
+
 ```sh
 pnpm install --frozen-lockfile
 pnpm build
-node dist/src/cli.js app --state-dir ~/.missionbraid --port 4317
+node dist/src/cli.js runtimes list --json
+
+MISSIONBRAID_DEMO_ROOT="$(mktemp -d)"
+node scripts/prepare-e1-fixture.mjs "$MISSIONBRAID_DEMO_ROOT/workspace"
+node dist/src/cli.js app --state-dir "$MISSIONBRAID_DEMO_ROOT/state" --port 4317
 ```
 
 Open `http://127.0.0.1:4317`. The Workbench shows Codex, Qoder, Claude Code,
 OpenCode, Hermes, and DeepSeek Harness with their observed local status. Only a
 Runtime marked **ready and supported** can be selected for execution. Choose a
 Codex, Qoder, or Codex-to-Qoder route, set the model and reasoning profile,
-provide a Git worktree and direct verifier command, then submit once.
+then use these values for the prepared fixture:
+
+**Title**
+
+```text
+Complete the Effect Ledger across Codex and Qoder
+```
+
+**Objective**
+
+```text
+Complete the dependency-free JSONL Effect Ledger in this disposable repository. Read AGENTS.md, README.md, and every public test. Implement record, replay, same-payload idempotency, payload-conflict detection, deterministic serialization, incomplete-tail recovery, strict corruption handling, and the CLI. Do not edit tests or install dependencies. Leave node --test passing for the original Mission objective.
+```
+
+- **Workspace:** the absolute path printed by the fixture preparer
+- **Route:** Codex to Qoder
+- **Verifier executable:** `node`
+- **Verifier arguments:** one line containing `--test`
+
+Submit once after selecting locally available model and reasoning profiles.
 
 The Workbench persists the Mission before starting a Runtime. A restart restores
 the Mission, Attempt timeline, Capsule evidence, and Receipt. If it finds a
 persisted `running` or `verifying` Mission without a live in-process operation,
 it marks the Mission interrupted and offers the existing recovery path.
 
-## Try the controlled fixtures
+## Reproduce the deeper paths
 
-Common requirements: Node.js 24–26, pnpm, and Git. The commands below target a
-POSIX shell on macOS, Linux, or WSL; native Windows reproduction is not yet
-documented or verified.
+The Workbench path above is the product entry. The separate
+[reproduction guide](docs/reproducing-evidence.md) contains an E0 Runtime-process
+interruption procedure, the interruption-bound E1 Codex-to-Qoder procedure, and
+the isolated Kandev v0.91.0 public-interface check. These paths intentionally use
+disposable workspaces and keep controller state outside the target repo.
 
-```sh
-pnpm install --frozen-lockfile
-pnpm build
-```
+## Flagship evidence
 
-### E0 process recovery
+The [unified Workbench evidence](evidence/unified-workbench-codex-qoder-local-2026-08-24.json)
+is the fastest way to inspect the strongest current claim. It binds a clean
+public clone of `c55dd54` to one real web-form Mission, two successful Runtime
+Attempts with distinct workspace changes, acknowledgement before target
+mutation, a passing verifier, a Receipt with no unresolved item, and restoration
+of the same result in a new app process.
 
-E0 requires an installed and authenticated `codex` CLI that can access the
-profile in the Mission file.
-
-```sh
-RUN_ROOT="$(mktemp -d)"
-WORKSPACE_DIR="$RUN_ROOT/workspace"
-STATE_DIR="$RUN_ROOT/control/.missionbraid"
-printf 'WORKSPACE_DIR=%s\nSTATE_DIR=%s\n' "$WORKSPACE_DIR" "$STATE_DIR"
-node scripts/prepare-e1-fixture.mjs "$WORKSPACE_DIR"
-node dist/src/cli.js run examples/e0-fixture/mission.yaml \
-  --workspace "$WORKSPACE_DIR" \
-  --state-dir "$STATE_DIR"
-```
-
-In another terminal, `list` reveals the Mission ID and `status` reveals the
-owned runtime PID. Reuse the absolute `STATE_DIR` created above, interrupt that
-runtime only after the disposable worktree contains a meaningful change, then
-continue without restating the task:
-
-```sh
-STATE_DIR='/absolute/path/from/the/first/terminal'
-MISSION_ID='paste missionId from list output'
-RUNTIME_PID='paste activeProcess.pid from status output'
-
-node dist/src/cli.js list --state-dir "$STATE_DIR"
-node dist/src/cli.js status "$MISSION_ID" --state-dir "$STATE_DIR"
-kill -TERM "$RUNTIME_PID"
-```
-
-Wait for the original `run` command to return a waiting result and release its
-workspace lease. Then resume the same Mission:
-
-```sh
-node dist/src/cli.js resume "$MISSION_ID" --state-dir "$STATE_DIR"
-```
-
-### E1 Codex-to-Qoder handoff
-
-E1 requires both installed CLIs, valid local authentication, and access to the
-models fixed in the Mission file:
-
-```sh
-command -v codex
-codex --version
-command -v qodercli
-qodercli --version
-```
-
-In the first terminal, create fresh, disjoint workspace and controller paths,
-then start the E1 Mission. Keep this `run` process alive:
-
-```sh
-RUN_ROOT="$(mktemp -d)"
-WORKSPACE_DIR="$RUN_ROOT/workspace"
-STATE_DIR="$RUN_ROOT/control/.missionbraid"
-printf 'WORKSPACE_DIR=%s\nSTATE_DIR=%s\n' "$WORKSPACE_DIR" "$STATE_DIR"
-
-node scripts/prepare-e1-fixture.mjs "$WORKSPACE_DIR"
-node dist/src/cli.js run examples/e1-fixture/mission.yaml \
-  --workspace "$WORKSPACE_DIR" \
-  --state-dir "$STATE_DIR"
-```
-
-In a second terminal, reuse the two printed absolute paths. Wait until `list`
-shows the single fresh Mission, then let the fixture helper enforce the exact
-Codex checkpoint boundary and signal only its persisted runtime PID:
-
-```sh
-WORKSPACE_DIR='/absolute/run-root/workspace'
-STATE_DIR='/absolute/run-root/control/.missionbraid'
-
-node dist/src/cli.js list --state-dir "$STATE_DIR"
-node scripts/interrupt-e1-at-checkpoint.mjs \
-  --workspace "$WORKSPACE_DIR" \
-  --state-dir "$STATE_DIR"
-```
-
-The original `run` controller automatically checkpoints Codex, projects the
-Capsule, and starts Qoder. Do **not** launch a concurrent `resume`. Wait for the
-first terminal to return `status: "succeeded"` with
-`receipt.outcome: "verified"`, then replay the original verifier:
-
-```sh
-MISSION_ID='paste missionId from the succeeded run output'
-node dist/src/cli.js status "$MISSION_ID" --state-dir "$STATE_DIR"
-node dist/src/cli.js verify "$MISSION_ID" --state-dir "$STATE_DIR"
-```
-
-`resume` is only for a controller that has exited or returned a waiting result
-and no longer owns the workspace lease. The E1 fixture's normal SIGTERM path
-does not require it. Only use the included disposable fixtures; controller
-state must remain outside the target workspace.
-
-### Kandev v0.91.0 public-interface check
-
-MissionBraid includes a narrow development command for the separately installed
-[Kandev v0.91.0 release](https://github.com/kdlbs/kandev/releases/tag/v0.91.0).
-It pins the release commit, creates or reconciles one prepared Kandev task by
-`external_id`, observes its worktree binding, starts one preconfigured custom
-process, and requires the public process GET and list endpoints to stop exposing
-that process after a stop request.
-
-Run this only against an isolated disposable Kandev workspace. Configure the
-selected repository with a no-side-effect probe script that remains alive long
-enough to be observed, such as `pwd; sleep 600`; use a disposable agent profile
-and executor because session preparation may instantiate them. Then copy and complete
-[`config.example.json`](examples/kandev-provider-check/config.example.json).
-Authentication, when enabled, is read only from
-`MISSIONBRAID_KANDEV_TOKEN`; it is never accepted in the config or written to
-the result.
-
-```sh
-node dist/src/cli.js provider-check kandev /absolute/path/to/config.json \
-  --output /absolute/path/to/result.json
-```
-
-This command is deliberately outside the Mission Kernel. A compatible result
-is evidence only for the checked v0.91.0 public task, worktree, and custom-process
-lifecycle endpoints in that run. It is not an Outcome Receipt, a Kandev-backed
-Mission, Kandev Session or Agent lifecycle control, broad provider support,
-proof of operating-system process termination, or production readiness.
-MissionBraid remains independent and does not fork Kandev or read its internal
-database.
-
-## Evidence status
-
-- [Unified Workbench local real-runtime evidence](evidence/unified-workbench-codex-qoder-local-2026-08-24.json):
-  a web-form Mission from a clean public clone of `c55dd54` selected Codex
-  `gpt-5.6-sol` and Qoder `Qwen3.8-Max`; both produced distinct workspace
-  changes, Qoder acknowledged the Capsule before mutation, 12 target tests
-  passed, the Receipt had no unresolved item, and a new Workbench process
-  restored the same 26-event Mission.
-- [E0 local real-runtime evidence](evidence/e0-local-2026-08-24.json): a
-  controlled controller `SIGKILL` was recovered by Mission ID alone, the
-  original Contract passed, and a verified Receipt was issued against
-  implementation commit `9d5b4d3`.
-- [E1 local real-runtime evidence](evidence/e1-local-2026-08-24.json): Codex was
-  interrupted with `SIGTERM` after meaningful stage-owned changes,
-  MissionBraid captured its checkpoint and projected a Capsule, Qoder
-  acknowledged that Capsule while its workspace digest still matched the
-  recorded handoff baseline, completed the remaining files, and the original
-  Contract issued a verified Receipt against commit `b16bd0b`.
-- [E1 task-context-isolated local reproduction](evidence/e1-context-isolated-reproduction-local-2026-08-24.json):
-  a separate task context used a clean public clone and fresh state/workspace,
-  reproduced the Codex-to-Qoder handoff against commit `f73bc24`, and replayed
-  the original verifier to issue a second verified Receipt.
-- [E1 checkpoint-helper local validation](evidence/e1-checkpoint-helper-local-2026-08-24.json):
-  the exact helper content bound the public E1 spec, clean baseline, Codex
-  process, and renewed controller lease before signaling; the resulting real
-  Codex-to-Qoder run and explicit reverification both issued verified Receipts.
-- [Earlier blocked E1 evidence](evidence/e1-blocked-local-2026-08-24.json) is
-  retained as failure history: the prior Qoder account session stopped before
-  acknowledgement, and MissionBraid issued no false Receipt.
-- [Kandev v0.91.0 local provider-interface check](evidence/kandev-v0.91.0-provider-check-local-2026-08-24.json):
-  a clean-clone run created a fresh task, session, and worktree; its rerun
-  reconciled the same identities. Both started distinct custom processes,
-  accepted stop requests, and observed each exact process retire from the public
-  API. This is compatibility evidence for those endpoints, not a Kandev-backed
-  Mission or Session/Agent lifecycle support.
-
-These are local, revision- or content-hash-bound records. The fresh-clone
-reproduction isolated the task context, Mission state, and workspace, but reused
-the same host and its authenticated runtime installations; user-level Harness
-instructions, Skills, MCP, and other configuration may also have been reused.
-It is not third-party or cross-host reproduction, hostile-runtime isolation,
-production deployment, or broad compatibility evidence.
+The complete [evidence index](evidence/README.md) separates the flagship result,
+interruption-recovery runs, reproductions, provider compatibility checks, and a
+retained failed run. All current records are local and same-host. They do not
+establish third-party reproduction, hostile-runtime isolation, production
+deployment, or broad Runtime compatibility.
 
 ## Current scope
 

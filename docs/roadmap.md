@@ -11,48 +11,67 @@
 This roadmap separates implementation order from evidence. A module existing in
 the repository does not prove the corresponding product outcome.
 
-## Implementation path
+## Capability status
 
-### 1. Mission kernel and local durability
+| Capability                                                 | Status                           | Current evidence                                                      | Next acceptance condition                                                |
+| ---------------------------------------------------------- | -------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Mission Kernel, Contract, event chain, leases, and fencing | Implemented                      | E0/E1 plus Workbench restart restoration                              | Third-party recovery reproduction                                        |
+| Local unified Workbench                                    | Implemented                      | Clean-public-clone web-form Mission and restored Receipt              | Packaged installation and external reproduction                          |
+| Fixed target Runtime catalog                               | Implemented                      | Six target entries with explicit support/readiness states             | Versioned discovery contract rather than a larger hard-coded list        |
+| Direct Runtime execution                                   | Implemented for Codex and Qoder  | Real ordered Attempts from both adapters                              | One additional adapter with a new protocol boundary                      |
+| Canonical Capsule and target acknowledgement               | Implemented                      | Budgeted projection and acknowledgement before target mutation        | Cross-host/profile reproduction and broader budget characterization      |
+| Outcome verification and Receipt                           | Implemented for command criteria | Original verifier, hash-linked evidence, no-unresolved-item Receipt   | Additional criterion types without weakening authority                   |
+| Effect control                                             | Partial                          | Advisory workspace-stage Effect identities and Receipt disclosure     | Guarded or enforced external Effect with crash reconciliation            |
+| Failure evidence and attribution                           | Partial                          | Observed workspace/runtime failure events and bounded classifications | Versioned multi-layer attribution with discriminating probes             |
+| Deterministic Runtime planner                              | Design only                      | Architecture and required decision-hash contract                      | `filter → rank → record` implementation over immutable Profile snapshots |
+| Kandev execution provider                                  | Compatibility only               | Checked v0.91.0 task/worktree/custom-process public interfaces        | Complete provider-bound Mission Attempt and lifecycle control            |
+| Replay, fork, and automatic replan                         | Planned                          | No current capability claim                                           | E2 evidence gate                                                         |
 
-- versioned Mission and Outcome Contract;
-- append-only local event store and rebuildable projections;
-- workspace lease and fencing;
-- permission and cost envelopes;
-- immutable Runtime Profile snapshots.
+## Target implementation sequence
 
-### 2. One-runtime vertical path
+### 1. Mission kernel and local durability — implemented slice
 
-- deterministic profile filtering and planning;
-- one direct runtime adapter;
-- Attempt lifecycle and checkpointing;
-- independent criterion verification;
-- minimal Outcome Receipt.
+- versioned Mission and Outcome Contract — implemented;
+- append-only local event store and rebuildable projections — implemented;
+- workspace lease and fencing — implemented;
+- immutable Runtime Profile snapshots — implemented;
+- broader permission and cost envelopes — open.
 
-### 3. Cross-runtime handoff
+### 2. One-runtime vertical path — implemented without automatic planning
 
-- Canonical Handoff Capsule;
-- profile-budgeted Capsule Projection;
-- structured target acknowledgement;
-- Effect Ledger and crash reconciliation;
-- a second direct runtime adapter.
+- direct user-selected profile validation — implemented;
+- one direct runtime adapter — implemented;
+- Attempt lifecycle and checkpointing — implemented;
+- independent command-criterion verification — implemented;
+- minimal Outcome Receipt — implemented;
+- deterministic profile filtering, ranking, and decision recording — open.
 
-### 4. External execution-provider path
+### 3. Cross-runtime handoff — implemented for Codex and Qoder
 
-- versioned provider contract;
+- Canonical Handoff Capsule — implemented;
+- profile-budgeted Capsule Projection — implemented;
+- structured target acknowledgement — implemented;
+- advisory workspace Effect identities — implemented;
+- a second direct runtime adapter — implemented;
+- guarded external Effect deduplication and crash reconciliation — open.
+
+### 4. External execution-provider path — compatibility check only
+
+- versioned provider contract — designed, not implemented;
 - implemented exact-release public-interface check for Kandev v0.91.0 task,
   worktree, and preconfigured custom-process lifecycle;
-- workspace and lifecycle binding without forking or importing provider state;
-- real cross-runtime handoff with basic failure evidence.
+- workspace and lifecycle binding without forking or importing provider state —
+  open;
+- provider-bound Mission Attempt and handoff evidence — open.
 
-### 5. Replanning and timeline
+### 5. Replanning and timeline — planned E2 work
 
 - evidence-backed failure candidates and bounded diagnostic probes;
 - automatic safe replanning;
 - checkpoint replay and isolated fork semantics;
 - agentctl-compatible session projection where applicable.
 
-### 6. Platform surface
+### 6. Platform surface — Workbench implemented, SDK/evaluation open
 
 - implemented local Mission Workbench over authoritative state, including
   Runtime inventory, Mission creation, run/resume/verify actions, timeline, and

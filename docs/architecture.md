@@ -47,6 +47,42 @@ machine. It currently provides:
 The Workbench does not yet choose an optimal Runtime, read quota balances,
 replan after failure, or execute the four visible unsupported Harnesses.
 
+## Current running architecture
+
+This diagram contains only the path implemented and exercised by the current
+public Workbench evidence:
+
+```mermaid
+flowchart LR
+  UI[Workbench / CLI] --> ENG[Mission Engine]
+  ENG <--> DB[(SQLite hash-linked events)]
+  ENG --> CA[Codex adapter]
+  ENG --> QA[Qoder adapter]
+  CA --> WS[Git workspace]
+  QA --> WS
+  WS --> SNAP[Baseline / Checkpoint snapshots]
+  SNAP --> CAP[Canonical Capsule + projection]
+  CAP --> QA
+  ENG --> VER[Out-of-process verifier]
+  VER --> REC[Outcome Receipt]
+  REC --> DB
+  DB --> UI
+```
+
+| Implemented responsibility                                      | Source                                                                                                   |
+| --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Local HTTP entry, background operations, and restart projection | [`src/app.ts`](../src/app.ts), [`src/app-page.ts`](../src/app-page.ts)                                   |
+| Versioned Mission creation and validation                       | [`src/mission-draft.ts`](../src/mission-draft.ts), [`src/spec.ts`](../src/spec.ts)                       |
+| Attempt execution, recovery, handoff, and Receipt orchestration | [`src/engine.ts`](../src/engine.ts)                                                                      |
+| Append-only events, projections, leases, and fencing            | [`src/store.ts`](../src/store.ts)                                                                        |
+| Workspace evidence                                              | [`src/workspace.ts`](../src/workspace.ts)                                                                |
+| Capsule projection and acknowledgement validation               | [`src/capsule.ts`](../src/capsule.ts)                                                                    |
+| Direct Runtime processes                                        | [`src/adapters/codex.ts`](../src/adapters/codex.ts), [`src/adapters/qoder.ts`](../src/adapters/qoder.ts) |
+| Independent acceptance command                                  | [`src/verifier.ts`](../src/verifier.ts)                                                                  |
+
+The [project tour](project-tour.md) connects these modules to the full user
+journey and focused tests.
+
 ## Target architecture
 
 ```mermaid
