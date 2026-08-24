@@ -1,0 +1,196 @@
+{
+  "schemaVersion": "missionbraid.dev/evidence/unified-workbench/v1",
+  "evidenceLevel": "clean-public-clone-local-real-runtime",
+  "recordedOn": "2026-08-24",
+  "implementation": {
+    "revision": "c55dd544f022c1fae67debd3669b6e78e311fc8d",
+    "tree": "7605d4519be1bb809a0e80456982700314d4c9ee",
+    "publicRepository": "https://github.com/Oxygen56/missionbraid",
+    "publicMainMatchedRevisionBeforeRun": true,
+    "cleanPublicCloneUsed": true,
+    "cleanCloneHeadMatchedRevision": true,
+    "worktreeCleanBeforeRun": true,
+    "freshInstallAndBuildCompletedBeforeRun": true,
+    "nodeVersion": "26.4.0",
+    "pnpmVersion": "11.18.0"
+  },
+  "productEntry": {
+    "entry": "local-loopback-workbench",
+    "missionSubmittedThroughWebForm": true,
+    "userAuthoredMissionYaml": false,
+    "manualContextTransferBetweenHarnesses": false,
+    "selectedRoute": ["codex", "qoder"],
+    "runtimeProfiles": [
+      {
+        "harness": "codex",
+        "model": "gpt-5.6-sol",
+        "reasoningEffort": "medium",
+        "permissionMode": "workspace-write"
+      },
+      {
+        "harness": "qoder",
+        "model": "Qwen3.8-Max",
+        "reasoningEffort": "medium",
+        "permissionMode": "bypass_permissions"
+      }
+    ]
+  },
+  "runtimeInventory": [
+    {
+      "id": "codex",
+      "status": "ready-supported",
+      "version": "0.149.0-alpha.4.1"
+    },
+    {
+      "id": "qoder",
+      "status": "ready-supported",
+      "version": "1.1.6"
+    },
+    {
+      "id": "claude",
+      "status": "installed-unsupported",
+      "version": "2.1.241"
+    },
+    {
+      "id": "opencode",
+      "status": "installed-unsupported",
+      "version": "1.18.21"
+    },
+    {
+      "id": "hermes",
+      "status": "installed-unsupported",
+      "version": "2026.7.20"
+    },
+    {
+      "id": "deepseek-harness",
+      "status": "needs-bootstrap",
+      "version": null
+    }
+  ],
+  "fixture": {
+    "source": "examples/e1-fixture/template",
+    "preparer": "scripts/prepare-e1-fixture.mjs",
+    "baselineCommit": "a6d22264df2c034c8781e12a2e645330a8e3c125",
+    "baseline": "failing-as-designed",
+    "baselineExitCode": 1,
+    "finalPublicTests": {
+      "passed": 12,
+      "failed": 0
+    }
+  },
+  "mission": {
+    "missionId": "mission-dceca427-be55-4b02-8a2f-b0d930ac65aa",
+    "contractId": "contract-c10d74130519a833a5a6a44630a4",
+    "title": "Complete the Effect Ledger across Codex and Qoder",
+    "createdAt": "2026-08-24T07:07:31.266Z",
+    "completedAt": "2026-08-24T07:12:45.804Z",
+    "elapsedSeconds": 314.538,
+    "finalStatus": "succeeded"
+  },
+  "attempts": [
+    {
+      "attemptId": "attempt-c486ffaa-4688-450a-990e-741f660dfc4b",
+      "stageId": "codex-primary",
+      "harness": "codex",
+      "runtimeVersion": "0.149.0-alpha.4.1",
+      "model": "gpt-5.6-sol",
+      "reasoningEffort": "medium",
+      "processExitCode": 0,
+      "processAborted": false,
+      "checkpointId": "checkpoint-888acb4c175764db9dd2100e0358",
+      "checkpointStatus": "succeeded",
+      "beforeWorkspaceDigest": "10372a205512d7d5135790595a73f59bde57c07a081eb9c305258e61d553e8ba",
+      "afterWorkspaceDigest": "2a5ce654a521183fa1a78fe006bb93d72a16e20f02a2a3ae110ac0a9981511e3",
+      "changedPaths": ["src/effect-core.mjs", "src/ledger.mjs"],
+      "outputSha256": "bc4e9951367607c7d039931601d0eab83f5c922d2def5af4fe422b20d43b7383"
+    },
+    {
+      "attemptId": "attempt-aa0e600b-a4d4-4b63-89bd-b0d5d9e61bf7",
+      "stageId": "qoder-continuation",
+      "harness": "qoder",
+      "runtimeVersion": "1.1.6",
+      "model": "Qwen3.8-Max",
+      "reasoningEffort": "medium",
+      "processExitCode": 0,
+      "processAborted": false,
+      "checkpointId": "checkpoint-d100465305a543d26722177bcfc5",
+      "checkpointStatus": "succeeded",
+      "beforeWorkspaceDigest": "2a5ce654a521183fa1a78fe006bb93d72a16e20f02a2a3ae110ac0a9981511e3",
+      "afterWorkspaceDigest": "f8675335b0b7f46621ac0c88be4a3af26a9597f72b13643d79064064554932e7",
+      "changedPaths": ["src/cli.mjs", "src/ledger.mjs"],
+      "outputSha256": "3542ef00b3a39bd375e4842b6ebb6620b4de4286a6f30cd77c48b8aa949136f5"
+    }
+  ],
+  "handoff": {
+    "capsuleId": "capsule-69a3690b1772242cf52967d8dc6b2135a6d11f5686d23a934c6d85f239ae8e2d",
+    "capsuleHash": "69a3690b1772242cf52967d8dc6b2135a6d11f5686d23a934c6d85f239ae8e2d",
+    "projectionHash": "e34496544b424295eb5c65a78e3f2c90288bf8bd250cba1911b3edc9e60aa261",
+    "checkpointId": "checkpoint-888acb4c175764db9dd2100e0358",
+    "sourceAttemptId": "attempt-c486ffaa-4688-450a-990e-741f660dfc4b",
+    "targetAttemptId": "attempt-aa0e600b-a4d4-4b63-89bd-b0d5d9e61bf7",
+    "budgetTokens": 1600,
+    "estimatedTokens": 527,
+    "acknowledgementId": "ack-2865b727ed709dfeb1ce1c57",
+    "acknowledgedBeforeTargetMutation": true,
+    "sourceCheckpointMatchesTargetBaseline": true
+  },
+  "verification": {
+    "criterionId": "mission-outcome",
+    "executable": "node",
+    "arguments": ["--test"],
+    "passed": true,
+    "exitCode": 0,
+    "timedOut": false,
+    "invocationDigest": "9eed79e0e4e08053815f3c8949154561baf37d331b7774fd2c633065039740e9",
+    "stdoutSha256": "187990dd3c15c93053daa2f2c139c63b9a2c830f3d54f086de59b29296058b96",
+    "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "receipt": {
+    "receiptId": "receipt-cfc67ea8-27c0-43fe-bcd6-b01f523f028f",
+    "outcome": "verified",
+    "verifiedThroughSeq": 25,
+    "verifiedHeadHash": "de7b3c95d35e708ee0bddb03e1e10ee041a3d12cb2eb1590a2efcd1e44b1406a",
+    "effects": [
+      {
+        "effectId": "effect-attempt-c486ffaa-4688-450a-990e-741f660dfc4b",
+        "status": "confirmed"
+      },
+      {
+        "effectId": "effect-attempt-aa0e600b-a4d4-4b63-89bd-b0d5d9e61bf7",
+        "status": "confirmed"
+      }
+    ],
+    "unresolvedItems": []
+  },
+  "eventChain": {
+    "valid": true,
+    "eventCount": 26,
+    "finalHeadHash": "13c7fe05d779e3ef3c756ac43913bed2f20a74fcb4749e1aa05f5bfd19eb4ad9"
+  },
+  "restartRecovery": {
+    "appStoppedAfterReceipt": true,
+    "newAppProcessUsedSameState": true,
+    "sameMissionRestored": true,
+    "restoredStatus": "succeeded",
+    "restoredEventCount": 26,
+    "restoredOperation": null,
+    "restoredReceiptId": "receipt-cfc67ea8-27c0-43fe-bcd6-b01f523f028f"
+  },
+  "productScreenshot": {
+    "path": "docs/assets/missionbraid-workbench-verified.png",
+    "sha256": "15465cc1c15a47afbc1b670a4b2949e7b0f4bef6c6818a034f82bba68048ffb5",
+    "runtimeCards": 6,
+    "missionCards": 1,
+    "visibleTimelineEvents": 23,
+    "visibleReceiptOutcome": "verified",
+    "desktopHorizontalOverflow": false
+  },
+  "qualityChecks": {
+    "cleanCloneFormatCheckPassed": true,
+    "cleanCloneTypecheckPassed": true,
+    "cleanCloneBuildPassed": true,
+    "testFilesPassed": 17,
+    "testsPassed": 118
+  },
+  "claimBoundary": "This proves one same-host local Mission submitted through the public revision's Workbench: Codex and Qoder were user-selected Runtime Profiles, both changed the disposable workspace in ordered Attempts, Qoder acknowledged the controller-generated Capsule before its mutation, the original verifier passed, a verified Receipt had no unresolved item, and a new Workbench process restored the same durable result. The catalog is a fixed target catalog and only Codex and Qoder have execution adapters. This does not establish automatic optimal or quota-aware routing, failure-triggered replanning, Kandev-backed Mission execution, arbitrary Harness compatibility, multi-host isolation, third-party reproduction, production readiness, or adoption."
+}

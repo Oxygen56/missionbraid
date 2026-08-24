@@ -1,12 +1,11 @@
 # Key Questions
 
-> **Status:** pre-alpha design and local implementation. One controlled local E0
-> run is verified against implementation commit `9d5b4d3`; one controlled local
-> Codex-to-Qoder E1 run is verified against commit `b16bd0b`; one same-host,
-> task-context-isolated fresh-clone run reproduced E1 against `f73bc24` while
-> host-level Harness configuration may have been reused. These results do not
-> represent third-party or cross-host reproduction, production readiness, or
-> broad cross-runtime compatibility.
+> **Status:** pre-alpha design and local product implementation. The unified
+> Workbench path is verified in a clean public clone of `c55dd54`: one web-form
+> Mission crossed real Codex and Qoder Attempts, both changed the workspace, the
+> original verifier passed, and the Receipt survived app restart. This does not
+> represent automatic routing, third-party or cross-host reproduction,
+> production readiness, or broad execution compatibility.
 
 MissionBraid is intentionally organized around questions that must be answered
 with code and reproducible evidence, not feature-count claims.
@@ -22,7 +21,10 @@ runtime boundaries.
 crossed from Codex to Qoder without manual context transfer and closed against
 its original Outcome Contract. A [same-host, task-context-isolated fresh-clone
 run](../evidence/e1-context-isolated-reproduction-local-2026-08-24.json)
-reproduced that path; third-party or cross-host reproduction remains required.
+reproduced that path. The [unified Workbench run](../evidence/unified-workbench-codex-qoder-local-2026-08-24.json)
+then proved the same core value through the product entry rather than a
+user-authored Mission file; third-party or cross-host reproduction remains
+required.
 
 ## 2. What exactly is portable across runtimes?
 
@@ -125,9 +127,10 @@ evidence gate.
 
 **Evidence status:** controlled local E0 and E1 runs satisfy the public gates in
 the [roadmap](roadmap.md). A same-host, task-context-isolated run from a clean
-public clone reproduced E1 and explicitly replayed its verifier. Third-party or
-cross-host reproduction and matched evaluation against manual transfer and
-relevant overlapping baselines remain.
+public clone reproduced E1 and explicitly replayed its verifier. A second clean
+public-clone run submitted through the Workbench and restored its verified
+Receipt after restart. Third-party or cross-host reproduction and matched
+evaluation against manual transfer and relevant overlapping baselines remain.
 
 ## 11. Which claims are intentionally excluded?
 

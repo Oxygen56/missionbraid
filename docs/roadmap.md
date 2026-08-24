@@ -1,15 +1,12 @@
 # MissionBraid Roadmap
 
-> **Current status:** pre-alpha. The thin direct-adapter E0/E1 paths are
-> implemented in code. One controlled local E0 run is verified against
-> implementation commit `9d5b4d3`; one controlled local Codex-to-Qoder E1 run
-> is verified against commit `b16bd0b`. A same-host, task-context-isolated run
-> from a clean public clone reproduced E1 against `f73bc24`; host-level Harness
-> configuration may have been reused, and third-party or cross-host
-> reproduction remains open. Separately, a clean-clone fresh-create run and
-> deduplicated rerun against MissionBraid commit `bf8c978` exercised Kandev
-> v0.91.0 task, worktree, and custom-process endpoints without executing a
-> Mission.
+> **Current status:** pre-alpha. E0/E1 and the local unified Harness Workbench
+> are implemented. A clean public-clone Workbench run against `c55dd54`
+> submitted one Mission without user-authored YAML, executed real Codex and
+> Qoder profiles with distinct changes, verified the original outcome, and
+> restored the same Receipt after restart. Only Codex and Qoder execute today;
+> automatic planning, quota-aware routing, additional adapters, and
+> third-party/cross-host reproduction remain open.
 
 This roadmap separates implementation order from evidence. A module existing in
 the repository does not prove the corresponding product outcome.
@@ -57,7 +54,9 @@ the repository does not prove the corresponding product outcome.
 
 ### 6. Platform surface
 
-- read-only Mission console over authoritative state;
+- implemented local Mission Workbench over authoritative state, including
+  Runtime inventory, Mission creation, run/resume/verify actions, timeline, and
+  Receipt;
 - adapter SDK and conformance suite;
 - matched evaluation against manual context transfer and relevant baselines;
 - additional adapters only when they add a new capability category or answer a
@@ -131,6 +130,16 @@ E2 requires:
 
 Before E2, MissionBraid does not claim automatic failover or time travel.
 
+### Product milestone — Unified Workbench
+
+[One clean-public-clone run](../evidence/unified-workbench-codex-qoder-local-2026-08-24.json)
+binds the product-shaped path to `c55dd54`: six target Harnesses were visible,
+Codex and Qoder were selectable as Runtime Profiles, one web submission created
+and ran the Mission, both Attempts changed the same disposable workspace, the
+Capsule was acknowledged before Qoder mutation, the verifier passed, and a new
+Workbench process restored the same Receipt. This milestone does not satisfy
+E2 automatic replanning or broaden execution support beyond Codex and Qoder.
+
 ## Evaluation after the flagship path
 
 A same-host, task-context-isolated run from a clean public clone has reproduced
@@ -149,23 +158,24 @@ Receipt replay.
 
 ## Scope discipline
 
-While E0 and E1 evidence remains limited to controlled local and same-host
-task-context-isolated runs, the project will not prioritize:
+While evidence remains limited to controlled local and same-host runs, the
+project will not prioritize:
 
-- a dashboard-first experience;
+- secondary dashboards beyond the implemented local Workbench;
 - a generic plugin marketplace;
 - a broad runtime compatibility matrix;
 - distributed or multi-host state;
 - production-readiness claims;
 - additional reliability machinery not exposed by the real vertical path.
 
-The next provider item is a real Mission Attempt bound to an external worktree
-and runtime lifecycle. Kandev v0.91.0's checked public API does not expose full
+The next product capability is deterministic `filter → rank → record` planning
+over the Runtime Profiles already exposed by the Workbench, followed by one
+additional real adapter and evidence-triggered E2 recovery. The next provider
+item is a real Mission Attempt bound to an external worktree and complete
+runtime lifecycle. Kandev v0.91.0's checked public API does not expose full
 Session or Agent stop, so the completed compatibility check is not promoted to
 Provider support. MissionBraid will not silently depend on Kandev's documented
-internal, unversioned WebSocket protocol. Third-party or cross-host E1
-reproduction remains an external evidence target rather than a reason to expand
-the local framework first.
+internal, unversioned WebSocket protocol.
 
 ## Release policy
 

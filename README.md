@@ -5,19 +5,17 @@
 MissionBraid is a pre-alpha, mission-centric control plane for long-running
 coding agents.
 
-> **Project status:** pre-alpha. The thin direct-adapter E0/E1 paths are
-> implemented in code. One controlled local E0 run is verified against
-> implementation commit `9d5b4d3`. One controlled local E1 run is verified
-> against commit `b16bd0b`: Codex was interrupted after meaningful work, Qoder
-> acknowledged the Capsule while its workspace still matched the recorded
-> handoff baseline, continued there, and the original Contract produced a
-> verified Receipt. A second E1 run from a clean public clone of commit
-> `f73bc24` reproduced that path in a separate task context on the same host;
-> host-level Harness configuration may still have been reused. A separate local
-> check against Kandev v0.91.0 first created a fresh task, session, and worktree,
-> then reconciled them on rerun while retiring a distinct custom process each
-> time. These results do not establish a Kandev-backed Mission, third-party reproduction,
-> broad runtime compatibility, or production readiness.
+> **Project status:** pre-alpha. The local unified Harness Workbench is
+> implemented at commit `c55dd54`. A clean public clone submitted one Mission
+> through the web form, ran real Codex and Qoder Attempts that both changed the
+> same workspace, transferred a hash-bound Capsule without manual context
+> copying, passed the original verifier, issued a verified Receipt, and restored
+> that result after the Workbench restarted. The catalog currently exposes six
+> target Harnesses, but only Codex and Qoder have execution adapters. Routing is
+> user-selected, not automatic or quota-aware. Earlier interruption-recovery and
+> Kandev v0.91.0 compatibility evidence is retained below.
+
+![MissionBraid Workbench showing a verified Codex-to-Qoder Mission](docs/assets/missionbraid-workbench-verified.png)
 
 ## Why MissionBraid
 
@@ -40,7 +38,7 @@ issuing an outcome receipt.
 ```text
 Outcome Contract
   → Runtime Profile
-  → deterministic planning
+  → recorded route decision
   → bounded evidence handoff
   → effect reconciliation
   → verified Outcome Receipt
@@ -92,9 +90,36 @@ contract:
 - budgeted Canonical Capsule projection and structured acknowledgement checks;
 - advisory workspace Effect identities;
 - out-of-process command verification and hash-bound Outcome Receipts;
-- `run`, `resume`, `status`, `list`, and `verify` commands.
+- a local Workbench that discovers the target Runtime catalog, creates a
+  Mission without user-authored YAML, runs it in the background, and projects
+  its authoritative timeline and Receipt;
+- `app`, `runtimes list`, `create`, `run`, `resume`, `status`, `list`, and
+  `verify` commands.
 
 This is a local vertical slice, not a broad runtime compatibility claim.
+
+## Run the unified Workbench
+
+Requirements: Node.js 24–26, pnpm, Git, and at least one installed and
+authenticated supported Runtime. The real cross-Harness path currently requires
+both `codex` and `qodercli`.
+
+```sh
+pnpm install --frozen-lockfile
+pnpm build
+node dist/src/cli.js app --state-dir ~/.missionbraid --port 4317
+```
+
+Open `http://127.0.0.1:4317`. The Workbench shows Codex, Qoder, Claude Code,
+OpenCode, Hermes, and DeepSeek Harness with their observed local status. Only a
+Runtime marked **ready and supported** can be selected for execution. Choose a
+Codex, Qoder, or Codex-to-Qoder route, set the model and reasoning profile,
+provide a Git worktree and direct verifier command, then submit once.
+
+The Workbench persists the Mission before starting a Runtime. A restart restores
+the Mission, Attempt timeline, Capsule evidence, and Receipt. If it finds a
+persisted `running` or `verifying` Mission without a live in-process operation,
+it marks the Mission interrupted and offers the existing recovery path.
 
 ## Try the controlled fixtures
 
@@ -235,6 +260,12 @@ database.
 
 ## Evidence status
 
+- [Unified Workbench local real-runtime evidence](evidence/unified-workbench-codex-qoder-local-2026-08-24.json):
+  a web-form Mission from a clean public clone of `c55dd54` selected Codex
+  `gpt-5.6-sol` and Qoder `Qwen3.8-Max`; both produced distinct workspace
+  changes, Qoder acknowledged the Capsule before mutation, 12 target tests
+  passed, the Receipt had no unresolved item, and a new Workbench process
+  restored the same 26-event Mission.
 - [E0 local real-runtime evidence](evidence/e0-local-2026-08-24.json): a
   controlled controller `SIGKILL` was recovered by Mission ID alone, the
   original Contract passed, and a verified Receipt was issued against
@@ -281,8 +312,8 @@ The evidence scope is deliberately narrow:
 
 E0 and E1 are locally satisfied for the controlled runs bound to commits
 `9d5b4d3` and `b16bd0b`. A same-host, task-context-isolated fresh-clone run
-bound to `f73bc24` reproduced E1; third-party or cross-host reproduction remains
-open.
+bound to `f73bc24` reproduced E1. The product-shaped Workbench path is bound to
+public commit `c55dd54`; third-party or cross-host reproduction remains open.
 
 This repository should still be read as a pre-alpha local vertical slice. The
 verified Codex-to-Qoder fixture is evidence for that exact path, not a production

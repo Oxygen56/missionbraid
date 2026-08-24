@@ -1,15 +1,13 @@
 # MissionBraid Architecture
 
-> **Status:** accepted target architecture with a pre-alpha local vertical
-> slice. One controlled local E0 run is verified against implementation commit
-> `9d5b4d3`; one controlled local Codex-to-Qoder E1 run is verified against
-> commit `b16bd0b`; one same-host, task-context-isolated fresh-clone run
-> reproduced E1 against `f73bc24`. Host-level Harness configuration may still
-> have been reused. A separate local check twice exercised the selected public
-> task, worktree, and custom-process endpoints of Kandev v0.91.0 against
-> MissionBraid commit `bf8c978`; it did not execute a Mission. The design below
-> includes target semantics that are not fully implemented, and third-party or
-> cross-host reproduction remains open.
+> **Status:** accepted target architecture with a pre-alpha local product
+> slice. The unified Workbench, Mission Kernel, direct Codex/Qoder adapters,
+> Capsule handoff, verifier, and Receipt path are implemented at `c55dd54`. A
+> clean public-clone run submitted the Mission through the Workbench, exercised
+> both real Runtime Profiles, and restored the verified result after restart.
+> Deterministic automatic planning, additional execution adapters, and
+> Kandev-backed Mission execution remain target semantics rather than current
+> capabilities.
 
 ## Product contract
 
@@ -31,11 +29,29 @@ Three rules follow:
 - **Done is a receipt, not a claim.** Completion returns to the original
   acceptance criteria and a controller-run verifier.
 
+## Implemented product surface
+
+The local Workbench is a projection over the Mission Kernel, not a second state
+machine. It currently provides:
+
+- a fixed target catalog for Codex, Qoder, Claude Code, OpenCode, Hermes, and
+  DeepSeek Harness with explicit installed/supported/readiness states;
+- editable Runtime Profiles for the supported Codex and Qoder adapters;
+- one-form Mission creation with a Git workspace and direct verifier command;
+- ordered Codex, Qoder, or Codex-to-Qoder execution;
+- a durable Attempt, Checkpoint, Capsule, Effect, verification, and Receipt
+  timeline;
+- restart restoration and a visible recovery action for interrupted
+  `running`/`verifying` Missions.
+
+The Workbench does not yet choose an optimal Runtime, read quota balances,
+replan after failure, or execute the four visible unsupported Harnesses.
+
 ## Target architecture
 
 ```mermaid
 flowchart TB
-  U[CLI / API] --> MK[Mission Kernel + Outcome Contract]
+  U[Local Workbench / CLI / API] --> MK[Mission Kernel + Outcome Contract]
   MK --> RP[Runtime Profile Registry]
   RP --> PL[Deterministic Planner]
   PL --> AR[Attempt Runner]
@@ -303,3 +319,11 @@ identities. Both started distinct preconfigured custom processes and observed
 accepted stop plus exact public-process retirement. It did not bind a Mission
 Attempt, control the full Kandev Session or Agent lifecycle, or issue an Outcome
 Receipt.
+
+The [unified Workbench run](../evidence/unified-workbench-codex-qoder-local-2026-08-24.json)
+is bound to public commit `c55dd54`. It used a clean public clone and fresh
+state/workspace, submitted through the web form, let both Codex and Qoder make
+distinct changes, observed Capsule acknowledgement before Qoder mutation,
+issued a verified Receipt, and restored the same 26-event Mission in a new app
+process. It remains a same-host local result, not automatic routing, broad
+adapter support, third-party reproduction, or production adoption.
