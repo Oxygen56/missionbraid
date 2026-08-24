@@ -106,9 +106,13 @@ provider, not MissionBraid's state machine or source-code base. Integration is
 through a versioned public process boundary, without a fork or shared internal
 database. Direct local adapters remain a valid path.
 
-**Evidence required:** the public interface must support the workspace,
-lifecycle, status, output, and stable-reference contract needed by a real E1
-run. Until then, Kandev compatibility is a target, not a supported claim.
+**Evidence status:** a [clean-clone, two-run local check](../evidence/kandev-v0.91.0-provider-check-local-2026-08-24.json)
+against the official v0.91.0 container first created a fresh task, session, and
+worktree, then reconciled the same identities on rerun. Both runs started and
+retired distinct preconfigured custom processes. The versioned public API still
+lacks full Session or Agent stop. Kandev-backed
+Mission execution, a real provider-bound E1, and Outcome Receipt issuance
+therefore remain unproven and unsupported.
 
 ## 10. How will MissionBraid prove value rather than merely add machinery?
 

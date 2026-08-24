@@ -5,8 +5,11 @@
 > `9d5b4d3`; one controlled local Codex-to-Qoder E1 run is verified against
 > commit `b16bd0b`; one same-host, task-context-isolated fresh-clone run
 > reproduced E1 against `f73bc24`. Host-level Harness configuration may still
-> have been reused. The design below includes target semantics that are not
-> fully implemented, and third-party or cross-host reproduction remains open.
+> have been reused. A separate local check twice exercised the selected public
+> task, worktree, and custom-process endpoints of Kandev v0.91.0 against
+> MissionBraid commit `bf8c978`; it did not execute a Mission. The design below
+> includes target semantics that are not fully implemented, and third-party or
+> cross-host reproduction remains open.
 
 ## Product contract
 
@@ -123,11 +126,13 @@ An Attempt binds one Mission to one Runtime Profile and one execution provider.
 One runtime session cannot be controlled simultaneously by both an external
 provider and a direct adapter.
 
-The initial implementation uses local execution. Kandev is a candidate mature
-execution provider through a versioned public process boundary; MissionBraid
-does not fork it or share its internal database. Provider compatibility must be
-proven against the required workspace and lifecycle contract before it is
-described as supported.
+The initial implementation uses local execution. Kandev remains a candidate
+mature execution provider through versioned public boundaries; MissionBraid
+does not fork it or share its internal database. The checked v0.91.0 HTTP
+surface can prepare and reconcile a task worktree and control a preconfigured
+custom process. It does not expose versioned public Session or Agent stop, so
+that check is not sufficient to describe Kandev-backed Mission execution as
+supported.
 
 ### Append-only events and ownership
 
@@ -265,11 +270,13 @@ MissionBraid remains an independent project:
 - any intentional reuse must pin a source revision and preserve its license and
   attribution.
 
-Kandev may supply workspace and execution lifecycle capabilities. An
-agentctl-compatible bridge may inform native Claude/Codex session projection.
-Smithers may inform or provide timeline mechanics. Multica is a product-space
-reference, not a source-code baseline. These relationships are targets or
-compatibility directions until demonstrated by code and reproducible evidence.
+Kandev v0.91.0 has locally demonstrated the checked public task, worktree, and
+custom-process lifecycle endpoints. A complete Kandev-backed Attempt remains a
+target because its versioned public API does not control the full Session or
+Agent lifecycle. An agentctl-compatible bridge may inform native Claude/Codex
+session projection. Smithers may inform or provide timeline mechanics. Multica
+is a product-space reference, not a source-code baseline. None is a source-code
+base for MissionBraid.
 
 ## Evidence boundary
 
@@ -288,3 +295,11 @@ Receipt against `f73bc24`. Host-level Harness instructions, Skills, MCP, and
 other configuration may have been reused. These are local results, not
 third-party or cross-host reproduction, hostile-runtime isolation, production
 adoption, or broad runtime compatibility evidence.
+
+A separate [Kandev v0.91.0 check](../evidence/kandev-v0.91.0-provider-check-local-2026-08-24.json)
+ran from a clean clone against one isolated official container. Its first run
+created a fresh Kandev task, session, and worktree; its rerun reconciled the same
+identities. Both started distinct preconfigured custom processes and observed
+accepted stop plus exact public-process retirement. It did not bind a Mission
+Attempt, control the full Kandev Session or Agent lifecycle, or issue an Outcome
+Receipt.

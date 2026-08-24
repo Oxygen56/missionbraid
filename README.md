@@ -13,9 +13,11 @@ coding agents.
 > handoff baseline, continued there, and the original Contract produced a
 > verified Receipt. A second E1 run from a clean public clone of commit
 > `f73bc24` reproduced that path in a separate task context on the same host;
-> host-level Harness configuration may still have been reused. These results do
-> not establish third-party reproduction, broad runtime compatibility, or
-> production readiness.
+> host-level Harness configuration may still have been reused. A separate local
+> check against Kandev v0.91.0 first created a fresh task, session, and worktree,
+> then reconciled them on rerun while retiring a distinct custom process each
+> time. These results do not establish a Kandev-backed Mission, third-party reproduction,
+> broad runtime compatibility, or production readiness.
 
 ## Why MissionBraid
 
@@ -254,6 +256,12 @@ database.
 - [Earlier blocked E1 evidence](evidence/e1-blocked-local-2026-08-24.json) is
   retained as failure history: the prior Qoder account session stopped before
   acknowledgement, and MissionBraid issued no false Receipt.
+- [Kandev v0.91.0 local provider-interface check](evidence/kandev-v0.91.0-provider-check-local-2026-08-24.json):
+  a clean-clone run created a fresh task, session, and worktree; its rerun
+  reconciled the same identities. Both started distinct custom processes,
+  accepted stop requests, and observed each exact process retire from the public
+  API. This is compatibility evidence for those endpoints, not a Kandev-backed
+  Mission or Session/Agent lifecycle support.
 
 These are local, revision- or content-hash-bound records. The fresh-clone
 reproduction isolated the task context, Mission state, and workspace, but reused

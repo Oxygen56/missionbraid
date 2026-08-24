@@ -6,7 +6,10 @@
 > is verified against commit `b16bd0b`. A same-host, task-context-isolated run
 > from a clean public clone reproduced E1 against `f73bc24`; host-level Harness
 > configuration may have been reused, and third-party or cross-host
-> reproduction remains open.
+> reproduction remains open. Separately, a clean-clone fresh-create run and
+> deduplicated rerun against MissionBraid commit `bf8c978` exercised Kandev
+> v0.91.0 task, worktree, and custom-process endpoints without executing a
+> Mission.
 
 This roadmap separates implementation order from evidence. A module existing in
 the repository does not prove the corresponding product outcome.
@@ -40,7 +43,8 @@ the repository does not prove the corresponding product outcome.
 ### 4. External execution-provider path
 
 - versioned provider contract;
-- public-interface compatibility checks for Kandev;
+- implemented exact-release public-interface check for Kandev v0.91.0 task,
+  worktree, and preconfigured custom-process lifecycle;
 - workspace and lifecycle binding without forking or importing provider state;
 - real cross-runtime handoff with basic failure evidence.
 
@@ -155,10 +159,13 @@ task-context-isolated runs, the project will not prioritize:
 - production-readiness claims;
 - additional reliability machinery not exposed by the real vertical path.
 
-The next implementation item is the shortest provider-bound path that can
-validate Kandev's workspace and lifecycle contract, not the largest available
-feature list. Third-party or cross-host E1 reproduction remains an external
-evidence target rather than a reason to expand the local framework first.
+The next provider item is a real Mission Attempt bound to an external worktree
+and runtime lifecycle. Kandev v0.91.0's checked public API does not expose full
+Session or Agent stop, so the completed compatibility check is not promoted to
+Provider support. MissionBraid will not silently depend on Kandev's documented
+internal, unversioned WebSocket protocol. Third-party or cross-host E1
+reproduction remains an external evidence target rather than a reason to expand
+the local framework first.
 
 ## Release policy
 

@@ -1,0 +1,196 @@
+{
+  "schemaVersion": "missionbraid.dev/evidence/kandev-provider-check/v1",
+  "evidenceLevel": "fresh-create and deduplicated-rerun checks from a clean clone against one isolated Kandev container",
+  "recordedOn": "2026-08-24",
+  "implementation": {
+    "revision": "bf8c9783811258f8c82964a2a430fc3c92f62593",
+    "tree": "6f283f9b7ba523ae5d7186cc162ca2ec90bcddf5",
+    "cleanCloneUsed": true,
+    "cleanCloneHeadMatchesRevision": true,
+    "worktreeCleanBeforeRuns": true,
+    "freshBuildCompletedBeforeRuns": true,
+    "node": "26.4.0",
+    "pnpm": "11.18.0"
+  },
+  "providerRuntime": {
+    "releaseTag": "v0.91.0",
+    "releaseCommit": "e04428fa363ecc14b4731269630e7c5a7e579d6f",
+    "observedCommit": "e04428f",
+    "image": "ghcr.io/kdlbs/kandev:0.91.0",
+    "imageDigest": "sha256:0ff65d287b28e51102f39a3809c60ee19974bf661c3ef4be7169909581c97003",
+    "system": {
+      "os": "linux",
+      "arch": "arm64",
+      "goVersion": "go1.26.0",
+      "buildTime": "2026-08-21T14:13:12Z"
+    },
+    "isolation": {
+      "containerName": "oxygen-kandev-v091-proof-20260824",
+      "loopbackEndpoint": "http://127.0.0.1:18080",
+      "containerDataPath": "/data",
+      "hostBindPath": "/tmp/kandev-v091-probe-20260824",
+      "bootId": "6e6f083308ed26efa003dcc61747ec54",
+      "startedAt": "2026-08-24T01:14:14.331823629Z",
+      "existingPort8080ServiceTouched": false,
+      "authenticationEnabled": false
+    }
+  },
+  "configuration": {
+    "externalId": "missionbraid-kandev-check-local-20260824-v2",
+    "workspaceId": "821684c6-b8bb-4d88-a853-ed8c2e4f4be7",
+    "workflowId": "4f38c70b-a0fb-4bf1-9298-6bc1aa633df2",
+    "repositoryId": "a9e12d29-1cd6-474a-9bd0-eaf89f8c843b",
+    "agentProfileId": "77aa7320-f8f4-4fcb-90d8-d65c5de8c92a",
+    "executorId": "exec-worktree",
+    "executorProfileId": "99b811fd-06be-46ad-acfc-a52524157532",
+    "scriptName": "probe-sleep",
+    "scriptCommandSha256": "d36307d9a639f9a891f08bcfc17e64884c92474685ed4e4092fbcaf3294747ff",
+    "scriptCommand": "pwd; sleep 600",
+    "environmentPurpose": "disposable compatibility probe only"
+  },
+  "runs": [
+    {
+      "schemaVersion": "missionbraid.dev/provider-check/kandev/result/v1",
+      "artifactKind": "provider-compatibility-check",
+      "result": "compatible",
+      "evidenceLevel": "local-real-runtime",
+      "provider": {
+        "name": "kandev",
+        "api": "public-http-v1",
+        "expectedVersion": "v0.91.0",
+        "expectedReleaseCommit": "e04428fa363ecc14b4731269630e7c5a7e579d6f",
+        "observedVersion": "v0.91.0",
+        "observedCommit": "e04428f",
+        "observedCommitKind": "prefix"
+      },
+      "binding": {
+        "externalId": "missionbraid-kandev-check-local-20260824-v2",
+        "taskId": "846ffe75-e87f-4db7-b1ca-ccb3a8782fea",
+        "taskDeduplicated": false,
+        "sessionReconciled": false,
+        "sessionId": "e263be37-48e9-4b09-a1ba-390dadf336af",
+        "repositoryId": "a9e12d29-1cd6-474a-9bd0-eaf89f8c843b",
+        "worktreeId": "3c113362-cba1-4a2c-a4f5-269c8a751d28",
+        "worktreePath": "/data/tasks/missionbraid-kandev_q6webkuy/seed-repo",
+        "workspacePath": "/data/tasks/missionbraid-kandev_q6webkuy/seed-repo",
+        "branch": "feature/missionbraid-kandev-m2f"
+      },
+      "process": {
+        "processId": "d97695e8-410e-4992-8e41-16f22975388c",
+        "scriptName": "probe-sleep",
+        "acquisition": "started",
+        "statusObserved": "running",
+        "workingDirectory": "/data/tasks/missionbraid-kandev_q6webkuy/seed-repo",
+        "workingDirectoryMatched": true,
+        "stopAccepted": true,
+        "customProcessRetired": true,
+        "absentFromPublicGet": true,
+        "absentFromPublicList": true,
+        "startIdempotency": "unavailable",
+        "automaticStartRetries": 0
+      },
+      "claimBoundary": {
+        "missionExecutionObserved": false,
+        "sessionLifecycleObserved": false,
+        "outcomeReceiptIssued": false,
+        "providerSupportEstablished": false,
+        "productionReadinessEstablished": false
+      },
+      "observedAt": "2026-08-24T01:16:08.329Z",
+      "contentSha256": "ed0f045ec606eb84c2dacb971f2309c28214c8f8f8ff2da8020e37446314e0f8"
+    },
+    {
+      "schemaVersion": "missionbraid.dev/provider-check/kandev/result/v1",
+      "artifactKind": "provider-compatibility-check",
+      "result": "compatible",
+      "evidenceLevel": "local-real-runtime",
+      "provider": {
+        "name": "kandev",
+        "api": "public-http-v1",
+        "expectedVersion": "v0.91.0",
+        "expectedReleaseCommit": "e04428fa363ecc14b4731269630e7c5a7e579d6f",
+        "observedVersion": "v0.91.0",
+        "observedCommit": "e04428f",
+        "observedCommitKind": "prefix"
+      },
+      "binding": {
+        "externalId": "missionbraid-kandev-check-local-20260824-v2",
+        "taskId": "846ffe75-e87f-4db7-b1ca-ccb3a8782fea",
+        "taskDeduplicated": true,
+        "sessionReconciled": true,
+        "sessionId": "e263be37-48e9-4b09-a1ba-390dadf336af",
+        "repositoryId": "a9e12d29-1cd6-474a-9bd0-eaf89f8c843b",
+        "worktreeId": "3c113362-cba1-4a2c-a4f5-269c8a751d28",
+        "worktreePath": "/data/tasks/missionbraid-kandev_q6webkuy/seed-repo",
+        "workspacePath": "/data/tasks/missionbraid-kandev_q6webkuy/seed-repo",
+        "branch": "feature/missionbraid-kandev-m2f"
+      },
+      "process": {
+        "processId": "49a6efd3-2ac0-4bd0-bc7b-b4441c50d2ef",
+        "scriptName": "probe-sleep",
+        "acquisition": "started",
+        "statusObserved": "running",
+        "workingDirectory": "/data/tasks/missionbraid-kandev_q6webkuy/seed-repo",
+        "workingDirectoryMatched": true,
+        "stopAccepted": true,
+        "customProcessRetired": true,
+        "absentFromPublicGet": true,
+        "absentFromPublicList": true,
+        "startIdempotency": "unavailable",
+        "automaticStartRetries": 0
+      },
+      "claimBoundary": {
+        "missionExecutionObserved": false,
+        "sessionLifecycleObserved": false,
+        "outcomeReceiptIssued": false,
+        "providerSupportEstablished": false,
+        "productionReadinessEstablished": false
+      },
+      "observedAt": "2026-08-24T01:16:17.145Z",
+      "contentSha256": "105a28315ea53fa5fa519673d65e205c6f849ae0d412ee91fe310f213c3a718a"
+    }
+  ],
+  "crossRunChecks": {
+    "sameExternalId": true,
+    "sameTaskId": true,
+    "sameSessionId": true,
+    "sameWorktreeId": true,
+    "sameWorktreePath": true,
+    "distinctCustomProcessIds": true,
+    "firstRunCreatedFreshTask": true,
+    "secondRunDeduplicatedTask": true,
+    "firstRunSessionReturnedDirectly": true,
+    "secondRunSessionReconciled": true,
+    "automaticStartRetriesAcrossRuns": 0,
+    "bothCustomProcessesRetired": true
+  },
+  "hostObservation": {
+    "publicProcessCollectionAfterSecondRun": [],
+    "preparedSessionAgentMayRemainRunning": true,
+    "hostProcessSnapshotNotUsedAsCustomProcessProof": true,
+    "note": "Kandev's public stop handler can return 204 even if its internal stop call reports an error. Each run therefore also required the exact custom process GET to return 404 and the exact process id to be absent from the public collection. A separately prepared session Agent may remain running and is outside this check; no host process snapshot is used as proof of custom-process retirement."
+  },
+  "cleanup": {
+    "containerStoppedAfterEvidence": true,
+    "containerAutoRemoved": true,
+    "matchingContainerAfterStop": false,
+    "isolatedHostBindRetained": true
+  },
+  "verification": {
+    "typecheckPassed": true,
+    "buildPassed": true,
+    "formatCheckPassed": true,
+    "relatedTestsPassed": 29,
+    "fullTestFilesPassed": 14,
+    "fullTestsPassed": 89
+  },
+  "upstreamSources": {
+    "release": "https://github.com/kdlbs/kandev/releases/tag/v0.91.0",
+    "taskApi": "https://github.com/kdlbs/kandev/blob/e04428fa363ecc14b4731269630e7c5a7e579d6f/apps/backend/internal/task/handlers/task_http_handlers.go#L743-L795",
+    "processApi": "https://github.com/kdlbs/kandev/blob/e04428fa363ecc14b4731269630e7c5a7e579d6f/apps/backend/internal/task/handlers/process_handlers.go#L35-L130",
+    "stopHandler": "https://github.com/kdlbs/kandev/blob/e04428fa363ecc14b4731269630e7c5a7e579d6f/apps/backend/internal/task/handlers/process_handlers.go#L341-L377",
+    "processGroupRetirement": "https://github.com/kdlbs/kandev/blob/e04428fa363ecc14b4731269630e7c5a7e579d6f/apps/backend/internal/agentctl/server/process/runner.go#L635-L731",
+    "websocketBoundary": "https://github.com/kdlbs/kandev/blob/e04428fa363ecc14b4731269630e7c5a7e579d6f/docs/public/websocket-api.md#L6-L33"
+  },
+  "claimBoundary": "This is a same-host local observation from a clean clone of the checked Kandev v0.91.0 public task preparation, worktree binding, and preconfigured custom-process start, status, accepted stop, and public retirement endpoints. The first published run created a fresh caller-owned external_id; the second deduplicated it and reconciled to the same task, session, and worktree while starting a distinct custom process without automatic start retries. It does not establish Kandev-backed Mission execution, Session or Agent lifecycle control, Outcome Receipt issuance, general Provider support, third-party reproduction, broad version compatibility, operating-system isolation, or production readiness."
+}
