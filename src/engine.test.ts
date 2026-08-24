@@ -98,6 +98,34 @@ describe('MissionEngine', () => {
     }
   });
 
+  it('creates a durable pending Mission before any runtime is started', async () => {
+    const fixture = await createFixture('handoff');
+    const engine = new MissionEngine({
+      stateDir: fixture.stateDir,
+      codexAdapter: new CodexAdapter({ command: fixture.codex }),
+      qoderAdapter: new QoderAdapter({ command: fixture.qoder }),
+    });
+    try {
+      const created = await engine.create(fixture.missionFile, { workspace: fixture.workspace });
+
+      expect(created).toMatchObject({ status: 'pending' });
+      expect(engine.status(created.missionId)).toMatchObject({
+        mission: { status: 'pending' },
+        attempts: [],
+        chainValid: true,
+      });
+      await expect(readFile(join(fixture.workspace, 'codex.txt'), 'utf8')).rejects.toMatchObject({
+        code: 'ENOENT',
+      });
+
+      const completed = await engine.resume(created.missionId);
+      expect(completed.status).toBe('succeeded');
+      expect(completed.receipt?.outcome).toBe('verified');
+    } finally {
+      engine.close();
+    }
+  });
+
   it('verifies the original Kernel snapshot after the Mission YAML is replaced', async () => {
     const fixture = await createFixture('resume');
     const engine = new MissionEngine({
@@ -170,6 +198,20 @@ describe('MissionEngine', () => {
         { harness: 'codex', status: 'handed_off' },
         { harness: 'qoder', status: 'succeeded' },
       ]);
+      expect(engine.timeline(result.missionId).map((entry) => entry.kind)).toEqual(
+        expect.arrayContaining([
+          'mission.created',
+          'attempt.started',
+          'checkpoint.created',
+          'handoff.prepared',
+          'handoff.acknowledged',
+          'verification.completed',
+          'receipt.issued',
+        ]),
+      );
+      expect(
+        engine.timeline(result.missionId).some((entry) => entry.kind === 'mission.spec_snapshot'),
+      ).toBe(false);
     } finally {
       engine.close();
     }

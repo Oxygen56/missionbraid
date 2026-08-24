@@ -94,6 +94,19 @@ describe('runCommandVerifier', () => {
     expect(result.stdout.sha256).toBe(sha256('x'.repeat(10_000)));
   });
 
+  it('stops a verifier when the controlling operation is aborted', async () => {
+    const fixture = verifierFixture();
+    const controller = new AbortController();
+    const running = runCommandVerifier(
+      commandSpec(fixture.workspace, ['-e', 'setInterval(()=>{},1000)'], 30_000),
+      { ...fixture, signal: controller.signal },
+    );
+    await new Promise((resolveWait) => setTimeout(resolveWait, 50));
+    controller.abort();
+
+    await expect(running).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
   it('exports an environment builder that keeps only the documented ambient keys', () => {
     const fixture = verifierFixture();
     process.env.MISSIONBRAID_TEST_INHERITED_SECRET = 'do-not-inherit';

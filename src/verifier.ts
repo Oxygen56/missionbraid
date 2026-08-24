@@ -1,8 +1,10 @@
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
+import type { ChildProcessByStdio } from 'node:child_process';
 import { existsSync, realpathSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { performance } from 'node:perf_hooks';
+import type { Readable } from 'node:stream';
 
 import type { CommandVerifierSpecV1 } from './spec.js';
 
@@ -45,6 +47,7 @@ export interface RunCommandVerifierOptions {
   readonly provenanceFile: string;
   readonly maxSummaryBytes?: number;
   readonly now?: () => Date;
+  readonly signal?: AbortSignal;
 }
 
 export class VerifierBoundaryError extends Error {}
@@ -93,19 +96,40 @@ export async function runCommandVerifier(
   const stdout = new BoundedOutput(maxSummaryBytes);
   const stderr = new BoundedOutput(maxSummaryBytes);
 
-  return await new Promise<CommandVerificationResultV1>((resolveResult) => {
-    let child;
+  if (options.signal?.aborted === true) throw abortError();
+
+  return await new Promise<CommandVerificationResultV1>((resolveResult, rejectResult) => {
+    let child: ChildProcessByStdio<null, Readable, Readable>;
     let spawnError: CommandVerificationResultV1['spawnError'];
     let timedOut = false;
     let settled = false;
     let killTimer: NodeJS.Timeout | undefined;
     let timeout: NodeJS.Timeout | undefined;
+    let aborted = false;
+
+    const stopChild = (): void => {
+      if (child.exitCode !== null || child.signalCode !== null) return;
+      child.kill('SIGTERM');
+      killTimer = setTimeout(() => {
+        if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+      }, KILL_GRACE_MS);
+    };
+
+    const onAbort = (): void => {
+      aborted = true;
+      stopChild();
+    };
 
     const finish = (exitCode: number | null, signal: NodeJS.Signals | null): void => {
       if (settled) return;
       settled = true;
       if (timeout !== undefined) clearTimeout(timeout);
       if (killTimer !== undefined) clearTimeout(killTimer);
+      options.signal?.removeEventListener('abort', onAbort);
+      if (aborted) {
+        rejectResult(abortError());
+        return;
+      }
       const endedAt = (options.now ?? (() => new Date()))().toISOString();
       const durationMs = performance.now() - startedMonotonic;
       resolveResult({
@@ -146,16 +170,20 @@ export async function runCommandVerifier(
       spawnError = serializeError(error);
     });
     child.once('close', (exitCode, signal) => finish(exitCode, signal));
+    options.signal?.addEventListener('abort', onAbort, { once: true });
+    if (options.signal?.aborted === true) onAbort();
 
     timeout = setTimeout(() => {
-      if (child.exitCode !== null || child.signalCode !== null) return;
       timedOut = true;
-      child.kill('SIGTERM');
-      killTimer = setTimeout(() => {
-        if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
-      }, KILL_GRACE_MS);
+      stopChild();
     }, spec.timeoutMs);
   });
+}
+
+function abortError(): Error {
+  const error = new Error('Verifier operation was aborted');
+  error.name = 'AbortError';
+  return error;
 }
 
 export function cleanVerifierEnvironment(

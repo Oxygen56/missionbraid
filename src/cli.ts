@@ -5,13 +5,15 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { MissionEngine, type MissionExecutionResult } from './engine.js';
+import { startMissionBraidApp } from './app.js';
 import {
   kandevProviderCheckUsage,
   runKandevProviderCheckCommand,
 } from './kandev-provider-check-cli.js';
+import { discoverRuntimeCatalog } from './runtime-catalog.js';
 
 interface ParsedArguments {
-  readonly command: 'run' | 'resume' | 'status' | 'verify' | 'list';
+  readonly command: 'create' | 'run' | 'resume' | 'status' | 'verify' | 'list';
   readonly subject?: string;
   readonly stateDir: string;
   readonly workspace?: string;
@@ -43,6 +45,41 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       process.removeListener('SIGTERM', interrupt);
     }
   }
+  if (argv[0] === 'runtimes') {
+    if (argv.length === 2 && (argv[1] === '--help' || argv[1] === '-h')) {
+      process.stdout.write(`${runtimeCatalogUsage()}\n`);
+      return 0;
+    }
+    if (
+      argv.length < 2 ||
+      argv[1] !== 'list' ||
+      argv.slice(2).some((argument) => argument !== '--json')
+    ) {
+      process.stderr.write(`Expected: ${runtimeCatalogUsage()}\n`);
+      return 64;
+    }
+    process.stdout.write(`${JSON.stringify(await discoverRuntimeCatalog(), null, 2)}\n`);
+    return 0;
+  }
+  if (argv[0] === 'app') {
+    if (argv.length === 2 && (argv[1] === '--help' || argv[1] === '-h')) {
+      process.stdout.write(`${appUsage()}\n`);
+      return 0;
+    }
+    try {
+      const options = parseAppArguments(argv.slice(1));
+      const app = await startMissionBraidApp(options);
+      process.stdout.write(`MissionBraid is ready at ${app.url}\n`);
+      await waitForInterrupt();
+      await app.close();
+      return 0;
+    } catch (error) {
+      process.stderr.write(
+        `${error instanceof Error ? error.message : String(error)}\n\n${appUsage()}\n`,
+      );
+      return 64;
+    }
+  }
   let parsed: ParsedArguments;
   try {
     parsed = parseArguments(argv);
@@ -65,6 +102,13 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     }
     if (parsed.command === 'list') {
       process.stdout.write(`${JSON.stringify(engine.list(), null, 2)}\n`);
+      return 0;
+    }
+    if (parsed.command === 'create') {
+      const result = await engine.create(parsed.subject!, {
+        ...(parsed.workspace === undefined ? {} : { workspace: parsed.workspace }),
+      });
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
       return 0;
     }
     const result = await execute(engine, parsed, controller.signal);
@@ -103,11 +147,13 @@ async function execute(
     case 'resume':
       return await engine.resume(parsed.subject!, { signal });
     case 'verify':
-      return await engine.verify(parsed.subject!);
+      return await engine.verify(parsed.subject!, { signal });
     case 'status':
       throw new Error('status is handled before execution');
     case 'list':
       throw new Error('list is handled before execution');
+    case 'create':
+      throw new Error('create is handled before execution');
   }
 }
 
@@ -136,13 +182,14 @@ function publicResult(result: MissionExecutionResult): Record<string, unknown> {
 export function parseArguments(argv: readonly string[]): ParsedArguments {
   const [rawCommand, rawSubject, ...rest] = argv;
   if (
+    rawCommand !== 'create' &&
     rawCommand !== 'run' &&
     rawCommand !== 'resume' &&
     rawCommand !== 'status' &&
     rawCommand !== 'verify' &&
     rawCommand !== 'list'
   ) {
-    throw new Error('Expected one of: run, resume, status, verify, list');
+    throw new Error('Expected one of: create, run, resume, status, verify, list');
   }
   if (rawCommand !== 'list' && (rawSubject === undefined || rawSubject.startsWith('--'))) {
     throw new Error(`${rawCommand} requires a Mission file or Mission id`);
@@ -165,14 +212,17 @@ export function parseArguments(argv: readonly string[]): ParsedArguments {
     else workspace = resolve(value);
     index += 1;
   }
-  if (rawCommand !== 'run' && workspace !== undefined) {
-    throw new Error('--workspace is only valid with run');
+  if (rawCommand !== 'create' && rawCommand !== 'run' && workspace !== undefined) {
+    throw new Error('--workspace is only valid with create or run');
   }
   return {
     command: rawCommand,
     ...(rawSubject === undefined || rawCommand === 'list'
       ? {}
-      : { subject: rawCommand === 'run' ? resolve(rawSubject) : rawSubject }),
+      : {
+          subject:
+            rawCommand === 'create' || rawCommand === 'run' ? resolve(rawSubject) : rawSubject,
+        }),
     stateDir,
     ...(workspace === undefined ? {} : { workspace }),
   };
@@ -181,12 +231,63 @@ export function parseArguments(argv: readonly string[]): ParsedArguments {
 function usage(): string {
   return `MissionBraid
 
+  missionbraid create <mission.yaml> [--workspace <git-worktree>] [--state-dir <dir>]
   missionbraid run <mission.yaml> [--workspace <git-worktree>] [--state-dir <dir>]
   missionbraid resume <mission-id> [--state-dir <dir>]
   missionbraid status <mission-id> [--state-dir <dir>] [--json]
   missionbraid verify <mission-id> [--state-dir <dir>]
   missionbraid list [--state-dir <dir>]
+  ${appUsage()}
+  ${runtimeCatalogUsage()}
   ${kandevProviderCheckUsage()}`;
+}
+
+function runtimeCatalogUsage(): string {
+  return 'missionbraid runtimes list [--json]';
+}
+
+function appUsage(): string {
+  return 'missionbraid app [--state-dir <dir>] [--port <number>]';
+}
+
+export function parseAppArguments(argv: readonly string[]): {
+  readonly stateDir: string;
+  readonly port: number;
+} {
+  let stateDir = resolve(homedir(), '.missionbraid');
+  let port = 4317;
+  for (let index = 0; index < argv.length; index += 1) {
+    const flag = argv[index];
+    if (flag !== '--state-dir' && flag !== '--port') {
+      throw new Error(`Unknown app option ${String(flag)}`);
+    }
+    const value = argv[index + 1];
+    if (value === undefined || value.startsWith('--')) {
+      throw new Error(`${flag} requires a value`);
+    }
+    if (flag === '--state-dir') {
+      stateDir = resolve(value);
+    } else {
+      port = Number(value);
+      if (!Number.isSafeInteger(port) || port < 0 || port > 65_535) {
+        throw new Error('--port must be an integer from 0 to 65535');
+      }
+    }
+    index += 1;
+  }
+  return { stateDir, port };
+}
+
+function waitForInterrupt(): Promise<void> {
+  return new Promise((resolveInterrupt) => {
+    const finish = (): void => {
+      process.removeListener('SIGINT', finish);
+      process.removeListener('SIGTERM', finish);
+      resolveInterrupt();
+    };
+    process.once('SIGINT', finish);
+    process.once('SIGTERM', finish);
+  });
 }
 
 const executable = process.argv[1];

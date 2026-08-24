@@ -71,6 +71,11 @@ export interface MissionExecutionResult {
   readonly verificationResults?: readonly CommandVerificationResultV1[];
 }
 
+export interface MissionCreationResult {
+  readonly missionId: string;
+  readonly status: Extract<MissionProjectionV1['status'], 'pending'>;
+}
+
 export interface MissionStatusView {
   readonly mission: MissionProjectionV1;
   readonly chainValid: boolean;
@@ -87,6 +92,27 @@ export interface MissionStatusView {
     readonly harness: string;
     readonly status: 'running' | 'succeeded' | 'failed' | 'abandoned';
   }[];
+}
+
+export interface MissionTimelineEntry {
+  readonly seq: number;
+  readonly occurredAt: string;
+  readonly category:
+    | 'mission'
+    | 'profile'
+    | 'attempt'
+    | 'checkpoint'
+    | 'handoff'
+    | 'effect'
+    | 'verification'
+    | 'receipt'
+    | 'failure'
+    | 'runtime';
+  readonly kind: string;
+  readonly label: string;
+  readonly attemptId?: string;
+  readonly harness?: string;
+  readonly data?: JsonValue;
 }
 
 export interface RuntimeFailureObservation {
@@ -167,6 +193,20 @@ export class MissionEngine {
     missionFile: string,
     options: ExecuteMissionOptions = {},
   ): Promise<MissionExecutionResult> {
+    const created = await this.create(
+      missionFile,
+      options.workspace === undefined ? {} : { workspace: options.workspace },
+    );
+    return await this.resume(
+      created.missionId,
+      options.signal === undefined ? {} : { signal: options.signal },
+    );
+  }
+
+  async create(
+    missionFile: string,
+    options: Omit<ExecuteMissionOptions, 'signal'> = {},
+  ): Promise<MissionCreationResult> {
     await mkdir(this.#stateDir, { recursive: true });
     const spec = loadMissionSpec(
       missionFile,
@@ -219,7 +259,7 @@ export class MissionEngine {
         },
       };
       this.#store.appendEvents([createdEvent, specSnapshotEvent], fence);
-      return await this.#execute(missionId, spec, fence, options.signal);
+      return { missionId, status: 'pending' };
     });
   }
 
@@ -237,7 +277,10 @@ export class MissionEngine {
     });
   }
 
-  async verify(missionId: string): Promise<MissionExecutionResult> {
+  async verify(
+    missionId: string,
+    options: Omit<ExecuteMissionOptions, 'workspace'> = {},
+  ): Promise<MissionExecutionResult> {
     const mission = this.#requireMission(missionId);
     const spec = this.#requireSpecSnapshot(missionId);
     assertControlStateIsolation(this.#stateDir, spec.workspace);
@@ -245,7 +288,7 @@ export class MissionEngine {
     return await this.#withLease(
       mission.workspaceKey,
       ownerId,
-      async (fence) => await this.#verifyAndReceipt(missionId, spec, fence),
+      async (fence) => await this.#verifyAndReceipt(missionId, spec, fence, options.signal),
     );
   }
 
@@ -284,6 +327,19 @@ export class MissionEngine {
     return this.#store.listMissions();
   }
 
+  timeline(missionId: string): MissionTimelineEntry[] {
+    this.#requireMission(missionId);
+    const events = this.#store.listEvents(missionId);
+    const state = reconstructExecutionState(events);
+    const harnessByAttempt = new Map(
+      [...state.plans.values()].map((plan) => [plan.attemptId, plan.harness]),
+    );
+    return events.flatMap((event) => {
+      const entry = timelineEntry(event, harnessByAttempt.get(event.attemptId ?? ''));
+      return entry === undefined ? [] : [entry];
+    });
+  }
+
   async #execute(
     missionId: string,
     spec: MissionSpecV1,
@@ -319,7 +375,7 @@ export class MissionEngine {
         };
       }
     }
-    return await this.#verifyAndReceipt(missionId, spec, fence);
+    return await this.#verifyAndReceipt(missionId, spec, fence, signal);
   }
 
   async #executeStage(
@@ -703,6 +759,7 @@ export class MissionEngine {
     missionId: string,
     spec: MissionSpecV1,
     fence: WorkspaceFenceV1,
+    signal?: AbortSignal,
   ): Promise<MissionExecutionResult> {
     this.#append(
       {
@@ -724,6 +781,7 @@ export class MissionEngine {
         missionSourceDir: spec.missionSourceDir,
         controllerStateDir: this.#stateDir,
         provenanceFile,
+        ...(signal === undefined ? {} : { signal }),
       });
       results.push(result);
       this.#observe(
@@ -1152,6 +1210,150 @@ function createContract(spec: MissionSpecV1, now: Date): ContractV1 {
     ...contractBody,
     createdAt: now.toISOString(),
   };
+}
+
+function timelineEntry(
+  event: StoredEventV1,
+  attemptHarness?: string,
+): MissionTimelineEntry | undefined {
+  const base = {
+    seq: event.seq,
+    occurredAt: event.occurredAt,
+    ...(event.attemptId === undefined ? {} : { attemptId: event.attemptId }),
+    ...(attemptHarness === undefined ? {} : { harness: attemptHarness }),
+  };
+  switch (event.type) {
+    case 'mission.created':
+      return {
+        ...base,
+        category: 'mission',
+        kind: event.type,
+        label: 'Mission created',
+        data: {
+          title: event.payload.mission.title,
+          contractId: event.payload.contract.contractId,
+        },
+      };
+    case 'mission.status_changed':
+      return {
+        ...base,
+        category: 'mission',
+        kind: event.type,
+        label: `Mission ${event.payload.status}`,
+        data: {
+          status: event.payload.status,
+          ...(event.payload.reason === undefined ? {} : { reason: event.payload.reason }),
+        },
+      };
+    case 'profile.selected':
+      return {
+        ...base,
+        category: 'profile',
+        kind: event.type,
+        label: `${event.payload.profile.harness} profile selected`,
+        harness: event.payload.profile.harness,
+        data: {
+          profileId: event.payload.profile.profileId,
+          model: event.payload.profile.model,
+          reason: event.payload.reason,
+        },
+      };
+    case 'attempt.started':
+      return {
+        ...base,
+        category: 'attempt',
+        kind: event.type,
+        label: `${attemptHarness ?? 'Runtime'} attempt started`,
+        data: {
+          attemptId: event.payload.attempt.attemptId,
+          stageId: event.payload.attempt.stageId ?? null,
+          profileId: event.payload.attempt.profileId,
+        },
+      };
+    case 'attempt.finished':
+      return {
+        ...base,
+        category: 'attempt',
+        kind: event.type,
+        label: `${attemptHarness ?? 'Runtime'} attempt ${event.payload.status}`,
+        data: {
+          status: event.payload.status,
+          summary: event.payload.summary ?? null,
+        },
+      };
+    case 'effect.recorded':
+      return {
+        ...base,
+        category: 'effect',
+        kind: event.type,
+        label: 'Workspace effect registered',
+        data: {
+          effectId: event.payload.effect.effectId,
+          status: event.payload.effect.status,
+          controlLevel: event.payload.effect.controlLevel ?? 'advisory',
+        },
+      };
+    case 'effect.status_changed':
+      return {
+        ...base,
+        category: 'effect',
+        kind: event.type,
+        label: `Workspace effect ${event.payload.status}`,
+        data: {
+          effectId: event.payload.effectId,
+          status: event.payload.status,
+          evidenceRefs: [...event.payload.evidenceRefs],
+        },
+      };
+    case 'receipt.issued':
+      return {
+        ...base,
+        category: 'receipt',
+        kind: event.type,
+        label: `Outcome ${event.payload.receipt.outcome}`,
+        data: {
+          receiptId: event.payload.receipt.receiptId,
+          outcome: event.payload.receipt.outcome,
+          unresolvedItems: [...(event.payload.receipt.unresolvedItems ?? [])],
+        },
+      };
+    case 'runtime.observation': {
+      if (event.payload.kind === 'mission.spec_snapshot' || event.payload.kind === 'attempt.plan') {
+        return undefined;
+      }
+      const category = observationCategory(event.payload.kind);
+      return {
+        ...base,
+        category,
+        kind: event.payload.kind,
+        label: observationLabel(event.payload.kind),
+        data: event.payload.data,
+      };
+    }
+  }
+}
+
+function observationCategory(kind: string): MissionTimelineEntry['category'] {
+  if (kind.startsWith('checkpoint.')) return 'checkpoint';
+  if (kind.startsWith('handoff.')) return 'handoff';
+  if (kind.startsWith('verification.')) return 'verification';
+  if (kind.startsWith('failure.')) return 'failure';
+  return 'runtime';
+}
+
+function observationLabel(kind: string): string {
+  const labels: Readonly<Record<string, string>> = {
+    'attempt.baseline': 'Workspace baseline recorded',
+    'checkpoint.created': 'Checkpoint created',
+    'handoff.prepared': 'Handoff Capsule prepared',
+    'handoff.acknowledged': 'Handoff Capsule acknowledged',
+    'handoff.rejected': 'Handoff rejected',
+    'runtime.process_started': 'Runtime process started',
+    'runtime.process_finished': 'Runtime process finished',
+    'verification.completed': 'Acceptance criterion verified',
+    'failure.observed': 'Failure observed',
+  };
+  return labels[kind] ?? kind;
 }
 
 function createProfile(stage: AttemptStageSpecV1, detection: RuntimeDetection): ProfileV1 {
