@@ -5,6 +5,10 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { MissionEngine, type MissionExecutionResult } from './engine.js';
+import {
+  kandevProviderCheckUsage,
+  runKandevProviderCheckCommand,
+} from './kandev-provider-check-cli.js';
 
 interface ParsedArguments {
   readonly command: 'run' | 'resume' | 'status' | 'verify' | 'list';
@@ -17,6 +21,27 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
   if (argv.length === 1 && (argv[0] === '--help' || argv[0] === '-h')) {
     process.stdout.write(`${usage()}\n`);
     return 0;
+  }
+  if (argv[0] === 'provider-check') {
+    if (argv[1] === 'kandev' && argv.length === 3 && (argv[2] === '--help' || argv[2] === '-h')) {
+      process.stdout.write(`${kandevProviderCheckUsage()}\n`);
+      return 0;
+    }
+    const controller = new AbortController();
+    const interrupt = (): void => controller.abort();
+    process.once('SIGINT', interrupt);
+    process.once('SIGTERM', interrupt);
+    try {
+      return await runKandevProviderCheckCommand(argv.slice(1), {
+        signal: controller.signal,
+        ...(process.env.MISSIONBRAID_KANDEV_TOKEN === undefined
+          ? {}
+          : { bearerToken: process.env.MISSIONBRAID_KANDEV_TOKEN }),
+      });
+    } finally {
+      process.removeListener('SIGINT', interrupt);
+      process.removeListener('SIGTERM', interrupt);
+    }
   }
   let parsed: ParsedArguments;
   try {
@@ -160,7 +185,8 @@ function usage(): string {
   missionbraid resume <mission-id> [--state-dir <dir>]
   missionbraid status <mission-id> [--state-dir <dir>] [--json]
   missionbraid verify <mission-id> [--state-dir <dir>]
-  missionbraid list [--state-dir <dir>]`;
+  missionbraid list [--state-dir <dir>]
+  ${kandevProviderCheckUsage()}`;
 }
 
 const executable = process.argv[1];

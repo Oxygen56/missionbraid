@@ -200,6 +200,37 @@ and no longer owns the workspace lease. The E1 fixture's normal SIGTERM path
 does not require it. Only use the included disposable fixtures; controller
 state must remain outside the target workspace.
 
+### Kandev v0.91.0 public-interface check
+
+MissionBraid includes a narrow development command for the separately installed
+[Kandev v0.91.0 release](https://github.com/kdlbs/kandev/releases/tag/v0.91.0).
+It pins the release commit, creates or reconciles one prepared Kandev task by
+`external_id`, observes its worktree binding, starts one preconfigured custom
+process, and requires the public process GET and list endpoints to stop exposing
+that process after a stop request.
+
+Run this only against an isolated disposable Kandev workspace. Configure the
+selected repository with a no-side-effect probe script that remains alive long
+enough to be observed, such as `pwd; sleep 600`; use a disposable agent profile
+and executor because session preparation may instantiate them. Then copy and complete
+[`config.example.json`](examples/kandev-provider-check/config.example.json).
+Authentication, when enabled, is read only from
+`MISSIONBRAID_KANDEV_TOKEN`; it is never accepted in the config or written to
+the result.
+
+```sh
+node dist/src/cli.js provider-check kandev /absolute/path/to/config.json \
+  --output /absolute/path/to/result.json
+```
+
+This command is deliberately outside the Mission Kernel. A compatible result
+is evidence only for the checked v0.91.0 public task, worktree, and custom-process
+lifecycle endpoints in that run. It is not an Outcome Receipt, a Kandev-backed
+Mission, Kandev Session or Agent lifecycle control, broad provider support,
+proof of operating-system process termination, or production readiness.
+MissionBraid remains independent and does not fork Kandev or read its internal
+database.
+
 ## Evidence status
 
 - [E0 local real-runtime evidence](evidence/e0-local-2026-08-24.json): a

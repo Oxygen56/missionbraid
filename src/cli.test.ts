@@ -28,4 +28,15 @@ describe('MissionBraid CLI', () => {
     expect(stdout).toHaveBeenCalledWith(expect.stringContaining('missionbraid run'));
     expect(stderr).not.toHaveBeenCalled();
   });
+
+  it('prints provider-check help before opening Mission state', async () => {
+    const stdout = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+    await expect(main(['provider-check', 'kandev', '--help'])).resolves.toBe(0);
+    expect(stdout).toHaveBeenCalledWith(
+      expect.stringContaining('missionbraid provider-check kandev'),
+    );
+    expect(stderr).not.toHaveBeenCalled();
+  });
 });

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "missionbraid.dev/provider-check/kandev/config/v1",
+  "baseUrl": "http://127.0.0.1:18080",
+  "workspaceId": "replace-with-kandev-workspace-id",
+  "workflowId": "replace-with-kandev-workflow-id",
+  "repositoryId": "replace-with-kandev-repository-id",
+  "baseBranch": "main",
+  "agentProfileId": "replace-with-kandev-agent-profile-id",
+  "executorId": "exec-worktree",
+  "executorProfileId": "replace-with-kandev-executor-profile-id",
+  "scriptName": "replace-with-preconfigured-disposable-probe-script",
+  "externalId": "missionbraid-kandev-check-replace-with-unique-id"
+}
