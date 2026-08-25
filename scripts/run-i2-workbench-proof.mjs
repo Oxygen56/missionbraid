@@ -59,6 +59,14 @@ try {
       `Mission ended as ${completed.mission.status}: ${JSON.stringify(completed.operation)}`,
     );
   }
+  if (
+    completed.attempts.length !== 3 ||
+    !completed.attempts.every((attempt) => attempt.status === 'succeeded')
+  ) {
+    throw new Error(
+      `Not every declared Runtime Attempt succeeded: ${JSON.stringify(completed.attempts)}`,
+    );
+  }
 
   const runtimeEvents = entries(completed, 'runtime.event').map((entry) => entry.data);
   const artifactRef = runtimeEvents.find((event) => event.nativeArtifact)?.nativeArtifact;
@@ -240,9 +248,14 @@ try {
     continuity: {
       attempts: completed.attempts,
       handoffAcknowledgements,
-      everyHandoffAcknowledgedBeforeMutation:
+      everyHandoffAcknowledgedBeforeControlledAction:
         handoffAcknowledgements.length === 2 &&
-        handoffAcknowledgements.every((acknowledgement) => acknowledgement.beforeMutation === true),
+        handoffAcknowledgements.every(
+          (acknowledgement) =>
+            acknowledgement.beforeControlledAction === true &&
+            typeof acknowledgement.orderingEvidence === 'string' &&
+            acknowledgement.orderingEvidence !== 'unknown',
+        ),
       commandEvents,
     },
     receipt: {
@@ -271,7 +284,7 @@ try {
         'Version probes do not prove authentication or expose remaining provider quota; MissionBraid preserves those fields as unknown.',
     },
     claimBoundary:
-      'This proves one same-host local Workbench Mission using authenticated local Codex, Qoder, and Claude Code installations. It establishes ordered native Attempts, immutable Runtime Profile snapshots, durable command intent, source-scoped Event IR, inspectable sanitized native artifacts, two acknowledged Handoff Capsules, a verified Receipt, and stable restart restoration. It does not establish automatic routing, executable Fork/Replay, live tool gating, cross-host reproduction, production isolation, third-party adoption, or optimal model selection.',
+      'This proves one same-host local Workbench Mission using authenticated local Codex, Qoder, and Claude Code installations. It establishes ordered native Attempts, immutable Runtime Profile snapshots, durable command intent, source-scoped Event IR, inspectable sanitized native artifacts, two cooperatively acknowledged Handoff Capsules with recorded ordering evidence, a verified Receipt, and stable restart restoration. It does not establish automatic routing, executable Fork/Replay, live tool gating, cross-host reproduction, production isolation, third-party adoption, or optimal model selection.',
   };
 
   const serialized = `${JSON.stringify(evidence, null, 2)}\n`;

@@ -50,9 +50,12 @@ import {
 } from './spec.js';
 import { hashPayload, MissionStore } from './store.js';
 import {
+  mutationCapableToolRequestName,
   nativeEventIdentityIds,
   nativeParentCorrelationIds,
   normalizeRuntimeOutput,
+  resolveCooperativeHandoffOrdering,
+  type RuntimeSourcePosition,
 } from './runtime-events.js';
 import { runCommandVerifier, type CommandVerificationResultV1 } from './verifier.js';
 import {
@@ -817,6 +820,10 @@ export class MissionEngine {
     let acknowledged = capsule === undefined;
     let acknowledgementBeforeMutation = capsule === undefined;
     let acknowledgementId: string | undefined;
+    let acknowledgementPosition: RuntimeSourcePosition | undefined;
+    let firstMutationRequest: RuntimeSourcePosition | undefined;
+    let workspaceUnchangedAtAcknowledgement = capsule === undefined;
+    let acknowledgementOrderingEvidence = capsule === undefined ? 'not-required' : 'unknown';
     let runtimeFailure: RuntimeFailureObservation | undefined;
     const runtimeEventIdByNativeIdentity = new Map<string, string>();
     const reportedProfiles = new Set<string>();
@@ -854,6 +861,16 @@ export class MissionEngine {
       for (const nativeIdentity of nativeEventIdentityIds(line.value)) {
         runtimeEventIdByNativeIdentity.set(nativeIdentity, runtimeEvent.runtimeEventId);
       }
+      if (
+        firstMutationRequest === undefined &&
+        mutationCapableToolRequestName(line.value) !== undefined
+      ) {
+        firstMutationRequest = {
+          sourceId: runtimeEvent.sourceId,
+          sourceSequence: runtimeEvent.sourceSequence,
+          runtimeEventId: runtimeEvent.runtimeEventId,
+        };
+      }
       outputHash.update(`${line.stream}\0${line.line}\n`, 'utf8');
       outputLines += 1;
       runtimeFailure ??= classifyRuntimeOutputFailure(line);
@@ -876,20 +893,14 @@ export class MissionEngine {
       if (!candidate.ok) return;
       const atAcknowledgement = snapshotGitWorkspace(spec.workspace);
       acknowledged = true;
-      acknowledgementBeforeMutation = atAcknowledgement.workspaceDigest === before.workspaceDigest;
+      workspaceUnchangedAtAcknowledgement =
+        atAcknowledgement.workspaceDigest === before.workspaceDigest;
       acknowledgementId = `ack-${hashPayload(candidate.acknowledgement).slice(0, 24)}`;
-      this.#observe(
-        missionId,
-        'handoff.acknowledged',
-        {
-          acknowledgementId,
-          capsuleId: capsule.capsuleId,
-          checkpointId: capsule.checkpoint.checkpointId,
-          beforeMutation: acknowledgementBeforeMutation,
-        },
-        fence,
-        attemptId,
-      );
+      acknowledgementPosition = {
+        sourceId: runtimeEvent.sourceId,
+        sourceSequence: runtimeEvent.sourceSequence,
+        runtimeEventId: runtimeEvent.runtimeEventId,
+      };
     };
     const prompt = createAttemptPrompt(spec, stage, mission.contract, projectedCapsuleText);
     const runtimeResult = await this.#runRuntime(stage, profile, {
@@ -907,6 +918,39 @@ export class MissionEngine {
       },
       onOutput,
     });
+
+    if (capsule !== undefined) {
+      const ordering = resolveCooperativeHandoffOrdering(
+        acknowledgementPosition,
+        firstMutationRequest,
+        workspaceUnchangedAtAcknowledgement,
+      );
+      acknowledgementBeforeMutation = ordering.accepted;
+      acknowledgementOrderingEvidence = ordering.evidence;
+      if (
+        acknowledged &&
+        acknowledgementId !== undefined &&
+        acknowledgementPosition !== undefined
+      ) {
+        this.#observe(
+          missionId,
+          'handoff.acknowledged',
+          {
+            acknowledgementId,
+            capsuleId: capsule.capsuleId,
+            checkpointId: capsule.checkpoint.checkpointId,
+            beforeMutation: acknowledgementBeforeMutation,
+            beforeControlledAction: acknowledgementBeforeMutation,
+            workspaceUnchangedAtObservation: workspaceUnchangedAtAcknowledgement,
+            orderingEvidence: acknowledgementOrderingEvidence,
+            acknowledgementRuntimeEventId: acknowledgementPosition.runtimeEventId,
+            firstMutationRuntimeEventId: firstMutationRequest?.runtimeEventId ?? null,
+          },
+          fence,
+          attemptId,
+        );
+      }
+    }
 
     const after = snapshotGitWorkspace(spec.workspace);
     const delta = createStageWorkspaceDelta(before, after);
@@ -968,7 +1012,12 @@ export class MissionEngine {
         outputLines,
         acknowledged,
         acknowledgementBeforeMutation,
+        acknowledgementBeforeControlledAction: acknowledgementBeforeMutation,
+        workspaceUnchangedAtAcknowledgement,
+        acknowledgementOrderingEvidence,
         acknowledgementId: acknowledgementId ?? null,
+        acknowledgementRuntimeEventId: acknowledgementPosition?.runtimeEventId ?? null,
+        firstMutationRuntimeEventId: firstMutationRequest?.runtimeEventId ?? null,
       },
       fence,
       attemptId,
@@ -2023,7 +2072,7 @@ function failureSummary(
   if (acknowledgementRequired && !acknowledged)
     return 'Target runtime did not acknowledge the Handoff Capsule';
   if (acknowledgementRequired && !acknowledgementBeforeMutation)
-    return 'Target runtime acknowledged the Handoff Capsule after changing the workspace';
+    return 'Target runtime did not establish acknowledgement before its first controlled mutation action';
   return 'Runtime attempt did not satisfy the execution contract';
 }
 

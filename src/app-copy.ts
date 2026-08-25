@@ -132,9 +132,9 @@ const EN_COPY = {
   'timeline.description.handoffPrepared':
     'The control plane projected the objective, constraints, workspace summary, and remaining work into a Capsule.',
   'timeline.description.handoffAcknowledgedLate':
-    'The target Runtime acknowledged the Capsule only after changing the workspace, so continuity was not established.',
+    'The target Runtime did not establish Capsule acknowledgement before its first observable mutation action.',
   'timeline.description.handoffAcknowledged':
-    'The target Runtime acknowledged the same Capsule before changing the workspace.',
+    'The target Runtime acknowledged the same Capsule before its first observable mutation action.',
   'timeline.description.effectRecorded':
     'The mutable workspace action received an identity before the Runtime executed it.',
   'timeline.description.effectStatus': 'Current Effect status: {status}.',
@@ -413,8 +413,9 @@ const ZH_CN_COPY = {
   'timeline.description.handoffPrepared':
     '控制面已把目标、约束、工作区摘要和剩余工作投影为 Capsule。',
   'timeline.description.handoffAcknowledgedLate':
-    '目标 Runtime 在修改工作区后才确认 Capsule，连续性条件未满足。',
-  'timeline.description.handoffAcknowledged': '目标 Runtime 已在修改工作区前确认同一 Capsule。',
+    '目标 Runtime 未能证明在第一个可观察的变更动作前确认 Capsule。',
+  'timeline.description.handoffAcknowledged':
+    '目标 Runtime 已在第一个可观察的变更动作前确认同一 Capsule。',
   'timeline.description.effectRecorded': '可变工作区动作已先登记身份，再交给 Runtime 执行。',
   'timeline.description.effectStatus': 'Effect 当前状态：{status}。',
   'timeline.description.verificationPassed': '原始完成判据已通过。',

@@ -19,6 +19,23 @@ export interface RuntimeEventContext {
   readonly causalParentIds?: readonly string[];
 }
 
+export interface RuntimeSourcePosition {
+  readonly sourceId: string;
+  readonly sourceSequence: number;
+  readonly runtimeEventId: string;
+}
+
+export type CooperativeHandoffOrderingEvidence =
+  | 'workspace-snapshot'
+  | 'native-source-before-mutation-tool'
+  | 'native-source-not-before-mutation-tool'
+  | 'unknown';
+
+export interface CooperativeHandoffOrdering {
+  readonly accepted: boolean;
+  readonly evidence: CooperativeHandoffOrderingEvidence;
+}
+
 export function normalizeRuntimeOutput(
   line: RuntimeOutputLine,
   context: RuntimeEventContext,
@@ -77,6 +94,40 @@ export function nativeParentCorrelationIds(value: unknown): string[] {
   return uniqueStrings([record.parent_uuid, record.parent_id, record.parent_tool_use_id]);
 }
 
+/**
+ * Finds the first native request for a tool that can mutate the workspace.
+ * Shell-like tools are intentionally classified as mutation-capable because
+ * their command text cannot be treated as a reliable effect boundary here.
+ */
+export function mutationCapableToolRequestName(value: unknown): string | undefined {
+  return findMutationCapableToolRequest(value, new WeakSet<object>(), 0);
+}
+
+/**
+ * Resolves cooperative handoff ordering from evidence already emitted by the
+ * target Runtime. This is evidence of acknowledgement ordering, not a live
+ * tool gate or a claim that MissionBraid intercepted the tool call.
+ */
+export function resolveCooperativeHandoffOrdering(
+  acknowledgement: RuntimeSourcePosition | undefined,
+  firstMutationRequest: RuntimeSourcePosition | undefined,
+  workspaceUnchangedAtObservation: boolean,
+): CooperativeHandoffOrdering {
+  if (acknowledgement === undefined) return { accepted: false, evidence: 'unknown' };
+  if (
+    firstMutationRequest !== undefined &&
+    acknowledgement.sourceId === firstMutationRequest.sourceId
+  ) {
+    return acknowledgement.sourceSequence < firstMutationRequest.sourceSequence
+      ? { accepted: true, evidence: 'native-source-before-mutation-tool' }
+      : { accepted: false, evidence: 'native-source-not-before-mutation-tool' };
+  }
+  if (workspaceUnchangedAtObservation) {
+    return { accepted: true, evidence: 'workspace-snapshot' };
+  }
+  return { accepted: false, evidence: 'unknown' };
+}
+
 function nativeType(line: RuntimeOutputLine): string {
   if (line.value === null || typeof line.value !== 'object' || Array.isArray(line.value)) {
     return `${line.stream}.text`;
@@ -87,6 +138,62 @@ function nativeType(line: RuntimeOutputLine): string {
     if (typeof value === 'string' && value.trim().length > 0) return value;
   }
   return `${line.stream}.json`;
+}
+
+const MUTATION_CAPABLE_TOOL_NAMES = new Set([
+  'apply_patch',
+  'bash',
+  'computer',
+  'edit',
+  'exec',
+  'exec_command',
+  'execute',
+  'multiedit',
+  'notebookedit',
+  'shell',
+  'terminal',
+  'write',
+  'write_file',
+]);
+
+function findMutationCapableToolRequest(
+  value: unknown,
+  seen: WeakSet<object>,
+  depth: number,
+): string | undefined {
+  if (depth > 20 || value === null || typeof value !== 'object') return undefined;
+  if (seen.has(value)) return undefined;
+  seen.add(value);
+  if (Array.isArray(value)) {
+    for (const member of value) {
+      const nested = findMutationCapableToolRequest(member, seen, depth + 1);
+      if (nested !== undefined) return nested;
+    }
+    return undefined;
+  }
+  const record = value as Record<string, unknown>;
+  const type = typeof record.type === 'string' ? record.type.toLowerCase() : '';
+  const functionRecord =
+    record.function !== null &&
+    typeof record.function === 'object' &&
+    !Array.isArray(record.function)
+      ? (record.function as Record<string, unknown>)
+      : undefined;
+  const name = [record.name, record.tool_name, functionRecord?.name].find(
+    (candidate): candidate is string => typeof candidate === 'string',
+  );
+  if (
+    name !== undefined &&
+    (type === 'tool_use' || type === 'tool_call' || type === 'function_call') &&
+    MUTATION_CAPABLE_TOOL_NAMES.has(name.toLowerCase())
+  ) {
+    return name;
+  }
+  for (const nestedValue of Object.values(record)) {
+    const nested = findMutationCapableToolRequest(nestedValue, seen, depth + 1);
+    if (nested !== undefined) return nested;
+  }
+  return undefined;
 }
 
 function semanticKind(nativeEventType: string, value: unknown): RuntimeSemanticKindV1 {

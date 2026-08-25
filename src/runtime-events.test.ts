@@ -6,9 +6,11 @@ import { describe, expect, it } from 'vitest';
 
 import { NativeArtifactStore, sanitizeNativeArtifact } from './artifact-store.js';
 import {
+  mutationCapableToolRequestName,
   nativeEventIdentityIds,
   nativeParentCorrelationIds,
   normalizeRuntimeOutput,
+  resolveCooperativeHandoffOrdering,
 } from './runtime-events.js';
 
 describe('native runtime evidence', () => {
@@ -86,5 +88,53 @@ describe('native runtime evidence', () => {
       nativeParentCorrelationIds({ parent_uuid: 'event-1', parent_tool_use_id: 'tool-1' }),
     ).toEqual(['event-1', 'tool-1']);
     expect(nativeParentCorrelationIds({ type: 'assistant' })).toEqual([]);
+  });
+
+  it('uses native source order when buffered output arrives after the workspace changed', () => {
+    const acknowledgement = {
+      sourceId: 'attempt-1:qoder:qoder-stream-json:stdout',
+      sourceSequence: 6,
+      runtimeEventId: 'runtime-event-ack',
+    };
+    const firstMutationRequest = {
+      sourceId: acknowledgement.sourceId,
+      sourceSequence: 7,
+      runtimeEventId: 'runtime-event-write',
+    };
+
+    expect(
+      mutationCapableToolRequestName({
+        type: 'assistant',
+        message: { content: [{ type: 'tool_use', name: 'Write' }] },
+      }),
+    ).toBe('Write');
+    expect(resolveCooperativeHandoffOrdering(acknowledgement, firstMutationRequest, false)).toEqual(
+      { accepted: true, evidence: 'native-source-before-mutation-tool' },
+    );
+  });
+
+  it('rejects an acknowledgement that follows a native mutation-capable request', () => {
+    const sourceId = 'attempt-1:claude:claude-stream-json:stdout';
+    expect(
+      resolveCooperativeHandoffOrdering(
+        { sourceId, sourceSequence: 8, runtimeEventId: 'runtime-event-ack' },
+        { sourceId, sourceSequence: 7, runtimeEventId: 'runtime-event-write' },
+        true,
+      ),
+    ).toEqual({ accepted: false, evidence: 'native-source-not-before-mutation-tool' });
+  });
+
+  it('falls back to the workspace snapshot when native source ordering is unavailable', () => {
+    expect(
+      resolveCooperativeHandoffOrdering(
+        {
+          sourceId: 'attempt-1:claude:claude-stream-json:stdout',
+          sourceSequence: 2,
+          runtimeEventId: 'runtime-event-ack',
+        },
+        undefined,
+        true,
+      ),
+    ).toEqual({ accepted: true, evidence: 'workspace-snapshot' });
   });
 });
