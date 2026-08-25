@@ -1,0 +1,835 @@
+{
+  "schemaVersion": "missionbraid.dev/evidence/iteration-6-adaptive-handoff/v1",
+  "evidenceLevel": "same-host-local-real-native-runtime-browser-controlled-provider-interruption",
+  "recordedOn": "2026-08-26",
+  "implementation": {
+    "revision": "a1b62a860994dd053feea18d7298b3214f91b51b",
+    "headTree": "e984c24fbcfba5b06f9ee87848d81c6be72b1bc6",
+    "indexTree": "e984c24fbcfba5b06f9ee87848d81c6be72b1bc6",
+    "dirtyBeforeRun": true,
+    "nodeVersion": "v26.4.0"
+  },
+  "fixture": {
+    "source": "examples/i6-adaptive-handoff-fixture/template",
+    "preparer": "scripts/prepare-i6-adaptive-handoff-fixture.mjs",
+    "primarySuccess": {
+      "workspace": "/private/var/folders/s6/97lfn3_942g3b1w0cw82sgz00000gn/T/missionbraid-i6-adaptive-handoff-Up49DA/workspace-primary-success",
+      "mode": "primary-success",
+      "baseline": "failing-as-designed",
+      "baselineExitCode": 1,
+      "head": "9f3aa58ea88fe01a21e91c93f5b54cbb3cb3d7f4",
+      "tree": "2ad28399321d3f5a77fae4dafe44daeca26d182a"
+    },
+    "adaptive": {
+      "workspace": "/private/var/folders/s6/97lfn3_942g3b1w0cw82sgz00000gn/T/missionbraid-i6-adaptive-handoff-Up49DA/workspace-adaptive",
+      "mode": "adaptive",
+      "baseline": "failing-as-designed",
+      "baselineExitCode": 1,
+      "head": "cf2a3e80eee903b58acd06c913a791034e81fdaf",
+      "tree": "3ee2e82d81fefaa842fe390cca2f2bed8ebd399e"
+    }
+  },
+  "productEntry": {
+    "entry": "built local Workbench browser form and versioned Mission detail API",
+    "missionsCreatedThroughBrowser": true,
+    "userSelectedReplacement": false,
+    "manualPlannerOverride": false,
+    "manualContextCopy": false,
+    "declaredRoute": ["codex", "qoder", "claude"]
+  },
+  "runtimeInventory": [
+    {
+      "id": "codex",
+      "status": "ready-supported",
+      "version": "0.149.0-alpha.4.3",
+      "model": "gpt-5.6-sol",
+      "reasoningEffort": "medium"
+    },
+    {
+      "id": "qoder",
+      "status": "ready-supported",
+      "version": "1.1.6",
+      "model": "Qwen3.8-Max",
+      "reasoningEffort": "medium"
+    },
+    {
+      "id": "claude",
+      "status": "ready-supported",
+      "version": "2.1.245",
+      "model": "deepseek-v4-pro",
+      "reasoningEffort": "medium"
+    }
+  ],
+  "realRuntimeVersions": {
+    "codex": "codex-cli 0.149.0-alpha.4.3",
+    "qoder": "1.1.6",
+    "claude": "2.1.245 (Claude Code)"
+  },
+  "preferredSuccess": {
+    "missionId": "mission-d99c8233-176a-4368-8a97-ca77dea66521",
+    "commandId": "command-433c86f0-6522-49ee-98c2-b9ba01a7ad6f",
+    "receiptId": "receipt-570b9204-227f-4b12-9201-3618168efcb2",
+    "finalHeadHash": "db9204b4511764a8df1d89581aeac8550841c92225134651b3348dd01edabfac",
+    "elapsedSeconds": 36.802,
+    "attempts": [
+      {
+        "attemptId": "attempt-6c6e5d2d-89bd-422c-ba95-e6b05f0e02e1",
+        "stageId": "codex-primary",
+        "harness": "codex",
+        "status": "succeeded"
+      }
+    ],
+    "plannerDecisionCount": 0,
+    "fallbackAttemptsStarted": 0,
+    "workspace": {
+      "head": "9f3aa58ea88fe01a21e91c93f5b54cbb3cb3d7f4",
+      "tree": "2ad28399321d3f5a77fae4dafe44daeca26d182a",
+      "status": ["?? final.txt", "?? source.txt"]
+    },
+    "providerExit": {
+      "at": "2026-08-25T20:00:38.102Z",
+      "workspace": "/private/var/folders/s6/97lfn3_942g3b1w0cw82sgz00000gn/T/missionbraid-i6-adaptive-handoff-Up49DA/workspace-primary-success",
+      "kind": "provider.child_exit",
+      "run": true,
+      "controlled": false,
+      "code": 0,
+      "signal": null,
+      "deltaObserved": false,
+      "terminationRequested": false,
+      "wrapperExitCode": 0
+    },
+    "browser": {
+      "receiptVisible": true,
+      "plannerDecisionVisible": false
+    }
+  },
+  "adaptiveHandoff": {
+    "missionId": "mission-76032999-39ef-43f9-bf77-ae26f888c183",
+    "commandId": "command-8cdcb8db-481c-4314-bb5c-59b1f716ec07",
+    "receiptId": "receipt-49d0bd1d-399b-4b77-a90c-83460555492f",
+    "contractId": "contract-309074c3474121a984084e396f83",
+    "finalHeadHash": "8f6c829412144d459ad05c1a45ac98171370859e9adf26079cba9b7aab648d24",
+    "elapsedSeconds": 45.242,
+    "attempts": [
+      {
+        "attemptId": "attempt-fda24cf0-ec9f-4dad-831c-5254d6c29e7a",
+        "stageId": "codex-primary",
+        "harness": "codex",
+        "status": "failed"
+      },
+      {
+        "attemptId": "attempt-0fe53529-46f9-4419-a5ae-28113c5d3f31",
+        "stageId": "claude-continuation",
+        "harness": "claude",
+        "status": "succeeded"
+      }
+    ],
+    "controlledProviderInterruption": {
+      "boundary": "proof-runtime-provider-wrapper",
+      "wrapperSourceSha256": "76a6198f62b17f93eb58b60b7b0a94e2a4635983da2bbb1c7432bc33c2630fec",
+      "realExecutable": "/Applications/ChatGPT.app/Contents/Resources/codex",
+      "realRuntimeVersion": "codex-cli 0.149.0-alpha.4.3",
+      "spawned": {
+        "at": "2026-08-25T20:00:39.600Z",
+        "workspace": "/private/var/folders/s6/97lfn3_942g3b1w0cw82sgz00000gn/T/missionbraid-i6-adaptive-handoff-Up49DA/workspace-adaptive",
+        "kind": "provider.spawned",
+        "run": true,
+        "controlled": true,
+        "realExecutable": "/Applications/ChatGPT.app/Contents/Resources/codex",
+        "realPid": 22044,
+        "args": [
+          "exec",
+          "--json",
+          "--color",
+          "never",
+          "--cd",
+          "/private/var/folders/s6/97lfn3_942g3b1w0cw82sgz00000gn/T/missionbraid-i6-adaptive-handoff-Up49DA/workspace-adaptive",
+          "--sandbox",
+          "workspace-write",
+          "--model",
+          "gpt-5.6-sol",
+          "--config",
+          "model_reasoning_effort=medium",
+          "--ephemeral",
+          "-"
+        ]
+      },
+      "deltaObserved": {
+        "at": "2026-08-25T20:00:55.633Z",
+        "workspace": "/private/var/folders/s6/97lfn3_942g3b1w0cw82sgz00000gn/T/missionbraid-i6-adaptive-handoff-Up49DA/workspace-adaptive",
+        "kind": "provider.delta_observed",
+        "run": true,
+        "sourcePath": "source.txt",
+        "sourceSha256": "sha256:9cd3b44fea3e5465020c68a82869cb8de1ca0140d7acd22e5af99b0c47d53738"
+      },
+      "terminationRequested": {
+        "at": "2026-08-25T20:00:55.985Z",
+        "workspace": "/private/var/folders/s6/97lfn3_942g3b1w0cw82sgz00000gn/T/missionbraid-i6-adaptive-handoff-Up49DA/workspace-adaptive",
+        "kind": "provider.termination_requested",
+        "run": true,
+        "signal": "SIGTERM",
+        "reason": "controlled-proof-boundary-after-exact-source-delta"
+      },
+      "childExit": {
+        "at": "2026-08-25T20:00:55.990Z",
+        "workspace": "/private/var/folders/s6/97lfn3_942g3b1w0cw82sgz00000gn/T/missionbraid-i6-adaptive-handoff-Up49DA/workspace-adaptive",
+        "kind": "provider.child_exit",
+        "run": true,
+        "controlled": true,
+        "code": null,
+        "signal": "SIGTERM",
+        "deltaObserved": true,
+        "terminationRequested": true,
+        "wrapperExitCode": 86
+      },
+      "sourceSemanticFactKinds": [
+        "failure",
+        "message",
+        "model_call",
+        "tool_request",
+        "tool_result",
+        "workspace_change"
+      ],
+      "representation": "The proof provider deliberately terminated the real Codex process after observing the exact source.txt delta; this is not presented as a natural provider failure."
+    },
+    "sourceWorkspaceDelta": {
+      "head": "cf2a3e80eee903b58acd06c913a791034e81fdaf",
+      "tree": "3ee2e82d81fefaa842fe390cca2f2bed8ebd399e",
+      "status": ["?? final.txt", "?? source.txt"]
+    },
+    "planner": {
+      "trigger": {
+        "code": "DECLARED_HANDOFF_FAILURE",
+        "detail": "Runtime process exited with 86",
+        "sourceProfileId": "profile-snapshot-9fd0eb039f5cbd941570450bfec2",
+        "sourceStageId": "codex-primary"
+      },
+      "policyVersion": "missionbraid.dev/execution-policy/deterministic-v1",
+      "decisionHash": "6fc037388a43f59a45b6d5b22c07aa68a52d0955e2dafca40ef27eca5962a8db",
+      "recomputedDecisionHash": "6fc037388a43f59a45b6d5b22c07aa68a52d0955e2dafca40ef27eca5962a8db",
+      "requirements": {
+        "allowedHarnesses": ["claude", "codex", "qoder"],
+        "contractId": "contract-309074c3474121a984084e396f83",
+        "handoffStates": [
+          {
+            "required": true,
+            "stateId": "effect-frontier"
+          },
+          {
+            "required": true,
+            "stateId": "outcome-contract"
+          },
+          {
+            "required": true,
+            "stateId": "visible-context"
+          },
+          {
+            "required": true,
+            "stateId": "workspace"
+          }
+        ],
+        "minimumAdapterCapabilities": [
+          {
+            "minimum": "native",
+            "name": "observe"
+          },
+          {
+            "minimum": "process-only",
+            "name": "interrupt"
+          }
+        ],
+        "minimumContextWindowTokens": null,
+        "minimumInjectionBudgetTokens": null,
+        "missionId": "mission-76032999-39ef-43f9-bf77-ae26f888c183",
+        "planNodeId": "codex-primary",
+        "requiredProfileCapabilities": ["command-execution", "workspace-read", "workspace-write"],
+        "requirementsId": "requirements-17ae001af818293abc61bdb2e11b",
+        "source": "contract"
+      },
+      "candidates": [
+        {
+          "adapterCapabilities": {
+            "contextCapture": "unknown",
+            "externalEffectControl": "unknown",
+            "interrupt": "process-only",
+            "nativeFork": "unsupported",
+            "observe": "native",
+            "preToolGate": "unsupported",
+            "resume": "unsupported",
+            "steer": "unsupported",
+            "workspaceRestore": "unsupported"
+          },
+          "configurationDigest": "461a264f32bad0a9c0914d3fd5aec560e98e066285d4b13d9c6c0d053df90179",
+          "contextWindowTokens": null,
+          "handoffStates": [
+            {
+              "classification": "exact",
+              "freshness": "fresh",
+              "source": "derived",
+              "stateId": "effect-frontier"
+            },
+            {
+              "classification": "exact",
+              "freshness": "fresh",
+              "source": "derived",
+              "stateId": "outcome-contract"
+            },
+            {
+              "classification": "summarized",
+              "freshness": "fresh",
+              "source": "derived",
+              "stateId": "visible-context"
+            },
+            {
+              "classification": "exact",
+              "freshness": "fresh",
+              "source": "derived",
+              "stateId": "workspace"
+            }
+          ],
+          "harness": "claude",
+          "injectionBudgetTokens": 1600,
+          "model": "deepseek-v4-pro",
+          "observation": {
+            "availability": "ready",
+            "estimatedCostMicros": null,
+            "freshness": "fresh",
+            "historicalSuccessRate": null,
+            "latencyMs": null,
+            "observationId": "catalog-d4f12214b80e528681c886cba302",
+            "observedAt": "2026-08-25T20:00:56.058Z",
+            "quotaRemainingRatio": null,
+            "source": "local-cli"
+          },
+          "permissionMode": "bypassPermissions",
+          "profileCapabilities": ["command-execution", "workspace-read", "workspace-write"],
+          "profileId": "profile-snapshot-461a264f32bad0a9c0914d3fd5ae",
+          "wouldRepeatEffectIds": []
+        },
+        {
+          "adapterCapabilities": {
+            "contextCapture": "unknown",
+            "externalEffectControl": "unknown",
+            "interrupt": "process-only",
+            "nativeFork": "unsupported",
+            "observe": "native",
+            "preToolGate": "unsupported",
+            "resume": "unsupported",
+            "steer": "unsupported",
+            "workspaceRestore": "unsupported"
+          },
+          "configurationDigest": "5310adbf26d7df8ce3d88bd47ed55c1c4d187f4d3e434f5dbc7b4448058508f2",
+          "contextWindowTokens": null,
+          "handoffStates": [
+            {
+              "classification": "exact",
+              "freshness": "fresh",
+              "source": "derived",
+              "stateId": "effect-frontier"
+            },
+            {
+              "classification": "exact",
+              "freshness": "fresh",
+              "source": "derived",
+              "stateId": "outcome-contract"
+            },
+            {
+              "classification": "summarized",
+              "freshness": "fresh",
+              "source": "derived",
+              "stateId": "visible-context"
+            },
+            {
+              "classification": "exact",
+              "freshness": "fresh",
+              "source": "derived",
+              "stateId": "workspace"
+            }
+          ],
+          "harness": "qoder",
+          "injectionBudgetTokens": 1600,
+          "model": "Qwen3.8-Max",
+          "observation": {
+            "availability": "ready",
+            "estimatedCostMicros": null,
+            "freshness": "fresh",
+            "historicalSuccessRate": null,
+            "latencyMs": null,
+            "observationId": "catalog-195018e2b04304d3cff52cf3efda",
+            "observedAt": "2026-08-25T20:00:56.058Z",
+            "quotaRemainingRatio": null,
+            "source": "local-cli"
+          },
+          "permissionMode": "bypass_permissions",
+          "profileCapabilities": ["command-execution", "workspace-read", "workspace-write"],
+          "profileId": "profile-snapshot-5310adbf26d7df8ce3d88bd47ed5",
+          "wouldRepeatEffectIds": []
+        }
+      ],
+      "filter": {
+        "candidates": [
+          {
+            "eligible": true,
+            "profileId": "profile-snapshot-461a264f32bad0a9c0914d3fd5ae",
+            "rejectionReasons": []
+          },
+          {
+            "eligible": true,
+            "profileId": "profile-snapshot-5310adbf26d7df8ce3d88bd47ed5",
+            "rejectionReasons": []
+          }
+        ],
+        "eligibleProfileIds": [
+          "profile-snapshot-461a264f32bad0a9c0914d3fd5ae",
+          "profile-snapshot-5310adbf26d7df8ce3d88bd47ed5"
+        ]
+      },
+      "rank": [
+        {
+          "harness": "claude",
+          "observationFreshness": "fresh",
+          "observationId": "catalog-d4f12214b80e528681c886cba302",
+          "observationSource": "local-cli",
+          "profileId": "profile-snapshot-461a264f32bad0a9c0914d3fd5ae",
+          "rank": 1,
+          "rankVector": {
+            "continuityPenalty": 0,
+            "costPenalty": 9007199254740991,
+            "freshnessPenalty": 0,
+            "latencyPenalty": 9007199254740991,
+            "outcomePenalty": 9007199254740991,
+            "profileIdTieBreaker": "profile-snapshot-461a264f32bad0a9c0914d3fd5ae",
+            "quotaPenalty": 9007199254740991,
+            "sourcePenalty": 1
+          }
+        },
+        {
+          "harness": "qoder",
+          "observationFreshness": "fresh",
+          "observationId": "catalog-195018e2b04304d3cff52cf3efda",
+          "observationSource": "local-cli",
+          "profileId": "profile-snapshot-5310adbf26d7df8ce3d88bd47ed5",
+          "rank": 2,
+          "rankVector": {
+            "continuityPenalty": 0,
+            "costPenalty": 9007199254740991,
+            "freshnessPenalty": 0,
+            "latencyPenalty": 9007199254740991,
+            "outcomePenalty": 9007199254740991,
+            "profileIdTieBreaker": "profile-snapshot-5310adbf26d7df8ce3d88bd47ed5",
+            "quotaPenalty": 9007199254740991,
+            "sourcePenalty": 1
+          }
+        }
+      ],
+      "compatibility": [
+        {
+          "blockingSubjects": [],
+          "effectFrontier": {
+            "classification": "exact",
+            "conflictingEffectIds": [],
+            "doNotRepeatEffectIds": ["effect-attempt-fda24cf0-ec9f-4dad-831c-5254d6c29e7a"]
+          },
+          "overall": "summarized",
+          "profileId": "profile-snapshot-461a264f32bad0a9c0914d3fd5ae",
+          "states": [
+            {
+              "classification": "exact",
+              "freshness": "fresh",
+              "required": true,
+              "source": "derived",
+              "stateId": "effect-frontier"
+            },
+            {
+              "classification": "exact",
+              "freshness": "fresh",
+              "required": true,
+              "source": "derived",
+              "stateId": "outcome-contract"
+            },
+            {
+              "classification": "summarized",
+              "freshness": "fresh",
+              "required": true,
+              "source": "derived",
+              "stateId": "visible-context"
+            },
+            {
+              "classification": "exact",
+              "freshness": "fresh",
+              "required": true,
+              "source": "derived",
+              "stateId": "workspace"
+            }
+          ]
+        },
+        {
+          "blockingSubjects": [],
+          "effectFrontier": {
+            "classification": "exact",
+            "conflictingEffectIds": [],
+            "doNotRepeatEffectIds": ["effect-attempt-fda24cf0-ec9f-4dad-831c-5254d6c29e7a"]
+          },
+          "overall": "summarized",
+          "profileId": "profile-snapshot-5310adbf26d7df8ce3d88bd47ed5",
+          "states": [
+            {
+              "classification": "exact",
+              "freshness": "fresh",
+              "required": true,
+              "source": "derived",
+              "stateId": "effect-frontier"
+            },
+            {
+              "classification": "exact",
+              "freshness": "fresh",
+              "required": true,
+              "source": "derived",
+              "stateId": "outcome-contract"
+            },
+            {
+              "classification": "summarized",
+              "freshness": "fresh",
+              "required": true,
+              "source": "derived",
+              "stateId": "visible-context"
+            },
+            {
+              "classification": "exact",
+              "freshness": "fresh",
+              "required": true,
+              "source": "derived",
+              "stateId": "workspace"
+            }
+          ]
+        }
+      ],
+      "binding": {
+        "action": "handoff",
+        "reason": "current_missing_ranked_replacement",
+        "selectedHarness": "claude",
+        "selectedProfileId": "profile-snapshot-461a264f32bad0a9c0914d3fd5ae",
+        "status": "bound"
+      },
+      "manualOverride": {
+        "reason": null,
+        "requestedProfileId": null,
+        "status": "none"
+      },
+      "sourceCompositeCheckpoint": {
+        "checkpointId": "checkpoint-291f76df0e0d072ffc591a70bda07f7de853c38873ee0f8365a3792b9ba8c082",
+        "components": [
+          {
+            "component": "mission",
+            "contentDigest": "sha256:c66a3a0b65da734a6eef798afa9cea67ff3be7bad00fa7613c93fad3c48d1c3e",
+            "disposition": "portable"
+          },
+          {
+            "component": "branch",
+            "contentDigest": "sha256:5676d311dfe01c9ceec879169078b1b1a3ce4d61da99278d02f0d4a10c1c0407",
+            "disposition": "portable"
+          },
+          {
+            "component": "attempt",
+            "contentDigest": "sha256:b5f442f4f03c214c125e29fd1941eff5820dce27b0411b966c4a41600908c13c",
+            "disposition": "portable"
+          },
+          {
+            "component": "contract",
+            "contentDigest": "sha256:d5f1a8941bff8172e3216af69cb5d374f1c25244b33542e668c451b93a0aeac9",
+            "disposition": "portable"
+          },
+          {
+            "component": "profile",
+            "contentDigest": "sha256:4bfa339871d9c18cfe3642dbc2e121797a5145351b64276ef273f01d56547c0e",
+            "disposition": "portable"
+          },
+          {
+            "component": "event-prefix",
+            "contentDigest": "sha256:1fd36c552bf3e3652ebc42cc41a3763e7933d85b287b007b064147398c511e54",
+            "disposition": "portable"
+          },
+          {
+            "component": "visible-context",
+            "contentDigest": "sha256:9e4a153c875b43f1fb2250481f050eeb1927ac14ac390efdfaad740611994371",
+            "disposition": "portable"
+          },
+          {
+            "component": "workspace",
+            "contentDigest": "sha256:f484ee6bead367dc9250721b49cd80b434fadd5b5d9810275fc0bbe8411f4023",
+            "disposition": "inspect-only"
+          },
+          {
+            "component": "permissions",
+            "contentDigest": "sha256:f9ed449161e5d318fe721ac6aec73bcd65ff4519f569fa22fda74fbdf60dac4b",
+            "disposition": "portable"
+          },
+          {
+            "component": "effect-frontier",
+            "contentDigest": "sha256:d13db67f0295c02475a6f446db3962461a081ce421262b2a6854c3b26ad5edc9",
+            "disposition": "inspect-only"
+          },
+          {
+            "component": "process",
+            "contentDigest": "sha256:c8ae4b640cf00e5c01b6eaaf721eb1a52d55a0f3d394dcf93d5ee3530506caae",
+            "disposition": "inspect-only"
+          },
+          {
+            "component": "native-session",
+            "contentDigest": "sha256:42f8351d7ab28fed1fdbf390f3923dbd37853c19593b7ba1f33965c7b2d80e23",
+            "disposition": "unavailable"
+          }
+        ],
+        "eventPrefix": {
+          "headHash": "035ac911afc1c10af49666d2594262df7cdf8c031a188f6df081bb1e2d521fa2",
+          "throughSeq": 297
+        },
+        "manifestHash": "sha256:291f76df0e0d072ffc591a70bda07f7de853c38873ee0f8365a3792b9ba8c082",
+        "source": {
+          "attemptId": "attempt-fda24cf0-ec9f-4dad-831c-5254d6c29e7a",
+          "branchId": "branch-root-a427f866-7cba-42c6-8566-c4b60008c5a5",
+          "contractId": "contract-309074c3474121a984084e396f83",
+          "missionId": "mission-76032999-39ef-43f9-bf77-ae26f888c183",
+          "profileId": "profile-snapshot-9fd0eb039f5cbd941570450bfec2",
+          "workspaceKey": "workspace-8000f24b182e88d255703e37239e7850"
+        },
+        "workspace": {
+          "head": "cf2a3e80eee903b58acd06c913a791034e81fdaf",
+          "state": "digest-only",
+          "statusDigest": "e96686efd06216e1356912fce4af86e55fd8ab55f02dfb539ae06fadb84adfc7",
+          "workspaceDigest": "76a742e8d26d55a6ec9aea944b13d651cccb01dfda87bc0e2f99c261ac8bc491",
+          "workspaceKey": "workspace-8000f24b182e88d255703e37239e7850"
+        }
+      }
+    },
+    "compositeCheckpoint": {
+      "checkpointId": "checkpoint-291f76df0e0d072ffc591a70bda07f7de853c38873ee0f8365a3792b9ba8c082",
+      "manifestHash": "sha256:291f76df0e0d072ffc591a70bda07f7de853c38873ee0f8365a3792b9ba8c082",
+      "source": {
+        "attemptId": "attempt-fda24cf0-ec9f-4dad-831c-5254d6c29e7a",
+        "branchId": "branch-root-a427f866-7cba-42c6-8566-c4b60008c5a5",
+        "contractId": "contract-309074c3474121a984084e396f83",
+        "missionId": "mission-76032999-39ef-43f9-bf77-ae26f888c183",
+        "profileId": "profile-snapshot-9fd0eb039f5cbd941570450bfec2",
+        "workspaceKey": "workspace-8000f24b182e88d255703e37239e7850"
+      },
+      "eventPrefix": {
+        "headHash": "035ac911afc1c10af49666d2594262df7cdf8c031a188f6df081bb1e2d521fa2",
+        "throughSeq": 297
+      },
+      "workspace": {
+        "head": "cf2a3e80eee903b58acd06c913a791034e81fdaf",
+        "state": "digest-only",
+        "statusDigest": "e96686efd06216e1356912fce4af86e55fd8ab55f02dfb539ae06fadb84adfc7",
+        "workspaceDigest": "76a742e8d26d55a6ec9aea944b13d651cccb01dfda87bc0e2f99c261ac8bc491",
+        "workspaceKey": "workspace-8000f24b182e88d255703e37239e7850"
+      },
+      "componentDispositions": [
+        {
+          "component": "mission",
+          "disposition": "portable"
+        },
+        {
+          "component": "branch",
+          "disposition": "portable"
+        },
+        {
+          "component": "attempt",
+          "disposition": "portable"
+        },
+        {
+          "component": "contract",
+          "disposition": "portable"
+        },
+        {
+          "component": "profile",
+          "disposition": "portable"
+        },
+        {
+          "component": "event-prefix",
+          "disposition": "portable"
+        },
+        {
+          "component": "visible-context",
+          "disposition": "portable"
+        },
+        {
+          "component": "workspace",
+          "disposition": "inspect-only"
+        },
+        {
+          "component": "permissions",
+          "disposition": "portable"
+        },
+        {
+          "component": "effect-frontier",
+          "disposition": "inspect-only"
+        },
+        {
+          "component": "process",
+          "disposition": "inspect-only"
+        },
+        {
+          "component": "native-session",
+          "disposition": "unavailable"
+        }
+      ]
+    },
+    "selectedRuntime": {
+      "harness": "claude",
+      "attemptId": "attempt-0fe53529-46f9-4419-a5ae-28113c5d3f31",
+      "requestedModel": "deepseek-v4-pro",
+      "runtimeVersion": "2.1.245",
+      "semanticFactKinds": [
+        "context",
+        "message",
+        "model_call",
+        "subagent_started",
+        "tool_request",
+        "tool_result",
+        "usage"
+      ]
+    },
+    "handoff": {
+      "preparedSeq": 308,
+      "acknowledgedSeq": 1136,
+      "targetFinishedSeq": 1138,
+      "capsuleId": "capsule-7d83781b5dd9f95f623ca4845eaf91603c65de229eecba1ac8f3e93fbf048076",
+      "checkpointId": "checkpoint-291f76df0e0d072ffc591a70bda07f7de853c38873ee0f8365a3792b9ba8c082",
+      "acknowledgementId": "ack-f658f632a0b33f3cb0f2c04a",
+      "orderingEstablished": true,
+      "workspaceUnchangedAtAcknowledgement": true,
+      "firstToolRequestRuntimeEventId": "runtime-event-16fe51d3cc9adbe461672e413b55f1df"
+    },
+    "confirmedSourceEffectNoRepeat": {
+      "effectId": "effect-attempt-fda24cf0-ec9f-4dad-831c-5254d6c29e7a",
+      "status": "confirmed",
+      "carriedInTargetCapsule": true
+    },
+    "browserBeforeRestart": {
+      "locale": "zh-CN",
+      "triggerVisible": true,
+      "filterVisible": true,
+      "rankedSelectionVisible": true,
+      "rankVectorVisible": false,
+      "compatibilityVisible": true,
+      "decisionHashVisible": true,
+      "sourceCompositeCheckpointVisible": true,
+      "selectedHarnessVisible": true,
+      "receiptVisible": true,
+      "facts": [
+        {
+          "label": "触发原因",
+          "value": "DECLARED_HANDOFF_FAILURE"
+        },
+        {
+          "label": "选中的 Harness",
+          "value": "claude"
+        },
+        {
+          "label": "执行动作",
+          "value": "handoff"
+        },
+        {
+          "label": "绑定原因",
+          "value": "current_missing_ranked_replacement"
+        },
+        {
+          "label": "候选 Profile",
+          "value": "2"
+        },
+        {
+          "label": "可用 Profile",
+          "value": "profile-snapshot-461a264f32bad0a9c0914d3fd5ae, profile-snapshot-5310adbf26d7df8ce3d88bd47ed5"
+        },
+        {
+          "label": "被过滤的 Profile",
+          "value": "未知"
+        },
+        {
+          "label": "Handoff 兼容性",
+          "value": "profile-snapshot-461a264f32bad0a9c0914d3fd5ae: summarized, profile-snapshot-5310adbf26d7df8ce3d88bd47ed5: summarized"
+        },
+        {
+          "label": "源 Composite Checkpoint",
+          "value": "checkpoint-291f76df0e0d072ffc591a70bda07f7de853c38873ee0f8365a3792b9ba8c082"
+        },
+        {
+          "label": "策略版本",
+          "value": "missionbraid.dev/execution-policy/deterministic-v1"
+        },
+        {
+          "label": "决策摘要",
+          "value": "6fc037388a43f59a45b6d5b22c07aa68a52d0955e2dafca40ef27eca5962a8db"
+        }
+      ]
+    },
+    "browserAfterRestart": {
+      "locale": "zh-CN",
+      "triggerVisible": true,
+      "filterVisible": true,
+      "rankedSelectionVisible": true,
+      "rankVectorVisible": false,
+      "compatibilityVisible": true,
+      "decisionHashVisible": true,
+      "sourceCompositeCheckpointVisible": true,
+      "selectedHarnessVisible": true,
+      "receiptVisible": true,
+      "facts": [
+        {
+          "label": "触发原因",
+          "value": "DECLARED_HANDOFF_FAILURE"
+        },
+        {
+          "label": "选中的 Harness",
+          "value": "claude"
+        },
+        {
+          "label": "执行动作",
+          "value": "handoff"
+        },
+        {
+          "label": "绑定原因",
+          "value": "current_missing_ranked_replacement"
+        },
+        {
+          "label": "候选 Profile",
+          "value": "2"
+        },
+        {
+          "label": "可用 Profile",
+          "value": "profile-snapshot-461a264f32bad0a9c0914d3fd5ae, profile-snapshot-5310adbf26d7df8ce3d88bd47ed5"
+        },
+        {
+          "label": "被过滤的 Profile",
+          "value": "未知"
+        },
+        {
+          "label": "Handoff 兼容性",
+          "value": "profile-snapshot-461a264f32bad0a9c0914d3fd5ae: summarized, profile-snapshot-5310adbf26d7df8ce3d88bd47ed5: summarized"
+        },
+        {
+          "label": "源 Composite Checkpoint",
+          "value": "checkpoint-291f76df0e0d072ffc591a70bda07f7de853c38873ee0f8365a3792b9ba8c082"
+        },
+        {
+          "label": "策略版本",
+          "value": "missionbraid.dev/execution-policy/deterministic-v1"
+        },
+        {
+          "label": "决策摘要",
+          "value": "6fc037388a43f59a45b6d5b22c07aa68a52d0955e2dafca40ef27eca5962a8db"
+        }
+      ]
+    }
+  },
+  "restartRecovery": {
+    "samePreferredMissionHeadAndReceipt": true,
+    "sameAdaptiveMissionHeadAndReceipt": true,
+    "samePlannerDecisionHash": true,
+    "sameCompositeCheckpoint": true,
+    "runtimeProcessesAdded": 0
+  },
+  "claimBoundary": "This is same-host local evidence through the built MissionBraid Workbench. A real Codex 0.149.x process first completed a preferred Mission without launching either declared fallback. In the adaptive Mission, a separately recorded proof runtime-provider wrapper terminated a real Codex process only after it produced the exact source workspace delta; this is a controlled provider interruption, not a natural Codex, model, quota, or network failure. MissionBraid captured that frontier as a complete 12-component Composite Checkpoint whose workspace component is digest-only and inspect-only, deterministically filtered and ranked fresh local Qoder and Claude CLI Profile observations without a user choice or manual override, bound one native target, projected a semantic Handoff Capsule, required its acknowledgement before the first tool request, preserved the confirmed source Effect as no-repeat, passed the immutable verifier, issued a verified Receipt, rendered the decision in the browser, and reconstructed it after restart. It does not prove a restorable Handoff workspace, native session migration, native session resume, cross-host continuity, production reliability, independent reproduction, or that unselected CLI probes establish authenticated model access or remaining quota.",
+  "proofRoot": "/var/folders/s6/97lfn3_942g3b1w0cw82sgz00000gn/T/missionbraid-i6-adaptive-handoff-Up49DA"
+}
