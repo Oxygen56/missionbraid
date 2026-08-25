@@ -22,7 +22,10 @@ import {
   type MissionExecutionPlannerOverrideV1,
   type MissionExecutionForkRequestV1,
   type MissionExecutionForkResultV1,
+  type MissionCheckpointReplayResultV1,
 } from './engine.js';
+import type { CheckpointReplayRecordV1 } from './checkpoint-replay.js';
+import type { MissionCheckpointReplayRequestV1 } from './mission-checkpoint-replay.js';
 import { createMissionDraft, MissionDraftError } from './mission-draft.js';
 import { discoverRuntimeCatalog, type RuntimeCatalogEntry } from './runtime-catalog.js';
 import type {
@@ -69,6 +72,7 @@ export interface AppEngine {
   branches?(missionId: string): readonly BranchV1[];
   compositeCheckpoints?(missionId: string): readonly CompositeCheckpointManifestV1[];
   executionForks?(missionId: string): Promise<readonly ExecutionForkRecordV1[]>;
+  checkpointReplays?(missionId: string): Promise<readonly CheckpointReplayRecordV1[]>;
   createCompositeCheckpoint?(
     missionId: string,
     requestedAttemptId?: string,
@@ -77,6 +81,11 @@ export interface AppEngine {
     missionId: string,
     input: MissionExecutionForkRequestV1,
   ): Promise<MissionExecutionForkResultV1>;
+  replayCheckpoint?(
+    missionId: string,
+    checkpointId: string,
+    input: MissionCheckpointReplayRequestV1,
+  ): Promise<MissionCheckpointReplayResultV1>;
   executionPlannerCandidates?(missionId: string): readonly MissionExecutionPlannerCandidateV1[];
   executionPlannerOverride?(missionId: string): MissionExecutionPlannerOverrideV1 | undefined;
   setExecutionPlannerOverride?(
@@ -552,6 +561,31 @@ export async function startMissionBraidApp(
       }
       return;
     }
+    const checkpointReplay = matchCheckpointReplayCollection(url.pathname);
+    if (checkpointReplay !== undefined && request.method === 'POST') {
+      const engine = engineFactory(stateDir);
+      try {
+        if (engine.replayCheckpoint === undefined) {
+          throw new AppHttpError(
+            501,
+            'CHECKPOINT_REPLAY_UNAVAILABLE',
+            'Checkpoint Replay is unavailable.',
+          );
+        }
+        const body = requireCheckpointReplayBody(await readJson(request));
+        const result = await engine.replayCheckpoint(
+          checkpointReplay.missionId,
+          checkpointReplay.checkpointId,
+          body,
+        );
+        sendJson(response, body.mode === 'playback' ? 200 : 201, {
+          checkpointReplay: result,
+        });
+      } finally {
+        engine.close();
+      }
+      return;
+    }
     const plannerOverrideMissionId = matchExecutionPlannerOverride(url.pathname);
     if (plannerOverrideMissionId !== undefined && request.method === 'POST') {
       const engine = engineFactory(stateDir);
@@ -611,6 +645,8 @@ export async function startMissionBraidApp(
           compositeCheckpoints: engine.compositeCheckpoints?.(missionId) ?? [],
           executionForks:
             engine.executionForks === undefined ? [] : await engine.executionForks(missionId),
+          checkpointReplays:
+            engine.checkpointReplays === undefined ? [] : await engine.checkpointReplays(missionId),
           executionPlanner: {
             candidates: engine.executionPlannerCandidates?.(missionId) ?? [],
             override: engine.executionPlannerOverride?.(missionId) ?? null,
@@ -618,6 +654,7 @@ export async function startMissionBraidApp(
           capabilities: {
             createCompositeCheckpoint: engine.createCompositeCheckpoint !== undefined,
             executeFork: engine.executeFork !== undefined,
+            replayCheckpoint: engine.replayCheckpoint !== undefined,
             setExecutionPlannerOverride: engine.setExecutionPlannerOverride !== undefined,
             clearExecutionPlannerOverride: engine.clearExecutionPlannerOverride !== undefined,
           },
@@ -770,6 +807,17 @@ function matchExecutionPlannerOverride(pathname: string): string | undefined {
   return match?.[1] === undefined ? undefined : decodeURIComponent(match[1]);
 }
 
+function matchCheckpointReplayCollection(
+  pathname: string,
+): { readonly missionId: string; readonly checkpointId: string } | undefined {
+  const match = pathname.match(/^\/api\/v1\/missions\/([^/]+)\/checkpoints\/([^/]+)\/replays$/);
+  if (match?.[1] === undefined || match[2] === undefined) return undefined;
+  return {
+    missionId: decodeURIComponent(match[1]),
+    checkpointId: decodeURIComponent(match[2]),
+  };
+}
+
 function matchMissionEventStreamId(pathname: string): string | undefined {
   const match = pathname.match(/^\/api\/v1\/missions\/([^/]+)\/events$/);
   return match?.[1] === undefined ? undefined : decodeURIComponent(match[1]);
@@ -916,6 +964,79 @@ function matchCheckpointForkCollection(
     missionId: decodeURIComponent(match[1]),
     checkpointId: decodeURIComponent(match[2]),
   };
+}
+
+function requireCheckpointReplayBody(value: unknown): MissionCheckpointReplayRequestV1 {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new AppHttpError(
+      400,
+      'INVALID_CHECKPOINT_REPLAY',
+      'Checkpoint Replay body must be an object.',
+    );
+  }
+  const body = value as Record<string, unknown>;
+  if (body.mode === 'playback') return { mode: 'playback' };
+  if (body.mode !== 'cached-replay' && body.mode !== 'counterfactual-resample') {
+    throw new AppHttpError(
+      400,
+      'INVALID_CHECKPOINT_REPLAY',
+      'mode must be playback, cached-replay, or counterfactual-resample.',
+    );
+  }
+  if (
+    body.intervention === null ||
+    typeof body.intervention !== 'object' ||
+    Array.isArray(body.intervention)
+  ) {
+    throw new AppHttpError(400, 'INVALID_CHECKPOINT_REPLAY', 'intervention must be an object.');
+  }
+  const input = body.intervention as Record<string, unknown>;
+  const authorityChange =
+    input.authorityChange === undefined
+      ? undefined
+      : requireExecutionForkAuthorityChange(input.authorityChange);
+  return {
+    mode: body.mode,
+    intervention: {
+      kind: requireExecutionForkKind(input.kind),
+      targetRef: requireCheckpointReplayString(input.targetRef, 'intervention.targetRef'),
+      replacement: requireCheckpointReplayString(
+        input.replacement,
+        'intervention.replacement',
+        64 * 1024,
+      ),
+      description: requireCheckpointReplayString(
+        input.description,
+        'intervention.description',
+        4_096,
+      ),
+      ...(authorityChange === undefined ? {} : { authorityChange }),
+      ...(input.beforeDigest === undefined
+        ? {}
+        : {
+            beforeDigest: requireCheckpointReplayString(
+              input.beforeDigest,
+              'intervention.beforeDigest',
+            ),
+          }),
+    },
+    ...(body.childBranchId === undefined
+      ? {}
+      : {
+          childBranchId: requireCheckpointReplayString(body.childBranchId, 'childBranchId'),
+        }),
+  };
+}
+
+function requireCheckpointReplayString(value: unknown, field: string, limit = 512): string {
+  if (typeof value !== 'string' || value.trim().length === 0 || value.length > limit) {
+    throw new AppHttpError(
+      400,
+      'INVALID_CHECKPOINT_REPLAY',
+      `${field} must be a non-empty bounded string.`,
+    );
+  }
+  return value.trim();
 }
 
 function requireExecutionForkBody(value: unknown): {

@@ -68,6 +68,7 @@ describe('ClaudeAdapter', () => {
         reasoningEffort: 'high',
         maxTurns: 12,
         noSessionPersistence: true,
+        safeMode: true,
         includePartialMessages: true,
         settingsFile,
         tools: ['Read', 'Edit', 'Bash(git status)'],
@@ -97,6 +98,7 @@ describe('ClaudeAdapter', () => {
         '--max-turns',
         '12',
         '--no-session-persistence',
+        '--safe-mode',
         '--settings',
         settingsFile,
         '--tools',
@@ -240,13 +242,12 @@ describe('ClaudeAdapter', () => {
         settingsFile: 'relative-settings.json',
       }),
     ).toThrow('Claude settingsFile must be an absolute path.');
-    expect(() =>
-      buildClaudeInvocation({
-        workspace,
-        prompt: 'fixture',
-        tools: [],
-      }),
-    ).toThrow('Claude tools must contain at least one tool.');
+    const noTools = buildClaudeInvocation({
+      workspace,
+      prompt: 'fixture',
+      tools: [],
+    });
+    expect(noTools.args.slice(noTools.args.indexOf('--tools'))).toEqual(['--tools', '']);
     expect(() =>
       buildClaudeInvocation({
         workspace,

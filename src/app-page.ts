@@ -2688,6 +2688,12 @@ function responseError(payload, status) {
   if (code === 'INVALID_EXECUTION_FORK') {
     return localizedError('error.invalidExecutionFork');
   }
+  if (code === 'CHECKPOINT_REPLAY_UNAVAILABLE') {
+    return localizedError('error.checkpointReplayUnavailable');
+  }
+  if (code === 'INVALID_CHECKPOINT_REPLAY') {
+    return localizedError('error.invalidCheckpointReplay');
+  }
   if (code === 'ARTIFACT_NOT_FOUND') {
     return localizedError('artifact.notFound', {
       artifactId: params.artifactId || t('intelligence.unknown'),
@@ -3841,6 +3847,7 @@ function renderExecutionPlanner(timeline, detail, missionId) {
         const compatibility = Array.isArray(decision.handoffCompatibility)
           ? decision.handoffCompatibility
           : [];
+        const ranked = Array.isArray(decision.rank) ? decision.rank : [];
         const compatibilitySummary = compatibility.map(function (item) {
           return [item.profileId, item.overall].filter(Boolean).join(': ');
         });
@@ -3860,6 +3867,21 @@ function renderExecutionPlanner(timeline, detail, missionId) {
                   ? candidate.rejectionReasons.map(function (reason) { return reason.code; })
                   : [];
                 return [candidate.profileId, reasons.join(', ')].filter(Boolean).join(': ');
+              }),
+            ),
+          ],
+          [
+            'planner.field.rankVectors',
+            displayValue(
+              ranked.map(function (candidate) {
+                return {
+                  rank: candidate.rank,
+                  harness: candidate.harness,
+                  profileId: candidate.profileId,
+                  rankVector: candidate.rankVector,
+                  observationSource: candidate.observationSource,
+                  observationFreshness: candidate.observationFreshness,
+                };
               }),
             ),
           ],
@@ -4451,7 +4473,92 @@ function renderForkIntervention(missionId, checkpoint, enabled) {
   return form;
 }
 
-function renderContinuityCheckpoint(missionId, checkpoint, canExecuteFork) {
+function renderReplayIntervention(missionId, checkpoint, enabled) {
+  const checkpointId = String(checkpoint.checkpointId || '');
+  const form = createElement('div', 'fork-intervention');
+  form.dataset.checkpointReplayAction = checkpointId;
+  form.append(createElement('h5', '', t('continuity.replayHeading')));
+  const replacement = document.createElement('textarea');
+  replacement.rows = 3;
+  replacement.placeholder = t('continuity.replayReplacementPlaceholder');
+  const description = document.createElement('textarea');
+  description.rows = 2;
+  description.placeholder = t('continuity.descriptionPlaceholder');
+  form.append(
+    continuityField('continuity.replayReplacement', replacement, 'intervention-description'),
+    continuityField('continuity.replayDescription', description, 'intervention-description'),
+  );
+  const actions = createElement('div', 'fork-action-row');
+  const playback = createElement('button', 'continuity-action is-secondary', t('continuity.playbackAction'));
+  const cached = createElement('button', 'continuity-action is-secondary', t('continuity.cachedReplayAction'));
+  const counterfactual = createElement('button', 'continuity-action', t('continuity.counterfactualAction'));
+  [playback, cached, counterfactual].forEach(function (button) {
+    button.type = 'button';
+    button.disabled = !enabled;
+  });
+  const status = createElement(
+    'p',
+    'continuity-status',
+    enabled ? '' : t('continuity.completeCheckpointRequired'),
+  );
+  status.setAttribute('aria-live', 'polite');
+  async function run(mode) {
+    const nextGuidance = replacement.value.trim();
+    const reason = description.value.trim();
+    if (mode !== 'playback' && (!nextGuidance || !reason)) {
+      status.textContent = t('continuity.replayRequired');
+      return;
+    }
+    [playback, cached, counterfactual].forEach(function (button) { button.disabled = true; });
+    status.textContent = t('continuity.replayRunning');
+    try {
+      await requestJson(
+        '/api/v1/missions/' +
+          encodeURIComponent(missionId) +
+          '/checkpoints/' +
+          encodeURIComponent(checkpointId) +
+          '/replays',
+        {
+          method: 'POST',
+          body: JSON.stringify(
+            mode === 'playback'
+              ? { mode: mode }
+              : {
+                  mode: mode,
+                  intervention: {
+                    kind: 'guidance',
+                    targetRef: 'guidance:next-turn',
+                    replacement: nextGuidance,
+                    description: reason,
+                    authorityChange: 'unchanged',
+                  },
+                },
+          ),
+        },
+      );
+      showPageAlert(translated('continuity.replayCompleted'));
+      await loadMissions({ quiet: true });
+      await loadDetail(missionId, { quiet: true });
+    } catch (error) {
+      status.textContent = messageText(errorMessage(error, 'continuity.replayFailed'));
+      showPageAlert(errorMessage(error, 'continuity.replayFailed'));
+    } finally {
+      if (form.isConnected) {
+        [playback, cached, counterfactual].forEach(function (button) {
+          button.disabled = !enabled;
+        });
+      }
+    }
+  }
+  playback.addEventListener('click', function () { void run('playback'); });
+  cached.addEventListener('click', function () { void run('cached-replay'); });
+  counterfactual.addEventListener('click', function () { void run('counterfactual-resample'); });
+  actions.append(playback, cached, counterfactual, status);
+  form.append(actions);
+  return form;
+}
+
+function renderContinuityCheckpoint(missionId, checkpoint, canExecuteFork, canReplay) {
   const record = recordValue(checkpoint) || {};
   const source = recordValue(record.source) || {};
   const ready = checkpointIsExecutionForkReady(record);
@@ -4484,6 +4591,7 @@ function renderContinuityCheckpoint(missionId, checkpoint, canExecuteFork) {
   );
 
   const form = renderForkIntervention(missionId, record, executable);
+  const replayForm = renderReplayIntervention(missionId, record, ready && canReplay);
   const modes = createElement('div', 'mode-grid');
   [
     {
@@ -4507,9 +4615,61 @@ function renderContinuityCheckpoint(missionId, checkpoint, canExecuteFork) {
       descriptionKey: 'continuity.mode.executionForkDescription',
     },
   ].forEach(function (mode) {
-    modes.append(renderCheckpointMode(mode, mode.id === 'execution-fork' && executable, form));
+    const isExecutionFork = mode.id === 'execution-fork';
+    modes.append(
+      renderCheckpointMode(
+        mode,
+        isExecutionFork ? executable : ready && canReplay,
+        isExecutionFork ? form : replayForm,
+      ),
+    );
   });
-  card.append(createElement('h5', '', t('continuity.modes')), modes, form);
+  card.append(createElement('h5', '', t('continuity.modes')), modes, replayForm, form);
+  return card;
+}
+
+function renderCheckpointReplay(record) {
+  const value = recordValue(record) || {};
+  const lineage = recordValue(value.lineage) || {};
+  const plan = recordValue(value.plan) || {};
+  const semantics = recordValue(plan.semantics) || {};
+  const card = createElement('article', 'fork-card');
+  card.dataset.checkpointReplayId = String(value.replayId || '');
+  const heading = createElement('div', 'continuity-card-heading');
+  heading.append(
+    createElement('strong', 'fork-identity', value.replayId || t('intelligence.unknown')),
+    createElement('span', 'continuity-label', displayValue(value.mode)),
+  );
+  card.append(
+    heading,
+    createElement('p', '', t('continuity.phase') + ' · ' + displayValue(value.phase)),
+  );
+  if (value.mode === 'playback') {
+    card.append(createElement('p', '', t('continuity.replayNoBranch')));
+  } else {
+    card.append(
+      createElement(
+        'p',
+        '',
+        displayValue(lineage.parentBranchId) + ' → ' + displayValue(lineage.childBranchId),
+      ),
+      createElement(
+        'p',
+        '',
+        'model ' +
+          displayValue(semantics.modelExecution) +
+          ' · tool ' +
+          displayValue(semantics.toolExecution) +
+          ' · workspace ' +
+          displayValue(semantics.workspaceUse),
+      ),
+      createElement('p', '', t('continuity.replayUnknown')),
+    );
+  }
+  const failure = recordValue(value.failure);
+  const unknown = recordValue(value.unknown);
+  if (failure && failure.detail) card.append(createElement('p', 'operation-note', failure.detail));
+  if (unknown && unknown.detail) card.append(createElement('p', 'operation-note', unknown.detail));
   return card;
 }
 
@@ -4586,11 +4746,15 @@ function renderContinuityWorkbench(detail, missionId, receipt) {
   const capabilities = recordValue(detail.capabilities) || {};
   const canCreateCheckpoint = capabilities.createCompositeCheckpoint === true;
   const canExecuteFork = capabilities.executeFork === true;
+  const canReplay = capabilities.replayCheckpoint === true;
   const branches = Array.isArray(detail.branches) ? detail.branches : [];
   const checkpoints = Array.isArray(detail.compositeCheckpoints)
     ? detail.compositeCheckpoints
     : [];
   const executionForks = Array.isArray(detail.executionForks) ? detail.executionForks : [];
+  const checkpointReplays = Array.isArray(detail.checkpointReplays)
+    ? detail.checkpointReplays
+    : [];
   const section = createElement('section', 'continuity-workbench');
   section.setAttribute('data-continuity-workbench', missionId);
   const heading = createElement('div', 'continuity-heading');
@@ -4653,7 +4817,9 @@ function renderContinuityWorkbench(detail, missionId, receipt) {
     checkpointList.append(createElement('p', 'empty-note', t('continuity.noCheckpoints')));
   } else {
     checkpoints.forEach(function (checkpoint) {
-      checkpointList.append(renderContinuityCheckpoint(missionId, checkpoint, canExecuteFork));
+      checkpointList.append(
+        renderContinuityCheckpoint(missionId, checkpoint, canExecuteFork, canReplay),
+      );
     });
   }
   section.append(continuityGroup('continuity.checkpoints', checkpointList));
@@ -4667,6 +4833,16 @@ function renderContinuityWorkbench(detail, missionId, receipt) {
     });
   }
   section.append(continuityGroup('continuity.executionForks', forkList));
+
+  const replayList = createElement('div', 'fork-list');
+  if (checkpointReplays.length === 0) {
+    replayList.append(createElement('p', 'empty-note', t('continuity.noReplays')));
+  } else {
+    checkpointReplays.forEach(function (record) {
+      replayList.append(renderCheckpointReplay(record));
+    });
+  }
+  section.append(continuityGroup('continuity.replays', replayList));
   return section;
 }
 

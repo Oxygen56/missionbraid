@@ -32,6 +32,8 @@ export interface ClaudeRunRequest extends AdapterRunRequest {
   readonly permissionMode?: ClaudePermissionMode;
   readonly maxTurns?: number;
   readonly noSessionPersistence?: boolean;
+  /** Disable project/user customizations for a request-scoped, explicit context run. */
+  readonly safeMode?: boolean;
   readonly includeHookEvents?: boolean;
   readonly includePartialMessages?: boolean;
   /** Absolute path to request-scoped Claude settings, including native Hooks. */
@@ -127,9 +129,6 @@ function validateRequest(request: ClaudeRunRequest): void {
     throw new TypeError('Claude settingsFile must be an absolute path.');
   }
   if (request.tools !== undefined) {
-    if (request.tools.length === 0) {
-      throw new TypeError('Claude tools must contain at least one tool.');
-    }
     for (const tool of request.tools) {
       requireNonEmpty(tool, 'Claude tool');
     }
@@ -238,6 +237,9 @@ export function buildClaudeInvocation(
   }
   if (request.noSessionPersistence === true) {
     args.push('--no-session-persistence');
+  }
+  if (request.safeMode === true) {
+    args.push('--safe-mode');
   }
   if (request.settingsFile !== undefined) {
     args.push('--settings', request.settingsFile);

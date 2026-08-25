@@ -19,11 +19,14 @@ import {
 } from './domain.js';
 import type { ExternalEffectOutcome } from './external-effect.js';
 import type { ExecutionForkRecordV1 } from './execution-fork.js';
+import type { CheckpointReplayRecordV1 } from './checkpoint-replay.js';
+import type { MissionCheckpointReplayRequestV1 } from './mission-checkpoint-replay.js';
 import type {
   MissionCreationResult,
   MissionExecutionResult,
   MissionExecutionForkRequestV1,
   MissionExecutionForkResultV1,
+  MissionCheckpointReplayResultV1,
   MissionExecutionPlannerCandidateV1,
   MissionExecutionPlannerOverrideRequestV1,
   MissionExecutionPlannerOverrideV1,
@@ -544,6 +547,102 @@ describe('MissionBraid local app', () => {
     }
   });
 
+  it('runs each honest Checkpoint Replay mode through the versioned Workbench API', async () => {
+    const fixture = await createWorkspace();
+    const state = new FakeEngineState();
+    const missionId = 'mission-checkpoint-replay';
+    const checkpoint = checkpointFixture(missionId, 'attempt-source');
+    state.missions.set(missionId, projection(missionId, 'succeeded'));
+    state.timelines.set(missionId, []);
+    state.checkpoints.set(missionId, [checkpoint]);
+    const app = await startMissionBraidApp({
+      stateDir: fixture.stateDir,
+      port: 0,
+      engineFactory: () => new FakeEngine(state),
+      discoverRuntimes: async () => readyCatalog(),
+    });
+    try {
+      const playback = await fetch(
+        `${app.url}/api/v1/missions/${missionId}/checkpoints/${checkpoint.checkpointId}/replays`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ mode: 'playback' }),
+        },
+      );
+      expect(playback.status).toBe(200);
+      expect(await playback.json()).toMatchObject({
+        checkpointReplay: { mode: 'playback', createsBranch: false },
+      });
+
+      const cached = await fetch(
+        `${app.url}/api/v1/missions/${missionId}/checkpoints/${checkpoint.checkpointId}/replays`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            mode: 'cached-replay',
+            childBranchId: 'branch-cached',
+            intervention: {
+              kind: 'guidance',
+              targetRef: 'guidance:next-turn',
+              replacement: 'Use the retained alternative.',
+              description: 'Change one visible guidance item.',
+            },
+          }),
+        },
+      );
+      expect(cached.status).toBe(201);
+      expect(await cached.json()).toMatchObject({
+        checkpointReplay: {
+          mode: 'cached-replay',
+          lineage: { childBranchId: 'branch-cached' },
+        },
+      });
+      expect(state.replayRequests.map((item) => item.input.mode)).toEqual([
+        'playback',
+        'cached-replay',
+      ]);
+
+      const detail = await fetch(`${app.url}/api/v1/missions/${missionId}`);
+      expect(await detail.json()).toMatchObject({
+        checkpointReplays: [{ mode: 'cached-replay' }],
+        capabilities: { replayCheckpoint: true },
+      });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('rejects malformed Checkpoint Replay requests before reaching the Engine', async () => {
+    const fixture = await createWorkspace();
+    const state = new FakeEngineState();
+    const missionId = 'mission-invalid-replay';
+    state.missions.set(missionId, projection(missionId, 'succeeded'));
+    state.timelines.set(missionId, []);
+    const app = await startMissionBraidApp({
+      stateDir: fixture.stateDir,
+      port: 0,
+      engineFactory: () => new FakeEngine(state),
+      discoverRuntimes: async () => readyCatalog(),
+    });
+    try {
+      const response = await fetch(
+        `${app.url}/api/v1/missions/${missionId}/checkpoints/checkpoint-invalid/replays`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ mode: 'cached-replay', intervention: { kind: 'guidance' } }),
+        },
+      );
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({ code: 'INVALID_CHECKPOINT_REPLAY' });
+      expect(state.replayRequests).toEqual([]);
+    } finally {
+      await app.close();
+    }
+  });
+
   it('keeps the app bound to loopback hosts', async () => {
     await expect(startMissionBraidApp({ host: '0.0.0.0', port: 0 })).rejects.toThrow('loopback');
   });
@@ -633,9 +732,15 @@ class FakeEngineState {
   readonly branches = new Map<string, BranchV1[]>();
   readonly checkpoints = new Map<string, CompositeCheckpointManifestV1[]>();
   readonly executionForkRecords = new Map<string, ExecutionForkRecordV1[]>();
+  readonly checkpointReplayRecords = new Map<string, CheckpointReplayRecordV1[]>();
   readonly forkRequests: Array<{
     readonly missionId: string;
     readonly input: MissionExecutionForkRequestV1;
+  }> = [];
+  readonly replayRequests: Array<{
+    readonly missionId: string;
+    readonly checkpointId: string;
+    readonly input: MissionCheckpointReplayRequestV1;
   }> = [];
   readonly plannerCandidates = new Map<string, MissionExecutionPlannerCandidateV1[]>();
   readonly plannerOverrides = new Map<string, MissionExecutionPlannerOverrideV1>();
@@ -776,6 +881,11 @@ class FakeEngine implements AppEngine {
     return this.#state.executionForkRecords.get(missionId) ?? [];
   }
 
+  async checkpointReplays(missionId: string): Promise<readonly CheckpointReplayRecordV1[]> {
+    this.#require(missionId);
+    return this.#state.checkpointReplayRecords.get(missionId) ?? [];
+  }
+
   async coordinateExternalEffect(
     missionId: string,
     input: MissionExternalEffectRequestV1,
@@ -848,6 +958,39 @@ class FakeEngine implements AppEngine {
       issuedAt: '2026-08-24T03:02:00.000Z',
     };
     return { record, receipt };
+  }
+
+  async replayCheckpoint(
+    missionId: string,
+    checkpointId: string,
+    input: MissionCheckpointReplayRequestV1,
+  ): Promise<MissionCheckpointReplayResultV1> {
+    this.#require(missionId);
+    this.#state.replayRequests.push({ missionId, checkpointId, input });
+    if (input.mode === 'playback') {
+      return {
+        schemaVersion: 'missionbraid.dev/checkpoint-replay/v1',
+        mode: 'playback',
+        replayId: 'checkpoint-playback-fixture',
+        checkpointId,
+        parentBranchId: `branch-root-${missionId}`,
+        eventPrefix: { throughSeq: 1, headHash: '0'.repeat(64) },
+        history: [],
+        createsBranch: false,
+        futureEvidenceRefs: [],
+        modelExecution: 'none',
+        toolExecution: 'none',
+        kernelWrite: 'none',
+        audit: replayRecordFixture(missionId, checkpointId, 'playback', undefined),
+      };
+    }
+    const childBranchId = input.childBranchId ?? `branch-${input.mode}`;
+    const record = replayRecordFixture(missionId, checkpointId, input.mode, childBranchId);
+    this.#state.checkpointReplayRecords.set(missionId, [
+      ...(this.#state.checkpointReplayRecords.get(missionId) ?? []),
+      record,
+    ]);
+    return record;
   }
 
   executionPlannerCandidates(missionId: string): readonly MissionExecutionPlannerCandidateV1[] {
@@ -1050,6 +1193,149 @@ function executionForkFixture(
     events: [],
     runtimeEvidence: [],
     cleaned: false,
+  };
+}
+
+function replayRecordFixture(
+  missionId: string,
+  checkpointId: string,
+  mode: 'playback' | 'cached-replay' | 'counterfactual-resample',
+  childBranchId: string | undefined,
+): CheckpointReplayRecordV1 {
+  const parentBranchId = `branch-root-${missionId}`;
+  if (mode === 'playback') {
+    return {
+      replayId: 'checkpoint-playback-fixture',
+      mode,
+      phase: 'completed',
+      lineage: {
+        schemaVersion: 'missionbraid.dev/checkpoint-replay/v1',
+        replayId: 'checkpoint-playback-fixture',
+        lineageId: 'checkpoint-replay-lineage-playback-fixture',
+        mode,
+        missionId,
+        parentBranchId,
+        parentCheckpointId: checkpointId,
+        sourceEventPrefix: { throughSeq: 1, headHash: 'head-hash', eventRefs: [] },
+        createdAt: '2026-08-24T03:00:00.000Z',
+      },
+      plan: {
+        schemaVersion: 'missionbraid.dev/checkpoint-operation/v1',
+        mode,
+        planId: 'checkpoint-playback-plan-fixture',
+        parentCheckpointId: checkpointId,
+        parentBranchId,
+        inheritedExternalEffectFrontier: [],
+        semantics: {
+          createsBranch: false,
+          producesNewEvidence: false,
+          modelExecution: 'none',
+          toolExecution: 'none',
+          workspaceUse: 'read-only',
+          sourceHistory: 'immutable',
+        },
+      },
+      events: [],
+      modelEvidence: [],
+    };
+  }
+  const replayId = `checkpoint-${mode}-fixture`;
+  const branchId = childBranchId ?? `branch-${mode}`;
+  const intervention = {
+    interventionId: 'intervention-replay-fixture',
+    kind: 'guidance' as const,
+    targetRef: 'guidance:next-turn',
+    afterDigest: 'sha256:' + 'a'.repeat(64),
+    description: 'Change one visible guidance item.',
+    authorityChange: 'unchanged' as const,
+  };
+  const commonLineage = {
+    schemaVersion: 'missionbraid.dev/checkpoint-replay/v1' as const,
+    replayId,
+    lineageId: `checkpoint-replay-lineage-${mode}-fixture`,
+    missionId,
+    contractId: 'contract-app-fixture',
+    profileId: 'profile-app-fixture',
+    parentAttemptId: 'attempt-source',
+    parentBranchId,
+    childBranchId: branchId,
+    childWorkspaceKey: `workspace-${mode}-fixture`,
+    parentCheckpointId: checkpointId,
+    intervention,
+    interventionArtifact: {
+      artifactId: 'artifact-' + 'a'.repeat(64),
+      contentDigest: 'sha256:' + 'a'.repeat(64),
+      fidelity: 'exact-replay-safe' as const,
+      evidenceRefs: ['fixture'],
+      targetRef: intervention.targetRef,
+    },
+    inheritedExternalEffectFrontier: [],
+    externalEffectDecisions: [],
+    createdAt: '2026-08-24T03:00:00.000Z',
+  };
+  const plan = {
+    schemaVersion: 'missionbraid.dev/checkpoint-operation/v1' as const,
+    mode,
+    planId: `checkpoint-${mode}-plan-fixture`,
+    parentCheckpointId: checkpointId,
+    parentBranchId,
+    inheritedExternalEffectFrontier: [],
+    semantics: {
+      createsBranch: true,
+      producesNewEvidence: true,
+      modelExecution: mode === 'cached-replay' ? ('cached' as const) : ('resampled' as const),
+      toolExecution: mode === 'cached-replay' ? ('cached' as const) : ('none' as const),
+      workspaceUse: 'isolated-read-only' as const,
+      sourceHistory: 'immutable' as const,
+    },
+    childBranchId: branchId,
+    intervention,
+    isolatedWorktree: {
+      worktreeId: `worktree-${mode}-fixture`,
+      workspaceKey: `workspace-${mode}-fixture`,
+      absolutePath: `/tmp/${mode}-fixture`,
+      isolationMechanism: 'copy-on-write' as const,
+      baselineWorkspaceDigest: 'workspace-digest',
+      evidenceRefs: ['fixture'],
+    },
+    externalEffectDecisions: [],
+  };
+  return {
+    replayId,
+    mode,
+    phase: 'completed',
+    lineage:
+      mode === 'cached-replay'
+        ? {
+            ...commonLineage,
+            mode,
+            sourceFuture: {
+              schemaVersion: 'missionbraid.dev/checkpoint-replay-source/v1',
+              checkpointId,
+              sourceBranchId: parentBranchId,
+              sourceEventPrefix: { throughSeq: 1, headHash: 'head-hash' },
+              evidence: [],
+              bundleId: 'cached-source-fixture',
+              manifestDigest: 'sha256:' + 'b'.repeat(64),
+            },
+          }
+        : {
+            ...commonLineage,
+            mode,
+            cachedContext: {
+              schemaVersion: 'missionbraid.dev/checkpoint-replay-source/v1',
+              checkpointId,
+              contextDigest: 'sha256:' + 'c'.repeat(64),
+              artifactRefs: [],
+              targetDigests: [],
+              evidenceRefs: ['fixture'],
+              bundleId: 'cached-context-fixture',
+              manifestDigest: 'sha256:' + 'd'.repeat(64),
+            },
+          },
+    plan,
+    events: [],
+    modelEvidence: [],
   };
 }
 

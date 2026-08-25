@@ -21,6 +21,24 @@ import {
   type CheckpointInterventionV1,
   type CompositeCheckpointManifestV1,
 } from './composite-checkpoint.js';
+import {
+  CheckpointReplayService,
+  FileCheckpointReplayJournal,
+  type CheckpointPlaybackResultV1,
+  type CheckpointReplayRecordV1,
+  type ModelOnlyResamplePortV1,
+} from './checkpoint-replay.js';
+import {
+  cachedContextFromMission,
+  cachedReplaySourceFromMission,
+  confirmedEffectNoRepeatDecisions,
+  replayKernelEvents,
+  type MissionCheckpointReplayRequestV1,
+} from './mission-checkpoint-replay.js';
+import {
+  ClaudeModelOnlyResamplePort,
+  NativeArtifactReplayResolver,
+} from './model-only-resample.js';
 import { createClaudeToolGateBinding, type ClaudeToolGateBindingV1 } from './claude-tool-gate.js';
 import {
   DOMAIN_SCHEMA_VERSION,
@@ -132,6 +150,7 @@ export interface MissionEngineOptions {
   readonly beforeExternalEffectAppend?: (
     event: ExternalEffectEvent<JsonValue>,
   ) => void | Promise<void>;
+  readonly modelOnlyResamplePort?: ModelOnlyResamplePortV1;
 }
 
 export interface ExecuteMissionOptions {
@@ -211,6 +230,8 @@ export interface MissionExecutionForkResultV1 {
   readonly record: ExecutionForkRecordV1;
   readonly receipt: ReceiptV1;
 }
+
+export type MissionCheckpointReplayResultV1 = CheckpointPlaybackResultV1 | CheckpointReplayRecordV1;
 
 export interface MissionTimelineEntry {
   readonly seq: number;
@@ -329,6 +350,7 @@ export class MissionEngine {
   readonly #beforeExternalEffectAppend:
     | ((event: ExternalEffectEvent<JsonValue>) => void | Promise<void>)
     | undefined;
+  readonly #modelOnlyResample: ModelOnlyResamplePortV1;
   readonly #now: () => Date;
   readonly #id: () => string;
 
@@ -342,6 +364,14 @@ export class MissionEngine {
     this.#artifacts = new NativeArtifactStore(this.#stateDir);
     this.#externalEffectTargets = indexExternalEffectTargets(options.externalEffectTargets ?? []);
     this.#beforeExternalEffectAppend = options.beforeExternalEffectAppend;
+    this.#modelOnlyResample =
+      options.modelOnlyResamplePort ??
+      new ClaudeModelOnlyResamplePort({
+        adapter: this.#claude,
+        artifacts: this.#artifacts,
+        sandboxDirectory: join(this.#stateDir, 'model-only-sandbox'),
+        now: this.#now,
+      });
     this.#store = new MissionStore(join(this.#stateDir, 'kernel.sqlite'), { now: this.#now });
   }
 
@@ -779,6 +809,143 @@ export class MissionEngine {
       records.push(projectExecutionFork(events));
     }
     return records;
+  }
+
+  async checkpointReplays(missionId: string): Promise<readonly CheckpointReplayRecordV1[]> {
+    this.#requireMission(missionId);
+    const directory = join(this.#stateDir, 'checkpoint-replays');
+    if (!existsSync(directory)) return [];
+    const service = new CheckpointReplayService({
+      journal: new FileCheckpointReplayJournal(directory),
+      now: this.#now,
+    });
+    const records: CheckpointReplayRecordV1[] = [];
+    for (const file of readdirSync(directory).sort()) {
+      const match = file.match(/^(checkpoint-[A-Za-z0-9_-]+)\.jsonl$/);
+      if (match?.[1] === undefined) continue;
+      const record = await service.inspect(match[1]);
+      if (record?.lineage.missionId === missionId) records.push(record);
+    }
+    return records.sort((left, right) => left.replayId.localeCompare(right.replayId));
+  }
+
+  async replayCheckpoint(
+    missionId: string,
+    checkpointId: string,
+    request: MissionCheckpointReplayRequestV1,
+  ): Promise<MissionCheckpointReplayResultV1> {
+    const mission = this.#requireMission(missionId);
+    const checkpoint = this.compositeCheckpoints(missionId).find(
+      (candidate) => candidate.checkpointId === checkpointId,
+    );
+    if (checkpoint === undefined) {
+      throw new MissionExecutionError(
+        `Composite Checkpoint ${checkpointId} does not belong to Mission ${missionId}`,
+      );
+    }
+    if (checkpoint.source.missionId !== missionId) {
+      throw new MissionExecutionError('Checkpoint replay cannot cross Mission identity');
+    }
+    const events = this.#store.listEvents(missionId);
+    const service = new CheckpointReplayService({
+      journal: new FileCheckpointReplayJournal(join(this.#stateDir, 'checkpoint-replays')),
+      now: this.#now,
+    });
+    if (request.mode === 'playback') {
+      return await service.playback({
+        mode: 'playback',
+        checkpoint,
+        history: events.filter((event) => event.seq <= checkpoint.eventPrefix.throughSeq),
+      });
+    }
+    if (request.intervention === undefined) {
+      throw new MissionExecutionError(`${request.mode} requires one declared Intervention`);
+    }
+    const replacement = await this.#artifacts.putLine(request.intervention.replacement);
+    const intervention: CheckpointInterventionV1 = {
+      interventionId: `intervention-replay-${this.#id()}`,
+      kind: request.intervention.kind,
+      targetRef: request.intervention.targetRef,
+      ...(request.intervention.beforeDigest === undefined
+        ? {}
+        : { beforeDigest: request.intervention.beforeDigest }),
+      afterDigest: `sha256:${replacement.sha256}`,
+      description: request.intervention.description,
+      authorityChange: request.intervention.authorityChange ?? 'unchanged',
+    };
+    const interventionArtifact = {
+      artifactId: replacement.artifactId,
+      contentDigest: intervention.afterDigest,
+      fidelity: 'exact-replay-safe' as const,
+      evidenceRefs: [`native-artifact:${replacement.artifactId}`],
+      targetRef: intervention.targetRef,
+    };
+    const childBranchId = request.childBranchId ?? `branch-replay-${this.#id()}`;
+    const childWorkspaceKey = `workspace-replay-${hashPayload({
+      missionId,
+      checkpointId,
+      childBranchId,
+      mode: request.mode,
+    }).slice(0, 32)}`;
+    const externalEffectDecisions = confirmedEffectNoRepeatDecisions(checkpoint);
+    const resolver = new NativeArtifactReplayResolver(this.#artifacts);
+    const record =
+      request.mode === 'cached-replay'
+        ? await service.cachedReplay(
+            {
+              mode: 'cached-replay',
+              checkpoint,
+              childBranchId,
+              childWorkspaceKey,
+              intervention,
+              interventionArtifact,
+              externalEffectDecisions,
+              sourceFuture: cachedReplaySourceFromMission(checkpoint, events),
+            },
+            resolver,
+          )
+        : await service.counterfactualResample(
+            {
+              mode: 'counterfactual-resample',
+              checkpoint,
+              childBranchId,
+              childWorkspaceKey,
+              intervention,
+              interventionArtifact,
+              externalEffectDecisions,
+              cachedContext: cachedContextFromMission(checkpoint, events),
+            },
+            resolver,
+            this.#modelOnlyResample,
+          );
+    await this.#persistCheckpointReplay(record);
+    return record;
+  }
+
+  async #persistCheckpointReplay(record: CheckpointReplayRecordV1): Promise<void> {
+    const mission = this.#requireMission(record.lineage.missionId);
+    const ownerId = `checkpoint-replay-${this.#id()}`;
+    await this.#withLease(mission.workspaceKey, ownerId, async (fence) => {
+      const events = this.#store.listEvents(mission.missionId);
+      const alreadyRecorded = events.some(
+        (event) =>
+          event.type === 'runtime.observation' &&
+          event.payload.kind === 'checkpoint-replay.recorded' &&
+          isJsonObject(event.payload.data) &&
+          event.payload.data.replayId === record.replayId &&
+          event.payload.data.phase === record.phase,
+      );
+      if (alreadyRecorded) return;
+      const childBranchId =
+        record.lineage.mode === 'playback' ? undefined : record.lineage.childBranchId;
+      const includeBranch =
+        childBranchId !== undefined &&
+        this.#store.getBranch(mission.missionId, childBranchId) === undefined;
+      this.#store.appendEvents(
+        replayKernelEvents(record, this.#now().toISOString(), includeBranch),
+        fence,
+      );
+    });
   }
 
   async executeFork(
