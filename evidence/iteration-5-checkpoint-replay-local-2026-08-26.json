@@ -78,9 +78,7 @@
       "cwd": "/private/var/folders/s6/97lfn3_942g3b1w0cw82sgz00000gn/T/missionbraid-i5-checkpoint-replay-STHzah/workspace",
       "kind": "provider.controller_sealed",
       "ownership": "local-proof-controller-after-inspecting-exact-runtime-delta",
-      "changedPaths": [
-        "source.txt"
-      ],
+      "changedPaths": ["source.txt"],
       "head": "f0bf910a0b8bda1bdd162491851deb8d065ca7b3",
       "tree": "057eea11611820f0202889a8b5c9d0649be5ada0"
     },
@@ -119,9 +117,7 @@
     "idempotencyKey": "iteration-5-replay-create-once",
     "status": "confirmed",
     "targetPostCount": 1,
-    "calls": [
-      "POST:iteration-5-replay-create-once"
-    ],
+    "calls": ["POST:iteration-5-replay-create-once"],
     "callsAddedByReplayOrRestart": 0
   },
   "checkpoint": {
@@ -256,31 +252,9 @@
     "branchId": "branch-root-7f3f24a2-c3ff-42e2-aa29-f333d59887cc",
     "checkpointThroughSeq": 313,
     "evidenceCount": 19,
-    "evidenceKinds": [
-      "message",
-      "tool-result",
-      "unknown"
-    ],
+    "evidenceKinds": ["message", "tool-result", "unknown"],
     "sourceSequences": [
-      330,
-      332,
-      333,
-      336,
-      338,
-      339,
-      340,
-      341,
-      342,
-      343,
-      344,
-      345,
-      346,
-      347,
-      348,
-      349,
-      350,
-      351,
-      352
+      330, 332, 333, 336, 338, 339, 340, 341, 342, 343, 344, 345, 346, 347, 348, 349, 350, 351, 352
     ],
     "artifactIds": [
       "artifact-12314b183230492f18a65113ba7983ea7200aa7031258b45e3333da924797799",
@@ -312,17 +286,13 @@
       "eventCount": 362,
       "headHash": "5aeea41693ead9c144c12b547fddfc711200689a86a059bb4fcff32099606f53",
       "lastSeq": 362,
-      "branchIds": [
-        "branch-root-7f3f24a2-c3ff-42e2-aa29-f333d59887cc"
-      ]
+      "branchIds": ["branch-root-7f3f24a2-c3ff-42e2-aa29-f333d59887cc"]
     },
     "kernelAfter": {
       "eventCount": 362,
       "headHash": "5aeea41693ead9c144c12b547fddfc711200689a86a059bb4fcff32099606f53",
       "lastSeq": 362,
-      "branchIds": [
-        "branch-root-7f3f24a2-c3ff-42e2-aa29-f333d59887cc"
-      ]
+      "branchIds": ["branch-root-7f3f24a2-c3ff-42e2-aa29-f333d59887cc"]
     },
     "kernelBranchAndEventCountsUnchanged": true
   },
@@ -768,12 +738,7 @@
       "unresolvedItems": []
     },
     "modelEvidenceCount": 398,
-    "modelEvidenceKinds": [
-      "message",
-      "usage",
-      "model-output",
-      "failure"
-    ],
+    "modelEvidenceKinds": ["message", "usage", "model-output", "failure"],
     "receiptInputOutcome": "unknown",
     "receiptInputAuthority": "receipt-input-not-kernel-state",
     "nativeInvocation": {
@@ -801,11 +766,7 @@
         "checkpoint-counterfactual-1c0481603e5275ae436a92aa63801e4c8d541205fb4c0a8303efe87a6db27e74",
         "checkpoint-playback-9f3b59774fdfcb0b3a1ab9636c9ff94001f9ded9291f0b77534e6e175449491b"
       ],
-      "replayModesVisible": [
-        "playback",
-        "cached-replay",
-        "counterfactual-resample"
-      ],
+      "replayModesVisible": ["playback", "cached-replay", "counterfactual-resample"],
       "recordCount": 3
     },
     "afterRestart": {
@@ -815,11 +776,7 @@
         "checkpoint-counterfactual-1c0481603e5275ae436a92aa63801e4c8d541205fb4c0a8303efe87a6db27e74",
         "checkpoint-playback-9f3b59774fdfcb0b3a1ab9636c9ff94001f9ded9291f0b77534e6e175449491b"
       ],
-      "replayModesVisible": [
-        "playback",
-        "cached-replay",
-        "counterfactual-resample"
-      ],
+      "replayModesVisible": ["playback", "cached-replay", "counterfactual-resample"],
       "recordCount": 3
     }
   },
