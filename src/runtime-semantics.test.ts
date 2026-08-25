@@ -63,6 +63,22 @@ describe('runtime semantic extraction', () => {
       ]),
     );
 
+    const shellWrapped = fixture('codex-jsonl', 'item.completed', 'tool', {
+      type: 'item.completed',
+      item: {
+        id: 'command-item-shell-wrapper',
+        type: 'command_execution',
+        command: "/bin/zsh -lc 'node --test'",
+        status: 'failed',
+        exit_code: 1,
+      },
+    });
+    expect(extractRuntimeSemanticFacts(shellWrapped.event, shellWrapped.artifact)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: 'test_run', status: 'failed', exitCode: 1 }),
+      ]),
+    );
+
     const changed = fixture('codex-jsonl', 'item.completed', 'workspace', {
       type: 'item.completed',
       item: {

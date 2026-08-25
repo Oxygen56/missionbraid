@@ -88,9 +88,16 @@ try {
     );
     if (contextEvent === undefined)
       throw new Error('Observable controller context was not recorded.');
+    const testObservation = completed.contextGraph.edges.find(
+      (edge) =>
+        edge.kind === 'event-observation' &&
+        edge.fromNodeId === `runtime-event:${failedTestFact.event.runtimeEventId}` &&
+        completed.contextGraph.nodes.some(
+          (node) => node.nodeId === edge.toNodeId && node.kind === 'test',
+        ),
+    );
     const testNode = completed.contextGraph.nodes.find(
-      (node) =>
-        node.kind === 'test' && node.evidenceRefs.includes(failedTestFact.event.runtimeEventId),
+      (node) => node.nodeId === testObservation?.toNodeId,
     );
     const promptNode = completed.contextGraph.nodes.find(
       (node) => node.kind === 'context-item' && node.label.startsWith('controller prompt'),
@@ -122,9 +129,19 @@ try {
     const failedArtifact = await requestJson(
       `${app.url}/api/v1/artifacts/${encodeURIComponent(failedTestFact.event.nativeArtifact.artifactId)}`,
     );
+    const redactedRuntimeEvent = runtimeEvents.find(
+      (event) => event.nativeArtifact.redactionCount > 0,
+    );
+    if (redactedRuntimeEvent === undefined) {
+      throw new Error('No native Runtime artifact demonstrated credential-like redaction.');
+    }
+    const redactedRuntimeArtifact = await requestJson(
+      `${app.url}/api/v1/artifacts/${encodeURIComponent(redactedRuntimeEvent.nativeArtifact.artifactId)}`,
+    );
     if (
       promptArtifact.content.includes(fakeCredential) ||
-      failedArtifact.content.includes(fakeCredential)
+      failedArtifact.content.includes(fakeCredential) ||
+      redactedRuntimeArtifact.content.includes(fakeCredential)
     ) {
       throw new Error('Credential-like fixture material survived artifact redaction.');
     }
@@ -148,6 +165,8 @@ try {
       promptContextSnapshotId: contextEvent.data.contextSnapshotId,
       promptArtifactId: promptArtifact.artifactId,
       promptRedactionCount: contextEvent.data.nativeArtifact.redactionCount,
+      redactedRuntimeEventId: redactedRuntimeEvent.runtimeEventId,
+      redactedRuntimeArtifactId: redactedRuntimeArtifact.artifactId,
       graphIdentity: stableGraph(completed.contextGraph),
       live,
       rendered,
@@ -200,6 +219,8 @@ try {
       promptContextSnapshotId: result.promptContextSnapshotId,
       promptArtifactId: result.promptArtifactId,
       promptRedactionCount: result.promptRedactionCount,
+      redactedRuntimeEventId: result.redactedRuntimeEventId,
+      redactedRuntimeArtifactId: result.redactedRuntimeArtifactId,
       eventDeliveredBeforeProcessFinished: result.live.beforeProcessFinished,
       browserRenderedBeforeProcessFinished: result.rendered.beforeProcessFinished,
       browserTimelineText: result.rendered.timelineText,

@@ -689,7 +689,7 @@ function commandText(record: Record<string, unknown>): string | undefined {
 }
 
 function looksLikeTestCommand(command: string): boolean {
-  const normalized = command.trim().toLowerCase();
+  const candidates = unwrapShellCommand(command.trim().toLowerCase());
   const boundary = '(?:^|[;&|]\\s*)';
   const executable = '(?:[a-z0-9_./-]*/)?';
   const patterns = [
@@ -698,7 +698,28 @@ function looksLikeTestCommand(command: string): boolean {
     new RegExp(`${boundary}${executable}(?:node|deno)\\s+--test(?:\\s|$)`),
     new RegExp(`${boundary}${executable}(?:go|cargo|dotnet|mvn|gradle|gradlew)\\s+test(?:\\s|$)`),
   ];
-  return patterns.some((pattern) => pattern.test(normalized));
+  return candidates.some((candidate) => patterns.some((pattern) => pattern.test(candidate)));
+}
+
+function unwrapShellCommand(command: string): readonly string[] {
+  const candidates = [command];
+  let current = command;
+  for (let depth = 0; depth < 2; depth += 1) {
+    const match = /^(?:[a-z0-9_./-]*\/)?(?:sh|bash|zsh)\s+-[a-z]*c\s+([\s\S]+)$/.exec(current);
+    if (match?.[1] === undefined) break;
+    current = stripMatchingQuotes(match[1].trim());
+    candidates.push(current);
+  }
+  return candidates;
+}
+
+function stripMatchingQuotes(value: string): string {
+  if (value.length < 2) return value;
+  const first = value[0];
+  const last = value[value.length - 1];
+  return (first === "'" && last === "'") || (first === '"' && last === '"')
+    ? value.slice(1, -1)
+    : value;
 }
 
 function usageNumbers(record: Record<string, unknown>): UsageNumbers {
