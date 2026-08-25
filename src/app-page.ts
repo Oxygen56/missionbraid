@@ -3687,6 +3687,195 @@ function renderRuntimeIntelligence(mission, timeline) {
   return section;
 }
 
+function renderPlannerOverride(detail, missionId) {
+  const planner = recordValue(detail.executionPlanner) || {};
+  const allCandidates = Array.isArray(planner.candidates) ? planner.candidates : [];
+  const candidates = allCandidates.slice(1);
+  if (candidates.length === 0) return null;
+  const capabilities = recordValue(detail.capabilities) || {};
+  const canSet = capabilities.setExecutionPlannerOverride === true;
+  const canClear = capabilities.clearExecutionPlannerOverride === true;
+  const active = recordValue(planner.override);
+  const form = createElement('div', 'fork-intervention');
+  form.dataset.plannerOverrideForm = missionId;
+  form.append(
+    createElement('h5', '', t('planner.overrideHeading')),
+    createElement('p', 'intervention-description', t('planner.overrideDescription')),
+  );
+
+  const select = document.createElement('select');
+  candidates.forEach(function (candidate) {
+    const definition = recordValue(candidate.profileDefinition) || {};
+    const option = document.createElement('option');
+    option.value = String(candidate.stageId || '');
+    option.textContent = [
+      definition.harness,
+      definition.requestedModel,
+      candidate.stageId,
+    ].filter(Boolean).join(' · ');
+    if (active && active.stageId === candidate.stageId) option.selected = true;
+    select.append(option);
+  });
+  const reason = document.createElement('textarea');
+  reason.rows = 2;
+  reason.placeholder = t('planner.overrideReasonPlaceholder');
+  if (active && typeof active.reason === 'string') reason.value = active.reason;
+  form.append(
+    continuityField('planner.overrideProfile', select),
+    continuityField('planner.overrideReason', reason, 'intervention-description'),
+  );
+
+  if (active) {
+    form.append(
+      createElement(
+        'p',
+        'continuity-status',
+        t('planner.overrideActive', {
+          stageId: active.stageId || t('intelligence.unknown'),
+          reason: active.reason || t('intelligence.unknown'),
+        }),
+      ),
+    );
+  }
+  const actionRow = createElement('div', 'fork-action-row');
+  const save = createElement('button', 'continuity-action', t('planner.overrideSave'));
+  save.type = 'button';
+  save.disabled = !canSet;
+  const clear = createElement('button', 'continuity-action', t('planner.overrideClear'));
+  clear.type = 'button';
+  clear.disabled = !canClear || !active;
+  const status = createElement(
+    'p',
+    'continuity-status',
+    canSet ? '' : t('planner.overrideUnavailable'),
+  );
+  status.setAttribute('aria-live', 'polite');
+
+  save.addEventListener('click', async function () {
+    const stageId = select.value.trim();
+    const overrideReason = reason.value.trim();
+    if (!stageId || !overrideReason) {
+      status.textContent = t('planner.overrideRequired');
+      return;
+    }
+    save.disabled = true;
+    clear.disabled = true;
+    status.textContent = t('planner.overrideSaving');
+    try {
+      await requestJson(
+        '/api/v1/missions/' + encodeURIComponent(missionId) + '/execution-planner/override',
+        {
+          method: 'POST',
+          body: JSON.stringify({ stageId: stageId, reason: overrideReason }),
+        },
+      );
+      showPageAlert(translated('planner.overrideSaved'));
+      await loadDetail(missionId, { quiet: true });
+    } catch (error) {
+      status.textContent = messageText(errorMessage(error, 'planner.overrideFailed'));
+      showPageAlert(errorMessage(error, 'planner.overrideFailed'));
+    } finally {
+      if (save.isConnected) save.disabled = !canSet;
+    }
+  });
+  clear.addEventListener('click', async function () {
+    clear.disabled = true;
+    save.disabled = true;
+    status.textContent = t('planner.overrideClearing');
+    try {
+      await requestJson(
+        '/api/v1/missions/' + encodeURIComponent(missionId) + '/execution-planner/override',
+        {
+          method: 'DELETE',
+          body: JSON.stringify({ reason: 'Return to automatic routing from the Workbench' }),
+        },
+      );
+      showPageAlert(translated('planner.overrideCleared'));
+      await loadDetail(missionId, { quiet: true });
+    } catch (error) {
+      status.textContent = messageText(errorMessage(error, 'planner.overrideFailed'));
+      showPageAlert(errorMessage(error, 'planner.overrideFailed'));
+    } finally {
+      if (clear.isConnected) clear.disabled = !canClear || !active;
+      if (save.isConnected) save.disabled = !canSet;
+    }
+  });
+  actionRow.append(save, clear, status);
+  form.append(actionRow);
+  return form;
+}
+
+function renderExecutionPlanner(timeline, detail, missionId) {
+  const records = timelineRecords(timeline, 'execution-planner.decision');
+  const override = renderPlannerOverride(detail, missionId);
+  if (records.length === 0 && !override) return null;
+
+  const section = createElement('section', 'runtime-intelligence');
+  section.dataset.executionPlanner = 'true';
+  const heading = createElement('div', 'intelligence-heading');
+  heading.append(
+    createElement('p', 'eyebrow', t('planner.eyebrow')),
+    createElement('h3', '', t('planner.heading')),
+  );
+  const grid = createElement('div', 'intelligence-grid');
+  if (records.length > 0) {
+    grid.append(renderIntelligenceCard({
+      titleKey: 'planner.decisions',
+      records,
+      identityKeys: ['decisionHash'],
+      wide: true,
+      facts: function (record) {
+        const trigger = recordValue(record.trigger) || {};
+        const decision = recordValue(record.decision) || {};
+        const binding = recordValue(decision.binding) || {};
+        const filter = recordValue(decision.filter) || {};
+        const extracted = recordValue(decision.extracted) || {};
+        const candidates = Array.isArray(extracted.candidates) ? extracted.candidates : [];
+        const filterCandidates = Array.isArray(filter.candidates) ? filter.candidates : [];
+        const eligible = Array.isArray(filter.eligibleProfileIds)
+          ? filter.eligibleProfileIds
+          : [];
+        const rejected = filterCandidates.filter(function (candidate) {
+          return candidate && candidate.eligible === false;
+        });
+        const compatibility = Array.isArray(decision.handoffCompatibility)
+          ? decision.handoffCompatibility
+          : [];
+        const compatibilitySummary = compatibility.map(function (item) {
+          return [item.profileId, item.overall].filter(Boolean).join(': ');
+        });
+        const sourceCheckpoint = recordValue(record.sourceCompositeCheckpoint) || {};
+        return [
+          ['planner.field.trigger', displayValue(trigger.code)],
+          ['planner.field.selectedHarness', displayValue(binding.selectedHarness)],
+          ['planner.field.action', displayValue(binding.action)],
+          ['planner.field.reason', displayValue(binding.reason)],
+          ['planner.field.candidates', displayValue(candidates.length)],
+          ['planner.field.eligible', displayValue(eligible)],
+          [
+            'planner.field.rejections',
+            displayValue(
+              rejected.map(function (candidate) {
+                const reasons = Array.isArray(candidate.rejectionReasons)
+                  ? candidate.rejectionReasons.map(function (reason) { return reason.code; })
+                  : [];
+                return [candidate.profileId, reasons.join(', ')].filter(Boolean).join(': ');
+              }),
+            ),
+          ],
+          ['planner.field.compatibility', displayValue(compatibilitySummary)],
+          ['planner.field.checkpoint', displayValue(sourceCheckpoint.checkpointId)],
+          ['planner.field.policy', displayValue(record.policyVersion)],
+          ['planner.field.hash', displayValue(record.decisionHash)],
+        ];
+      },
+    }));
+  }
+  section.append(heading, grid);
+  if (override) section.append(override);
+  return section;
+}
+
 function renderContextGraph(value) {
   const graph = recordValue(value) || {};
   const nodes = Array.isArray(graph.nodes) ? graph.nodes : [];
@@ -4624,6 +4813,8 @@ function renderDetail() {
   const toolGates = renderToolGates(detail.toolGates, missionId);
   if (toolGates) content.append(toolGates);
   content.append(renderContinuityWorkbench(detail, missionId, receipt));
+  const executionPlanner = renderExecutionPlanner(timeline, detail, missionId);
+  if (executionPlanner) content.append(executionPlanner);
   content.append(
     renderRuntimeIntelligence(mission, timeline),
     renderContextGraph(detail.contextGraph),

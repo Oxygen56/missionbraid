@@ -17,6 +17,9 @@ import {
   type MissionTimelineEntry,
   type MissionToolGateView,
   type MissionExternalEffectRequestV1,
+  type MissionExecutionPlannerCandidateV1,
+  type MissionExecutionPlannerOverrideRequestV1,
+  type MissionExecutionPlannerOverrideV1,
   type MissionExecutionForkRequestV1,
   type MissionExecutionForkResultV1,
 } from './engine.js';
@@ -74,6 +77,13 @@ export interface AppEngine {
     missionId: string,
     input: MissionExecutionForkRequestV1,
   ): Promise<MissionExecutionForkResultV1>;
+  executionPlannerCandidates?(missionId: string): readonly MissionExecutionPlannerCandidateV1[];
+  executionPlannerOverride?(missionId: string): MissionExecutionPlannerOverrideV1 | undefined;
+  setExecutionPlannerOverride?(
+    missionId: string,
+    request: MissionExecutionPlannerOverrideRequestV1,
+  ): Promise<MissionExecutionPlannerOverrideV1>;
+  clearExecutionPlannerOverride?(missionId: string, reason: string): Promise<void>;
   pendingToolGates?(missionId: string): Promise<readonly MissionToolGateView[]>;
   decideToolGate?(
     missionId: string,
@@ -542,6 +552,49 @@ export async function startMissionBraidApp(
       }
       return;
     }
+    const plannerOverrideMissionId = matchExecutionPlannerOverride(url.pathname);
+    if (plannerOverrideMissionId !== undefined && request.method === 'POST') {
+      const engine = engineFactory(stateDir);
+      try {
+        if (engine.setExecutionPlannerOverride === undefined) {
+          throw new AppHttpError(
+            501,
+            'EXECUTION_PLANNER_OVERRIDE_UNAVAILABLE',
+            'Execution Planner override is unavailable.',
+          );
+        }
+        const body = requireJsonRecord(await readJson(request));
+        const override = await engine.setExecutionPlannerOverride(plannerOverrideMissionId, {
+          stageId: requireJsonString(body.stageId, 'stageId'),
+          reason: requireJsonString(body.reason, 'reason'),
+        });
+        sendJson(response, 201, { override });
+      } finally {
+        engine.close();
+      }
+      return;
+    }
+    if (plannerOverrideMissionId !== undefined && request.method === 'DELETE') {
+      const engine = engineFactory(stateDir);
+      try {
+        if (engine.clearExecutionPlannerOverride === undefined) {
+          throw new AppHttpError(
+            501,
+            'EXECUTION_PLANNER_OVERRIDE_UNAVAILABLE',
+            'Execution Planner override is unavailable.',
+          );
+        }
+        const body = requireJsonRecord(await readJson(request));
+        await engine.clearExecutionPlannerOverride(
+          plannerOverrideMissionId,
+          requireJsonString(body.reason, 'reason'),
+        );
+        sendJson(response, 200, { cleared: true });
+      } finally {
+        engine.close();
+      }
+      return;
+    }
     const missionId = matchMissionId(url.pathname);
     if (missionId !== undefined && request.method === 'GET') {
       const engine = engineFactory(stateDir);
@@ -558,9 +611,15 @@ export async function startMissionBraidApp(
           compositeCheckpoints: engine.compositeCheckpoints?.(missionId) ?? [],
           executionForks:
             engine.executionForks === undefined ? [] : await engine.executionForks(missionId),
+          executionPlanner: {
+            candidates: engine.executionPlannerCandidates?.(missionId) ?? [],
+            override: engine.executionPlannerOverride?.(missionId) ?? null,
+          },
           capabilities: {
             createCompositeCheckpoint: engine.createCompositeCheckpoint !== undefined,
             executeFork: engine.executeFork !== undefined,
+            setExecutionPlannerOverride: engine.setExecutionPlannerOverride !== undefined,
+            clearExecutionPlannerOverride: engine.clearExecutionPlannerOverride !== undefined,
           },
           operation: operationView(
             status.mission,
@@ -703,6 +762,11 @@ async function readJson(request: IncomingMessage): Promise<unknown> {
 
 function matchMissionId(pathname: string): string | undefined {
   const match = pathname.match(/^\/api\/v1\/missions\/([^/]+)$/);
+  return match?.[1] === undefined ? undefined : decodeURIComponent(match[1]);
+}
+
+function matchExecutionPlannerOverride(pathname: string): string | undefined {
+  const match = pathname.match(/^\/api\/v1\/missions\/([^/]+)\/execution-planner\/override$/);
   return match?.[1] === undefined ? undefined : decodeURIComponent(match[1]);
 }
 

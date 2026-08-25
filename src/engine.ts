@@ -95,6 +95,15 @@ import {
 } from './execution-fork.js';
 import { executionForkEventToMissionEvents } from './mission-execution-fork.js';
 import { NativeAdapterRuntimeContinuationPort } from './runtime-continuation.js';
+import {
+  EXECUTION_PLANNER_POLICY_VERSION,
+  planExecution,
+  type CandidateHandoffStateV1,
+  type ExecutionPlannerInputV1,
+  type FrozenMissionCapabilityRequirementsV1,
+  type PlannerObservationV1,
+  type PlannerProfileCandidateV1,
+} from './execution-planner.js';
 import { runCommandVerifier, type CommandVerificationResultV1 } from './verifier.js';
 import {
   ToolGateway,
@@ -168,6 +177,26 @@ export interface MissionToolGateView extends ToolGateRequestV1 {
 
 export interface MissionExternalEffectRequestV1 extends ExternalEffectRequest<JsonValue> {
   readonly attemptId: string;
+}
+
+export interface MissionExecutionPlannerOverrideRequestV1 {
+  /** The immutable Mission plan stage whose Runtime Profile should be selected if fallback occurs. */
+  readonly stageId: string;
+  readonly reason: string;
+}
+
+export interface MissionExecutionPlannerOverrideV1 {
+  readonly overrideId: string;
+  readonly missionId: string;
+  readonly stageId: string;
+  readonly profileDefinitionId: string;
+  readonly reason: string;
+  readonly recordedAt: string;
+}
+
+export interface MissionExecutionPlannerCandidateV1 {
+  readonly stageId: string;
+  readonly profileDefinition: RuntimeProfileDefinitionV1;
 }
 
 export interface MissionExecutionForkRequestV1 {
@@ -255,12 +284,37 @@ interface ExecutionState {
   readonly baselines: ReadonlyMap<string, AttemptBaselineRecord>;
   readonly finished: ReadonlyMap<string, 'succeeded' | 'failed' | 'abandoned'>;
   readonly checkpoints: readonly CheckpointRecord[];
-  readonly confirmedEffectIds: readonly string[];
+  readonly doNotRepeatEffectIds: readonly string[];
   readonly effects: readonly ReceiptEffectResultV1[];
   readonly effectsByAttempt: ReadonlyMap<string, ReceiptEffectResultV1>;
   readonly handoffIds: readonly string[];
   readonly processByAttempt: ReadonlyMap<string, number>;
 }
+
+interface PlannedRuntimeCandidate {
+  readonly stage: AttemptStageSpecV1;
+  readonly detection: RuntimeDetection;
+  readonly profile: ProfileV1;
+}
+
+interface PlannerTrigger {
+  readonly code:
+    | 'DECLARED_HANDOFF_FAILURE'
+    | 'CREDIT_LIMIT'
+    | 'RUNTIME_UNAVAILABLE'
+    | 'CAPABILITY_REQUIREMENT_UNMET';
+  readonly sourceStageId: string;
+  readonly sourceProfileId: string;
+  readonly detail: string;
+}
+
+type StageExecutionOutcome =
+  | { readonly status: 'succeeded' }
+  | { readonly status: 'waiting' }
+  | {
+      readonly status: 'handoff';
+      readonly trigger: PlannerTrigger;
+    };
 
 export class MissionExecutionError extends Error {}
 
@@ -937,6 +991,79 @@ export class MissionEngine {
     return await this.#toolGateway(missionId, attemptId).writeDecisionIntent(draft);
   }
 
+  executionPlannerOverride(missionId: string): MissionExecutionPlannerOverrideV1 | undefined {
+    this.#requireMission(missionId);
+    return activeExecutionPlannerOverride(this.#store.listEvents(missionId));
+  }
+
+  executionPlannerCandidates(missionId: string): readonly MissionExecutionPlannerCandidateV1[] {
+    this.#requireMission(missionId);
+    return this.#requireSpecSnapshot(missionId).attemptPlan.map((stage) => ({
+      stageId: stage.stageId,
+      profileDefinition: profileDefinition(stage),
+    }));
+  }
+
+  async setExecutionPlannerOverride(
+    missionId: string,
+    request: MissionExecutionPlannerOverrideRequestV1,
+  ): Promise<MissionExecutionPlannerOverrideV1> {
+    const mission = this.#requireMission(missionId);
+    const stageId = request.stageId.trim();
+    const reason = request.reason.trim();
+    if (stageId.length === 0 || reason.length === 0) {
+      throw new TypeError('Execution Planner override stageId and reason must not be empty');
+    }
+    const spec = this.#requireSpecSnapshot(missionId);
+    const stage = spec.attemptPlan.find((candidate) => candidate.stageId === stageId);
+    if (stage === undefined) {
+      throw new MissionExecutionError(
+        `Execution Planner override stage ${stageId} is not declared`,
+      );
+    }
+    const override: MissionExecutionPlannerOverrideV1 = {
+      overrideId: `planner-override-${this.#id()}`,
+      missionId,
+      stageId,
+      profileDefinitionId: profileDefinition(stage).definitionId,
+      reason,
+      recordedAt: this.#now().toISOString(),
+    };
+    const ownerId = `planner-override-${this.#id()}`;
+    return await this.#withLease(mission.workspaceKey, ownerId, async (fence) => {
+      this.#observe(
+        missionId,
+        'execution-planner.manual_override_set',
+        override as unknown as JsonValue,
+        fence,
+      );
+      return override;
+    });
+  }
+
+  async clearExecutionPlannerOverride(missionId: string, reason: string): Promise<void> {
+    const mission = this.#requireMission(missionId);
+    const normalizedReason = reason.trim();
+    if (normalizedReason.length === 0) {
+      throw new TypeError('Execution Planner override clear reason must not be empty');
+    }
+    const active = this.executionPlannerOverride(missionId);
+    if (active === undefined) return;
+    const ownerId = `planner-override-clear-${this.#id()}`;
+    await this.#withLease(mission.workspaceKey, ownerId, async (fence) => {
+      this.#observe(
+        missionId,
+        'execution-planner.manual_override_cleared',
+        {
+          overrideId: active.overrideId,
+          reason: normalizedReason,
+          clearedAt: this.#now().toISOString(),
+        },
+        fence,
+      );
+    });
+  }
+
   async coordinateExternalEffect(
     missionId: string,
     input: MissionExternalEffectRequestV1,
@@ -1121,17 +1248,51 @@ export class MissionEngine {
       };
     }
 
-    for (
-      let index = nextStageIndex(
-        spec,
-        reconstructExecutionState(this.#store.listEvents(missionId)),
-      );
-      index < spec.attemptPlan.length;
-      index += 1
+    const persistedState = reconstructExecutionState(this.#store.listEvents(missionId));
+    let index = nextStageIndex(spec, persistedState);
+    let selected: PlannedRuntimeCandidate | undefined;
+    const persistedBoundary = persistedState.checkpoints.at(-1);
+    if (
+      persistedBoundary?.status === 'handed_off' &&
+      index < spec.attemptPlan.length &&
+      persistedBoundary.stageId !== spec.attemptPlan[index]?.stageId
     ) {
-      const stage = spec.attemptPlan[index]!;
-      const result = await this.#executeStage(missionId, spec, stage, fence, signal);
-      if (result === 'waiting') {
+      const sourceStage = spec.attemptPlan.find(
+        (candidate) => candidate.stageId === persistedBoundary.stageId,
+      );
+      if (sourceStage === undefined) {
+        throw new MissionExecutionError(
+          `Persisted Handoff source ${persistedBoundary.stageId} is absent from the Mission plan`,
+        );
+      }
+      selected = await this.#planHandoff(
+        missionId,
+        spec,
+        sourceStage,
+        index,
+        {
+          code: 'DECLARED_HANDOFF_FAILURE',
+          sourceStageId: persistedBoundary.stageId,
+          sourceProfileId: persistedBoundary.profileId,
+          detail: 'Resume from a persisted handed-off Checkpoint frontier',
+        },
+        fence,
+      );
+      if (selected === undefined) {
+        const reason = 'No eligible Runtime Profile remains for the persisted Handoff frontier';
+        this.#setWaiting(missionId, reason, fence);
+        return { missionId, status: 'waiting', waitingReason: reason };
+      }
+      index = spec.attemptPlan.indexOf(selected.stage);
+    }
+    while (index < spec.attemptPlan.length) {
+      const stage = selected?.stage ?? spec.attemptPlan[index]!;
+      const result = await this.#executeStage(missionId, spec, stage, fence, signal, selected);
+      selected = undefined;
+      if (result.status === 'succeeded') {
+        return await this.#verifyAndReceipt(missionId, spec, fence, signal);
+      }
+      if (result.status === 'waiting') {
         const projection = this.#requireMission(missionId);
         const waitingReason = latestWaitingReason(this.#store.listEvents(missionId));
         return {
@@ -1140,8 +1301,189 @@ export class MissionEngine {
           ...(waitingReason === undefined ? {} : { waitingReason }),
         };
       }
+      const planned = await this.#planHandoff(
+        missionId,
+        spec,
+        stage,
+        index + 1,
+        result.trigger,
+        fence,
+      );
+      if (planned === undefined) {
+        const reason = `No eligible Runtime Profile remains after ${result.trigger.code}`;
+        this.#setWaiting(missionId, reason, fence);
+        return { missionId, status: 'waiting', waitingReason: reason };
+      }
+      selected = planned;
+      index = spec.attemptPlan.indexOf(planned.stage);
     }
     return await this.#verifyAndReceipt(missionId, spec, fence, signal);
+  }
+
+  async #planHandoff(
+    missionId: string,
+    spec: MissionSpecV1,
+    sourceStage: AttemptStageSpecV1,
+    nextCandidateIndex: number,
+    trigger: PlannerTrigger,
+    fence: WorkspaceFenceV1,
+  ): Promise<PlannedRuntimeCandidate | undefined> {
+    const mission = this.#requireMission(missionId);
+    const candidateStages = spec.attemptPlan.slice(nextCandidateIndex);
+    const candidates = await Promise.all(
+      candidateStages.map(async (stage): Promise<PlannedRuntimeCandidate> => {
+        const detection = await this.#detect(stage.profile.harness);
+        return {
+          stage,
+          detection,
+          profile: createProfile(stage, detection, spec.workspace),
+        };
+      }),
+    );
+    const missionEvents = this.#store.listEvents(missionId);
+    const state = reconstructExecutionState(missionEvents);
+    const manualOverride = activeExecutionPlannerOverride(missionEvents);
+    const overrideCandidate =
+      manualOverride === undefined
+        ? undefined
+        : candidates.find(
+            (candidate) =>
+              candidate.stage.stageId === manualOverride.stageId &&
+              profileDefinition(candidate.stage).definitionId ===
+                manualOverride.profileDefinitionId,
+          );
+    const sourceFrontier = state.checkpoints.at(-1);
+    let sourceComposite =
+      sourceFrontier === undefined
+        ? undefined
+        : [...this.compositeCheckpoints(missionId)]
+            .reverse()
+            .find((candidate) => candidate.source.attemptId === sourceFrontier.attemptId);
+    if (sourceFrontier?.status === 'handed_off') {
+      sourceComposite = await this.#persistHandoffCompositeCheckpoint(
+        missionId,
+        spec,
+        sourceFrontier,
+        snapshotGitWorkspace(spec.workspace),
+        fence,
+      );
+    }
+    const requirements = plannerRequirements(missionId, mission.contract, sourceStage, candidates);
+    const handoffStates = plannerHandoffStates(sourceComposite, mission.contract, sourceFrontier);
+    const plannerCandidates = candidates.map(
+      (candidate): PlannerProfileCandidateV1 => ({
+        profile: candidate.profile,
+        observation: plannerObservation(candidate),
+        handoffStates,
+        wouldRepeatEffectIds: [],
+      }),
+    );
+    const plannerInput: ExecutionPlannerInputV1 = {
+      policyVersion: EXECUTION_PLANNER_POLICY_VERSION,
+      requirements,
+      candidates: plannerCandidates,
+      ...(state.checkpoints.length === 0 ? {} : { currentProfileId: trigger.sourceProfileId }),
+      effectFrontier: state.effects.map((effect) => ({
+        effectId: effect.effectId,
+        status: effect.status,
+      })),
+      ...(manualOverride === undefined
+        ? {}
+        : {
+            manualOverride: {
+              profileId:
+                overrideCandidate?.profile.profileId ??
+                `profile-override-unresolved-${hashPayload({
+                  overrideId: manualOverride.overrideId,
+                  stageId: manualOverride.stageId,
+                  profileDefinitionId: manualOverride.profileDefinitionId,
+                }).slice(0, 28)}`,
+              reason: manualOverride.reason,
+            },
+          }),
+    };
+    const decision = planExecution(plannerInput);
+    const events: EventV1[] = candidates.map((candidate) => ({
+      schemaVersion: DOMAIN_SCHEMA_VERSION,
+      eventId: `event-${this.#id()}`,
+      missionId,
+      occurredAt: candidate.detection.checkedAt,
+      type: 'runtime.catalog_observed',
+      payload: { observation: requireCatalogObservation(candidate.profile) },
+    }));
+    events.push(
+      {
+        schemaVersion: DOMAIN_SCHEMA_VERSION,
+        eventId: `event-${this.#id()}`,
+        missionId,
+        occurredAt: this.#now().toISOString(),
+        type: 'runtime.observation',
+        payload: {
+          kind: 'execution-planner.requirements_frozen',
+          data: {
+            requirements: requirements as unknown as JsonValue,
+            derivationSource: 'accepted-stage-profile-and-adapter-needs',
+            trigger: trigger as unknown as JsonValue,
+            sourceCompositeCheckpointId: sourceComposite?.checkpointId ?? null,
+          },
+        },
+      },
+      {
+        schemaVersion: DOMAIN_SCHEMA_VERSION,
+        eventId: `event-${this.#id()}`,
+        missionId,
+        occurredAt: this.#now().toISOString(),
+        type: 'runtime.observation',
+        payload: {
+          kind: 'execution-planner.decision',
+          data: {
+            trigger: trigger as unknown as JsonValue,
+            plannerInput: plannerInput as unknown as JsonValue,
+            decision: decision as unknown as JsonValue,
+            policyVersion: EXECUTION_PLANNER_POLICY_VERSION,
+            decisionHash: decision.decisionHash,
+            manualOverrideRequest:
+              manualOverride === undefined ? null : (manualOverride as unknown as JsonValue),
+            sourceCompositeCheckpoint:
+              sourceComposite === undefined
+                ? null
+                : {
+                    checkpointId: sourceComposite.checkpointId,
+                    manifestHash: sourceComposite.manifestHash,
+                    source: sourceComposite.source as unknown as JsonValue,
+                    eventPrefix: sourceComposite.eventPrefix as unknown as JsonValue,
+                    workspace: sourceComposite.workspace as unknown as JsonValue,
+                    components: sourceComposite.components.map((component) => ({
+                      component: component.component,
+                      disposition: component.disposition,
+                      contentDigest: component.contentDigest,
+                    })),
+                  },
+          },
+        },
+      },
+    );
+    const selected =
+      decision.binding.selectedProfileId === null
+        ? undefined
+        : candidates.find(
+            (candidate) => candidate.profile.profileId === decision.binding.selectedProfileId,
+          );
+    if (selected !== undefined) {
+      events.push({
+        schemaVersion: DOMAIN_SCHEMA_VERSION,
+        eventId: `event-${this.#id()}`,
+        missionId,
+        occurredAt: this.#now().toISOString(),
+        type: 'profile.selected',
+        payload: {
+          profile: selected.profile,
+          reason: `Deterministic planner ${decision.decisionHash} after ${trigger.code}`,
+        },
+      });
+    }
+    this.#store.appendEvents(events, fence);
+    return selected;
   }
 
   async #executeStage(
@@ -1150,33 +1492,44 @@ export class MissionEngine {
     stage: AttemptStageSpecV1,
     fence: WorkspaceFenceV1,
     signal?: AbortSignal,
-  ): Promise<'progressed' | 'waiting'> {
-    const detection = await this.#detect(stage.profile.harness);
-    if (!detection.available || !detection.responsive || detection.status !== 'ready') {
-      this.#setWaiting(
-        missionId,
-        detection.available
-          ? `Runtime ${stage.profile.harness} is installed but unavailable`
-          : `Runtime ${stage.profile.harness} is not installed`,
+    planned?: PlannedRuntimeCandidate,
+  ): Promise<StageExecutionOutcome> {
+    const detection = planned?.detection ?? (await this.#detect(stage.profile.harness));
+    const profile = planned?.profile ?? createProfile(stage, detection, spec.workspace);
+    if (planned === undefined) {
+      this.#append(
+        {
+          schemaVersion: DOMAIN_SCHEMA_VERSION,
+          eventId: `event-${this.#id()}`,
+          missionId,
+          occurredAt: detection.checkedAt,
+          type: 'runtime.catalog_observed',
+          payload: { observation: requireCatalogObservation(profile) },
+        },
         fence,
       );
-      return 'waiting';
+    }
+    if (!detection.available || !detection.responsive || detection.status !== 'ready') {
+      const detail = detection.available
+        ? `Runtime ${stage.profile.harness} is installed but unavailable`
+        : `Runtime ${stage.profile.harness} is not installed`;
+      if (stage.onFailure === 'handoff') {
+        return {
+          status: 'handoff',
+          trigger: {
+            code: 'RUNTIME_UNAVAILABLE',
+            sourceStageId: stage.stageId,
+            sourceProfileId: profile.profileId,
+            detail,
+          },
+        };
+      }
+      this.#setWaiting(missionId, detail, fence);
+      return { status: 'waiting' };
     }
 
-    const profile = createProfile(stage, detection, spec.workspace);
     const mission = this.#requireMission(missionId);
     const branchId = requireRootBranch(mission);
-    this.#append(
-      {
-        schemaVersion: DOMAIN_SCHEMA_VERSION,
-        eventId: `event-${this.#id()}`,
-        missionId,
-        occurredAt: detection.checkedAt,
-        type: 'runtime.catalog_observed',
-        payload: { observation: requireCatalogObservation(profile) },
-      },
-      fence,
-    );
     if (mission.activeProfile.profileId !== profile.profileId) {
       this.#append(
         {
@@ -1193,6 +1546,12 @@ export class MissionEngine {
 
     const stateBefore = reconstructExecutionState(this.#store.listEvents(missionId));
     const previousCheckpoint = stateBefore.checkpoints.at(-1);
+    const previousComposite =
+      previousCheckpoint === undefined
+        ? undefined
+        : [...this.compositeCheckpoints(missionId)]
+            .reverse()
+            .find((candidate) => candidate.source.attemptId === previousCheckpoint.attemptId);
     const before = snapshotGitWorkspace(spec.workspace);
     if (
       previousCheckpoint !== undefined &&
@@ -1212,7 +1571,7 @@ export class MissionEngine {
         fence,
       );
       this.#setWaiting(missionId, 'Workspace diverged after the latest checkpoint', fence);
-      return 'waiting';
+      return { status: 'waiting' };
     }
     const attemptId = `attempt-${this.#id()}`;
     const bindingId = `binding-${this.#id()}`;
@@ -1230,6 +1589,40 @@ export class MissionEngine {
     let projectedCapsuleText: string | undefined;
     let preparedHandoff: JsonValue | undefined;
     if (previousCheckpoint !== undefined) {
+      if (previousCheckpoint.status === 'handed_off' && previousComposite === undefined) {
+        this.#setWaiting(
+          missionId,
+          'The Handoff frontier has no complete Composite Checkpoint manifest',
+          fence,
+        );
+        return { status: 'waiting' };
+      }
+      if (
+        previousComposite !== undefined &&
+        (previousComposite.source.missionId !== missionId ||
+          previousComposite.source.branchId !== branchId ||
+          previousComposite.source.attemptId !== previousCheckpoint.attemptId ||
+          previousComposite.source.contractId !== mission.contract.contractId ||
+          previousComposite.source.profileId !== previousCheckpoint.profileId ||
+          previousComposite.workspace.workspaceDigest !==
+            previousCheckpoint.delta.afterWorkspaceDigest)
+      ) {
+        this.#setWaiting(
+          missionId,
+          'The Composite Checkpoint no longer matches the persisted Handoff frontier',
+          fence,
+        );
+        return { status: 'waiting' };
+      }
+      const capsuleCheckpointId =
+        previousComposite?.checkpointId ?? previousCheckpoint.checkpointId;
+      const capsuleWorkspaceDigest =
+        previousComposite?.workspace.workspaceDigest ??
+        previousCheckpoint.delta.afterWorkspaceDigest;
+      if (capsuleWorkspaceDigest === null) {
+        this.#setWaiting(missionId, 'The Handoff Checkpoint has no workspace frontier', fence);
+        return { status: 'waiting' };
+      }
       capsule = createCanonicalCapsule({
         missionId,
         branchId,
@@ -1244,14 +1637,14 @@ export class MissionEngine {
         },
         target: { attemptId, stageId: stage.stageId, profileId: profile.profileId, bindingId },
         checkpoint: {
-          checkpointId: previousCheckpoint.checkpointId,
-          workspaceDigest: previousCheckpoint.delta.afterWorkspaceDigest,
+          checkpointId: capsuleCheckpointId,
+          workspaceDigest: capsuleWorkspaceDigest,
         },
         remainingCriteria: mission.contract.acceptanceCriteria.map((criterion) => ({
           criterionId: criterion.criterionId,
           summary: criterion.description,
         })),
-        doNotRepeatEffectIds: stateBefore.confirmedEffectIds,
+        doNotRepeatEffectIds: stateBefore.doNotRepeatEffectIds,
       });
       const projected = projectCanonicalCapsule(capsule, stage.profile.injectionBudgetTokens);
       if (!projected.ok) {
@@ -1267,14 +1660,18 @@ export class MissionEngine {
           attemptId,
         );
         this.#setWaiting(missionId, projected.error.code, fence);
-        return 'waiting';
+        return { status: 'waiting' };
       }
       projectedCapsuleText = projected.projection.text;
       preparedHandoff = {
         capsuleId: projected.projection.capsuleId,
         capsuleHash: projected.projection.capsuleHash,
         projectionHash: projected.projection.projectionHash,
-        checkpointId: previousCheckpoint.checkpointId,
+        checkpointId: capsuleCheckpointId,
+        frontierCheckpointId: previousCheckpoint.checkpointId,
+        compositeCheckpointId: previousComposite?.checkpointId ?? null,
+        compositeManifestHash: previousComposite?.manifestHash ?? null,
+        compositeEventPrefix: previousComposite?.eventPrefix ?? null,
         sourceAttemptId: previousCheckpoint.attemptId,
         targetAttemptId: attemptId,
         budgetTokens: stage.profile.injectionBudgetTokens,
@@ -1760,9 +2157,30 @@ export class MissionEngine {
       },
       fence,
     );
+    if (canHandOff) {
+      await this.#persistHandoffCompositeCheckpoint(missionId, spec, checkpoint, after, fence);
+    }
     await this.#writeProvenanceProjection(missionId);
 
-    if (attemptSucceeded || canHandOff) return 'progressed';
+    if (attemptSucceeded) return { status: 'succeeded' };
+    if (canHandOff) {
+      return {
+        status: 'handoff',
+        trigger: {
+          code:
+            runtimeFailure?.code === 'CREDIT_LIMIT' ? 'CREDIT_LIMIT' : 'DECLARED_HANDOFF_FAILURE',
+          sourceStageId: stage.stageId,
+          sourceProfileId: profile.profileId,
+          detail: failureSummary(
+            runtimeResult,
+            capsule !== undefined,
+            acknowledged,
+            handoffOrderingEstablished,
+            runtimeFailure,
+          ),
+        },
+      };
+    }
     this.#setWaiting(
       missionId,
       failureSummary(
@@ -1774,7 +2192,7 @@ export class MissionEngine {
       ),
       fence,
     );
-    return 'waiting';
+    return { status: 'waiting' };
   }
 
   async #verifyAndReceipt(
@@ -2379,8 +2797,182 @@ export class MissionEngine {
         },
         fence,
       );
+      if (checkpoint.status === 'handed_off') {
+        await this.#persistHandoffCompositeCheckpoint(
+          missionId,
+          spec,
+          checkpoint,
+          snapshotGitWorkspace(spec.workspace),
+          fence,
+        );
+      }
     }
     if (danglingPlans.length > 0) await this.#writeProvenanceProjection(missionId);
+  }
+
+  async #persistHandoffCompositeCheckpoint(
+    missionId: string,
+    spec: MissionSpecV1,
+    frontier: CheckpointRecord,
+    workspace: GitWorkspaceSnapshotV1,
+    fence: WorkspaceFenceV1,
+  ): Promise<CompositeCheckpointManifestV1> {
+    const events = this.#store.listEvents(missionId);
+    const effects = projectMissionEffects(events);
+    const existing = [...this.compositeCheckpoints(missionId)]
+      .reverse()
+      .find((candidate) => candidate.source.attemptId === frontier.attemptId);
+    if (
+      existing !== undefined &&
+      compositeCoversHandoffFrontier(existing, frontier, workspace, effects)
+    ) {
+      return existing;
+    }
+    const created = events.find(
+      (event): event is Extract<StoredEventV1, { type: 'mission.created' }> =>
+        event.type === 'mission.created',
+    );
+    const started = events.find(
+      (event): event is Extract<StoredEventV1, { type: 'attempt.started' }> =>
+        event.type === 'attempt.started' && event.payload.attempt.attemptId === frontier.attemptId,
+    );
+    const finished = [...events]
+      .reverse()
+      .find(
+        (event): event is Extract<StoredEventV1, { type: 'attempt.finished' }> =>
+          event.type === 'attempt.finished' && event.payload.attemptId === frontier.attemptId,
+      );
+    if (created === undefined || started === undefined || finished === undefined) {
+      throw new MissionExecutionError(
+        `Handoff frontier ${frontier.checkpointId} lacks complete Attempt boundary evidence`,
+      );
+    }
+    const branch = this.#store.getBranch(missionId, frontier.branchId);
+    if (branch === undefined) {
+      throw new MissionExecutionError(
+        `Handoff frontier ${frontier.checkpointId} references an unknown Branch`,
+      );
+    }
+    const profile = profileForAttempt(events, started.payload.attempt, created.payload.profile);
+    if (
+      profile.profileId !== frontier.profileId ||
+      started.payload.attempt.branchId !== frontier.branchId ||
+      started.payload.attempt.stageId !== frontier.stageId
+    ) {
+      throw new MissionExecutionError(
+        `Handoff frontier ${frontier.checkpointId} no longer matches its Profile or Attempt`,
+      );
+    }
+    if (workspace.workspaceDigest !== frontier.delta.afterWorkspaceDigest) {
+      throw new MissionExecutionError(
+        `Handoff frontier ${frontier.checkpointId} no longer matches the workspace`,
+      );
+    }
+
+    const context = await this.contextGraph(missionId);
+    const contextDigest = `sha256:${hashPayload(context)}`;
+    const contextEvidenceRefs = uniqueStrings([
+      `context-graph:${contextDigest}`,
+      ...context.nodes.flatMap((node) => node.evidenceRefs),
+    ]);
+    const processStarted = events.find(
+      (event) =>
+        event.type === 'runtime.observation' &&
+        event.payload.kind === 'runtime.process_started' &&
+        event.attemptId === frontier.attemptId,
+    );
+    const processFinished = [...events]
+      .reverse()
+      .find(
+        (event) =>
+          event.type === 'runtime.observation' &&
+          event.payload.kind === 'runtime.process_finished' &&
+          event.attemptId === frontier.attemptId,
+      );
+    const processStartedData = runtimeObservationData(processStarted);
+    const processFinishedData = runtimeObservationData(processFinished);
+    const projection = this.#requireMission(missionId);
+    const checkpoint = createCompositeCheckpoint({
+      mission: created.payload.mission,
+      branch,
+      attempt: {
+        ...started.payload.attempt,
+        status: finished.payload.status,
+        endedAt: finished.payload.endedAt,
+      },
+      contract: projection.contract,
+      profile,
+      eventPrefix: {
+        throughSeq: projection.lastSeq,
+        headHash: projection.headHash,
+        evidenceRefs: [`kernel-head:${projection.headHash}`],
+      },
+      visibleContext: {
+        status: 'captured',
+        contextDigest,
+        artifactRefs: contextEvidenceRefs,
+        evidenceRefs: contextEvidenceRefs,
+      },
+      workspace: {
+        kind: 'git-digest',
+        workspaceKey: projection.workspaceKey,
+        snapshot: workspace,
+        evidenceRefs: [
+          `workspace:${workspace.workspaceDigest}`,
+          `frontier:${frontier.checkpointId}`,
+        ],
+      },
+      permissions: {
+        permissionMode: profile.permissionMode ?? 'unknown',
+        evidenceRefs: [`profile:${profile.profileId}`],
+      },
+      effects,
+      process: {
+        status: 'stopped',
+        stoppedAt: finished.payload.endedAt,
+        ...(typeof processStartedData?.pid === 'number'
+          ? { processRef: `pid:${String(processStartedData.pid)}` }
+          : {}),
+        ...(typeof processFinishedData?.exitCode === 'number' ||
+        processFinishedData?.exitCode === null
+          ? { exitCode: processFinishedData.exitCode }
+          : {}),
+        evidenceRefs: uniqueStrings([
+          `event:${finished.eventId}`,
+          ...(processFinished === undefined ? [] : [`event:${processFinished.eventId}`]),
+        ]),
+      },
+      nativeSession: {
+        status: 'unavailable',
+        harness: profile.harness,
+        reason:
+          'The stopped native process has no Adapter-exposed resumable session; Handoff reconstructs from the same workspace frontier and captured visible context.',
+        evidenceRefs: [`attempt:${frontier.attemptId}`],
+      },
+      capturedAt: this.#now().toISOString(),
+    });
+    this.#append(
+      {
+        schemaVersion: DOMAIN_SCHEMA_VERSION,
+        eventId: `event-composite-checkpoint-${checkpoint.manifestHash.slice('sha256:'.length)}`,
+        missionId,
+        attemptId: frontier.attemptId,
+        occurredAt: checkpoint.capturedAt,
+        type: 'runtime.observation',
+        payload: {
+          kind: 'composite-checkpoint.created',
+          data: {
+            checkpointId: checkpoint.checkpointId,
+            frontierCheckpointId: frontier.checkpointId,
+            branchId: checkpoint.source.branchId,
+            purpose: 'cross-harness-handoff',
+            manifest: checkpoint as unknown as JsonValue,
+          },
+        },
+      },
+      fence,
+    );
+    return checkpoint;
   }
 
   async #writeProvenanceProjection(missionId: string): Promise<void> {
@@ -3032,6 +3624,179 @@ function createProfile(
   };
 }
 
+function plannerRequirements(
+  missionId: string,
+  contract: ContractV1,
+  sourceStage: AttemptStageSpecV1,
+  candidates: readonly PlannedRuntimeCandidate[],
+): FrozenMissionCapabilityRequirementsV1 {
+  const requiredProfileCapabilities = uniqueStrings(
+    resolvedProfileCapabilities(
+      sourceStage,
+      resolvedPermission(sourceStage.profile.harness, sourceStage.profile.permissionMode),
+    ),
+  );
+  const minimumAdapterCapabilities: NonNullable<
+    FrozenMissionCapabilityRequirementsV1['minimumAdapterCapabilities']
+  > = {
+    observe: 'native',
+    interrupt: 'process-only',
+    ...(sourceStage.breakpoint === 'mutable-tools' ? { preToolGate: 'native' as const } : {}),
+  };
+  const allowedHarnesses = uniqueStrings([
+    sourceStage.profile.harness,
+    ...candidates.map((candidate) => candidate.stage.profile.harness),
+  ]);
+  const handoffStates = [
+    { stateId: 'outcome-contract', required: true },
+    { stateId: 'workspace', required: true },
+    { stateId: 'visible-context', required: true },
+    { stateId: 'effect-frontier', required: true },
+  ] as const;
+  const frozen = {
+    missionId,
+    contractId: contract.contractId,
+    planNodeId: sourceStage.stageId,
+    source: 'contract' as const,
+    requiredProfileCapabilities,
+    minimumAdapterCapabilities,
+    allowedHarnesses,
+    handoffStates,
+  };
+  return {
+    requirementsId: `requirements-${hashPayload(frozen).slice(0, 28)}`,
+    ...frozen,
+  };
+}
+
+function plannerObservation(candidate: PlannedRuntimeCandidate): PlannerObservationV1 {
+  const observation = requireCatalogObservation(candidate.profile);
+  return {
+    observationId: observation.observationId,
+    observedAt: candidate.detection.checkedAt,
+    source: 'local-cli',
+    freshness: 'fresh',
+    availability:
+      candidate.detection.available &&
+      candidate.detection.responsive &&
+      candidate.detection.status === 'ready'
+        ? 'ready'
+        : candidate.detection.available
+          ? 'unavailable'
+          : 'missing',
+  };
+}
+
+function plannerHandoffState(
+  stateId: string,
+  classification: CandidateHandoffStateV1['classification'],
+  source: CandidateHandoffStateV1['source'] = 'derived',
+  freshness: CandidateHandoffStateV1['freshness'] = 'fresh',
+): CandidateHandoffStateV1 {
+  return {
+    stateId,
+    classification,
+    source,
+    freshness,
+  };
+}
+
+function plannerHandoffStates(
+  checkpoint: CompositeCheckpointManifestV1 | undefined,
+  contract: ContractV1,
+  frontier: CheckpointRecord | undefined,
+): readonly CandidateHandoffStateV1[] {
+  if (frontier === undefined) {
+    return [
+      plannerHandoffState('outcome-contract', 'exact'),
+      plannerHandoffState('workspace', 'exact'),
+      plannerHandoffState('visible-context', 'exact'),
+      plannerHandoffState('effect-frontier', 'exact'),
+    ];
+  }
+  if (checkpoint === undefined) {
+    return [
+      plannerHandoffState('outcome-contract', 'unavailable', 'unknown', 'unknown'),
+      plannerHandoffState('workspace', 'unavailable', 'unknown', 'unknown'),
+      plannerHandoffState('visible-context', 'unavailable', 'unknown', 'unknown'),
+      plannerHandoffState('effect-frontier', 'unavailable', 'unknown', 'unknown'),
+    ];
+  }
+  const visibleContext = checkpoint.components.find(
+    (component) => component.component === 'visible-context',
+  );
+  const effectFrontier = checkpoint.components.find(
+    (component) => component.component === 'effect-frontier',
+  );
+  return [
+    plannerHandoffState(
+      'outcome-contract',
+      checkpoint.source.contractId === contract.contractId ? 'exact' : 'blocking',
+    ),
+    plannerHandoffState(
+      'workspace',
+      checkpoint.workspace.workspaceDigest === frontier.delta.afterWorkspaceDigest
+        ? 'exact'
+        : 'blocking',
+    ),
+    plannerHandoffState(
+      'visible-context',
+      visibleContext?.disposition === 'portable' || visibleContext?.disposition === 'recoverable'
+        ? 'summarized'
+        : 'unavailable',
+    ),
+    plannerHandoffState('effect-frontier', effectFrontier === undefined ? 'unavailable' : 'exact'),
+  ];
+}
+
+function compositeCoversHandoffFrontier(
+  checkpoint: CompositeCheckpointManifestV1,
+  frontier: CheckpointRecord,
+  workspace: GitWorkspaceSnapshotV1,
+  effects: readonly EffectV1[],
+): boolean {
+  if (
+    checkpoint.source.missionId !== frontier.missionId ||
+    checkpoint.source.branchId !== frontier.branchId ||
+    checkpoint.source.attemptId !== frontier.attemptId ||
+    checkpoint.source.profileId !== frontier.profileId ||
+    checkpoint.workspace.workspaceDigest !== workspace.workspaceDigest ||
+    workspace.workspaceDigest !== frontier.delta.afterWorkspaceDigest
+  ) {
+    return false;
+  }
+  const expected = effects
+    .filter((effect) => effect.scope !== 'branch_local_workspace')
+    .map((effect) => ({
+      effectId: effect.effectId,
+      attemptId: effect.attemptId,
+      kind: effect.kind,
+      resourceKey: effect.resourceKey,
+      scope: effect.scope ?? 'unknown',
+      status: effect.status,
+      controlLevel: effect.controlLevel ?? 'unknown',
+      authorityRef: effect.authorityRef ?? null,
+      idempotencyKey: effect.idempotencyKey ?? null,
+      evidenceRefs: uniqueStrings(effect.evidenceRefs),
+    }))
+    .sort((left, right) => left.effectId.localeCompare(right.effectId, 'en'));
+  const observed = checkpoint.externalEffectFrontier
+    .map((effect) => ({
+      effectId: effect.effectId,
+      attemptId: effect.attemptId,
+      kind: effect.kind,
+      resourceKey: effect.resourceKey,
+      scope: effect.scope,
+      status: effect.status,
+      controlLevel: effect.controlLevel,
+      authorityRef: effect.authorityRef ?? null,
+      idempotencyKey: effect.idempotencyKey ?? null,
+      evidenceRefs: uniqueStrings(effect.evidenceRefs),
+    }))
+    .sort((left, right) => left.effectId.localeCompare(right.effectId, 'en'));
+  return hashPayload(expected) === hashPayload(observed);
+}
+
 function stageMatchesProfile(stage: AttemptStageSpecV1, profile: ProfileV1): boolean {
   if (stage.profile.harness !== profile.harness || stage.profile.model !== profile.model) {
     return false;
@@ -3235,7 +4000,6 @@ function reconstructExecutionState(events: readonly StoredEventV1[]): ExecutionS
   const baselines = new Map<string, AttemptBaselineRecord>();
   const finished = new Map<string, 'succeeded' | 'failed' | 'abandoned'>();
   const checkpoints: CheckpointRecord[] = [];
-  const confirmedEffects = new Set<string>();
   const effects = new Map<string, ReceiptEffectResultV1>();
   const effectIdsByAttempt = new Map<string, string>();
   const handoffIds: string[] = [];
@@ -3244,9 +4008,6 @@ function reconstructExecutionState(events: readonly StoredEventV1[]): ExecutionS
     if (event.type === 'attempt.finished') {
       finished.set(event.payload.attemptId, event.payload.status);
       continue;
-    }
-    if (event.type === 'effect.status_changed' && event.payload.status === 'confirmed') {
-      confirmedEffects.add(event.payload.effectId);
     }
     if (event.type === 'effect.recorded') {
       const effect = event.payload.effect;
@@ -3306,7 +4067,10 @@ function reconstructExecutionState(events: readonly StoredEventV1[]): ExecutionS
     baselines,
     finished,
     checkpoints,
-    confirmedEffectIds: [...confirmedEffects],
+    doNotRepeatEffectIds: [...effects.values()]
+      .filter((effect) => effect.status === 'confirmed' || effect.status === 'ambiguous')
+      .map((effect) => effect.effectId)
+      .sort((left, right) => left.localeCompare(right, 'en')),
     effects: [...effects.values()],
     effectsByAttempt: new Map(
       [...effectIdsByAttempt].flatMap(([attemptId, effectId]) => {
@@ -3317,6 +4081,37 @@ function reconstructExecutionState(events: readonly StoredEventV1[]): ExecutionS
     handoffIds,
     processByAttempt,
   };
+}
+
+function activeExecutionPlannerOverride(
+  events: readonly StoredEventV1[],
+): MissionExecutionPlannerOverrideV1 | undefined {
+  let active: MissionExecutionPlannerOverrideV1 | undefined;
+  for (const event of events) {
+    if (event.type !== 'runtime.observation' || !isJsonObject(event.payload.data)) continue;
+    const data = event.payload.data;
+    if (event.payload.kind === 'execution-planner.manual_override_set') {
+      if (
+        typeof data.overrideId === 'string' &&
+        typeof data.missionId === 'string' &&
+        typeof data.stageId === 'string' &&
+        typeof data.profileDefinitionId === 'string' &&
+        typeof data.reason === 'string' &&
+        typeof data.recordedAt === 'string'
+      ) {
+        active = data as unknown as MissionExecutionPlannerOverrideV1;
+      }
+      continue;
+    }
+    if (
+      event.payload.kind === 'execution-planner.manual_override_cleared' &&
+      typeof data.overrideId === 'string' &&
+      data.overrideId === active?.overrideId
+    ) {
+      active = undefined;
+    }
+  }
+  return active;
 }
 
 function observationIds(

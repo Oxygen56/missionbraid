@@ -15,6 +15,8 @@ import {
   type WorkspaceFenceV1,
 } from './domain.js';
 import { classifyRuntimeOutputFailure, MissionEngine } from './engine.js';
+import { planExecution, type ExecutionPlannerInputV1 } from './execution-planner.js';
+import type { QueryableEffectTarget } from './external-effect.js';
 import { createMissionSpecSnapshot, loadMissionSpec } from './spec.js';
 import { hashPayload, MissionStore } from './store.js';
 import { snapshotGitWorkspace } from './workspace.js';
@@ -222,6 +224,237 @@ describe('MissionEngine', () => {
       }
     } finally {
       engine.close();
+    }
+  });
+
+  it('verifies immediately after the preferred Runtime succeeds without starting a fallback', async () => {
+    const fixture = await createFixture('claude');
+    const missionSource = await readFile(fixture.missionFile, 'utf8');
+    await writeFile(
+      fixture.missionFile,
+      missionSource.replace(
+        '    onFailure: stop',
+        `    onFailure: handoff
+  - stageId: qoder-fallback
+    profile:
+      harness: qoder
+      model: default
+      reasoningEffort: medium
+      permissionMode: bypass_permissions
+      injectionBudgetTokens: 4000
+    instruction: Run only if the preferred Runtime fails.
+    onFailure: stop`,
+      ),
+      'utf8',
+    );
+    const engine = new MissionEngine({
+      stateDir: fixture.stateDir,
+      qoderAdapter: new QoderAdapter({ command: fixture.qoder }),
+      claudeAdapter: new ClaudeAdapter({ command: fixture.claude }),
+    });
+    try {
+      const result = await engine.run(fixture.missionFile, { workspace: fixture.workspace });
+
+      expect(result).toMatchObject({ status: 'succeeded', receipt: { outcome: 'verified' } });
+      expect(engine.status(result.missionId).attempts).toMatchObject([
+        { harness: 'claude', status: 'succeeded' },
+      ]);
+      expect(
+        engine
+          .timeline(result.missionId)
+          .some((entry) => entry.kind === 'execution-planner.decision'),
+      ).toBe(false);
+      await expect(readFile(join(fixture.workspace, 'done.txt'), 'utf8')).rejects.toMatchObject({
+        code: 'ENOENT',
+      });
+    } finally {
+      engine.close();
+    }
+  });
+
+  it('starts an eligible fallback through the deterministic planner when the initial Runtime is unavailable', async () => {
+    const fixture = await createFixture('claude');
+    const missionSource = await readFile(fixture.missionFile, 'utf8');
+    await writeFile(
+      fixture.missionFile,
+      missionSource.replace(
+        /attemptPlan:\n[\s\S]*$/,
+        `attemptPlan:
+  - stageId: codex-unavailable
+    profile:
+      harness: codex
+      model: default
+      reasoningEffort: medium
+      permissionMode: workspace-write
+      injectionBudgetTokens: 4000
+    instruction: Use the preferred Runtime when it is available.
+    onFailure: handoff
+  - stageId: claude-fallback
+    profile:
+      harness: claude
+      model: deepseek-v4-pro
+      reasoningEffort: medium
+      permissionMode: acceptEdits
+      injectionBudgetTokens: 4000
+    instruction: Complete the fixture after deterministic fallback selection.
+    onFailure: stop
+`,
+      ),
+      'utf8',
+    );
+    const engine = new MissionEngine({
+      stateDir: fixture.stateDir,
+      codexAdapter: new CodexAdapter({ command: join(fixture.root, 'bin', 'missing-codex') }),
+      claudeAdapter: new ClaudeAdapter({ command: fixture.claude }),
+    });
+    try {
+      const result = await engine.run(fixture.missionFile, { workspace: fixture.workspace });
+
+      expect(result).toMatchObject({ status: 'succeeded', receipt: { outcome: 'verified' } });
+      expect(engine.status(result.missionId).attempts).toMatchObject([
+        { harness: 'claude', status: 'succeeded' },
+      ]);
+      const plannerEntry = engine
+        .timeline(result.missionId)
+        .find((entry) => entry.kind === 'execution-planner.decision');
+      const data = plannerEntry?.data as unknown as {
+        trigger: { code: string };
+        decision: {
+          binding: { action: string; selectedHarness: string };
+          filter: { eligibleProfileIds: string[] };
+          rank: unknown[];
+          handoffCompatibility: Array<{ overall: string }>;
+        };
+        sourceCompositeCheckpoint: unknown;
+      };
+      expect(data).toMatchObject({
+        trigger: { code: 'RUNTIME_UNAVAILABLE' },
+        decision: {
+          binding: { action: 'start', selectedHarness: 'claude' },
+          filter: { eligibleProfileIds: [expect.any(String)] },
+        },
+        sourceCompositeCheckpoint: null,
+      });
+      expect(data.decision.rank).toHaveLength(1);
+      expect(data.decision.handoffCompatibility).toMatchObject([{ overall: 'exact' }]);
+    } finally {
+      engine.close();
+    }
+  });
+
+  it('persists and applies an eligible preselected fallback Profile with its reason', async () => {
+    const fixture = await createFixture('planner-credit');
+    const engine = new MissionEngine({
+      stateDir: fixture.stateDir,
+      codexAdapter: new CodexAdapter({ command: fixture.codex }),
+      qoderAdapter: new QoderAdapter({ command: fixture.qoder }),
+      claudeAdapter: new ClaudeAdapter({ command: fixture.claude }),
+    });
+    try {
+      const created = await engine.create(fixture.missionFile, { workspace: fixture.workspace });
+      expect(engine.executionPlannerCandidates(created.missionId)).toMatchObject([
+        { stageId: 'qoder-primary', profileDefinition: { harness: 'qoder' } },
+        {
+          stageId: 'claude-read-only-rejected',
+          profileDefinition: { harness: 'claude' },
+        },
+        { stageId: 'codex-credit-fallback', profileDefinition: { harness: 'codex' } },
+      ]);
+      expect(
+        engine.executionPlannerCandidates(created.missionId).every((candidate) => {
+          const fields = candidate as unknown as Record<string, unknown>;
+          return fields.instruction === undefined && fields.prompt === undefined;
+        }),
+      ).toBe(true);
+      const override = await engine.setExecutionPlannerOverride(created.missionId, {
+        stageId: 'codex-credit-fallback',
+        reason: 'Use the approved workspace-writing fallback Profile.',
+      });
+
+      expect(engine.executionPlannerOverride(created.missionId)).toEqual(override);
+      const result = await engine.resume(created.missionId);
+      expect(result).toMatchObject({ status: 'succeeded', receipt: { outcome: 'verified' } });
+      const plannerData = engine
+        .timeline(created.missionId)
+        .find((entry) => entry.kind === 'execution-planner.decision')?.data as unknown as {
+        manualOverrideRequest: { overrideId: string; reason: string };
+        decision: {
+          manualOverride: { status: string; reason: string };
+          binding: { reason: string; selectedHarness: string };
+        };
+      };
+      expect(plannerData).toMatchObject({
+        manualOverrideRequest: {
+          overrideId: override.overrideId,
+          reason: override.reason,
+        },
+        decision: {
+          manualOverride: { status: 'applied', reason: override.reason },
+          binding: { reason: 'manual_override', selectedHarness: 'codex' },
+        },
+      });
+    } finally {
+      engine.close();
+    }
+  });
+
+  it('records an ineligible manual override rejection, clears it durably, and replans after restart', async () => {
+    const fixture = await createFixture('planner-credit');
+    const adapters = () => ({
+      codexAdapter: new CodexAdapter({ command: fixture.codex }),
+      qoderAdapter: new QoderAdapter({ command: fixture.qoder }),
+      claudeAdapter: new ClaudeAdapter({ command: fixture.claude }),
+    });
+    const engine = new MissionEngine({ stateDir: fixture.stateDir, ...adapters() });
+    const created = await engine.create(fixture.missionFile, { workspace: fixture.workspace });
+    const override = await engine.setExecutionPlannerOverride(created.missionId, {
+      stageId: 'claude-read-only-rejected',
+      reason: 'Validate this explicitly requested read-only Profile.',
+    });
+    const blocked = await engine.resume(created.missionId);
+    expect(blocked.status).toBe('waiting');
+    const rejectedDecision = engine
+      .timeline(created.missionId)
+      .find((entry) => entry.kind === 'execution-planner.decision')?.data as unknown as {
+      manualOverrideRequest: { overrideId: string };
+      decision: {
+        manualOverride: { status: string; reason: string };
+        binding: { status: string; reason: string };
+      };
+    };
+    expect(rejectedDecision).toMatchObject({
+      manualOverrideRequest: { overrideId: override.overrideId },
+      decision: {
+        manualOverride: { status: 'rejected', reason: override.reason },
+        binding: { status: 'blocked', reason: 'manual_override_rejected' },
+      },
+    });
+    await engine.clearExecutionPlannerOverride(created.missionId, 'Return to automatic fallback.');
+    expect(engine.executionPlannerOverride(created.missionId)).toBeUndefined();
+    engine.close();
+
+    const reopened = new MissionEngine({ stateDir: fixture.stateDir, ...adapters() });
+    try {
+      expect(reopened.executionPlannerOverride(created.missionId)).toBeUndefined();
+      const resumed = await reopened.resume(created.missionId);
+      expect(resumed).toMatchObject({ status: 'succeeded', receipt: { outcome: 'verified' } });
+      expect(reopened.status(created.missionId).attempts).toMatchObject([
+        { harness: 'qoder', status: 'failed' },
+        { harness: 'codex', status: 'succeeded' },
+      ]);
+      const decisions = reopened
+        .timeline(created.missionId)
+        .filter((entry) => entry.kind === 'execution-planner.decision');
+      expect(decisions).toHaveLength(2);
+      expect(decisions[1]?.data).toMatchObject({
+        manualOverrideRequest: null,
+        decision: {
+          manualOverride: { status: 'none' },
+          binding: { selectedHarness: 'codex' },
+        },
+      });
+    } finally {
+      reopened.close();
     }
   });
 
@@ -601,6 +834,251 @@ process.stdin.on('end', () => {
     }
   });
 
+  it('routes a Qoder native-protocol CREDIT_LIMIT fixture through a Composite Checkpoint and reaches a Receipt', async () => {
+    const fixture = await createFixture('planner-credit');
+    const engine = new MissionEngine({
+      stateDir: fixture.stateDir,
+      codexAdapter: new CodexAdapter({ command: fixture.codex }),
+      qoderAdapter: new QoderAdapter({ command: fixture.qoder }),
+      claudeAdapter: new ClaudeAdapter({ command: fixture.claude }),
+    });
+    try {
+      const result = await engine.run(fixture.missionFile, { workspace: fixture.workspace });
+
+      expect(result).toMatchObject({ status: 'succeeded', receipt: { outcome: 'verified' } });
+      expect(engine.status(result.missionId).attempts).toMatchObject([
+        { harness: 'qoder', status: 'failed' },
+        { harness: 'codex', status: 'succeeded' },
+      ]);
+      const checkpoints = engine.compositeCheckpoints(result.missionId);
+      expect(checkpoints).toHaveLength(1);
+      const composite = checkpoints[0]!;
+      expect(composite).toMatchObject({
+        source: { missionId: result.missionId, profileId: expect.stringMatching(/^profile-/) },
+        workspace: { state: 'digest-only', workspaceDigest: expect.any(String) },
+        process: { status: 'stopped' },
+      });
+      expect(composite.components).toHaveLength(12);
+      expect(
+        composite.components.find((component) => component.component === 'workspace'),
+      ).toMatchObject({ disposition: 'inspect-only' });
+
+      const timeline = engine.timeline(result.missionId);
+      const plannerEntry = timeline.find((entry) => entry.kind === 'execution-planner.decision');
+      const plannerData = plannerEntry?.data as unknown as {
+        trigger: { code: string };
+        plannerInput: ExecutionPlannerInputV1;
+        decisionHash: string;
+        decision: {
+          decisionHash: string;
+          binding: { action: string; selectedHarness: string };
+          filter: {
+            candidates: Array<{
+              eligible: boolean;
+              rejectionReasons: Array<{ code: string; subject: string }>;
+            }>;
+          };
+          rank: Array<{
+            profileId: string;
+            harness: string;
+            rankVector: Record<string, unknown>;
+          }>;
+          handoffCompatibility: Array<{
+            profileId: string;
+            overall: string;
+            states: Array<{ stateId: string; classification: string }>;
+            effectFrontier: { doNotRepeatEffectIds: string[]; conflictingEffectIds: string[] };
+          }>;
+        };
+        sourceCompositeCheckpoint: {
+          checkpointId: string;
+          manifestHash: string;
+          components: Array<{ component: string; disposition: string }>;
+        };
+      };
+      expect(plannerData).toMatchObject({
+        trigger: { code: 'CREDIT_LIMIT' },
+        decision: {
+          binding: { action: 'handoff', selectedHarness: 'codex' },
+        },
+        sourceCompositeCheckpoint: {
+          checkpointId: composite.checkpointId,
+          manifestHash: composite.manifestHash,
+        },
+      });
+      expect(planExecution(plannerData.plannerInput).decisionHash).toBe(plannerData.decisionHash);
+      expect(plannerData.decision.decisionHash).toBe(plannerData.decisionHash);
+      expect(
+        plannerData.decision.filter.candidates.some((candidate) =>
+          candidate.rejectionReasons.some(
+            (reason) =>
+              reason.code === 'PROFILE_CAPABILITY_MISSING' && reason.subject === 'workspace-write',
+          ),
+        ),
+      ).toBe(true);
+      expect(plannerData.decision.rank).toMatchObject([
+        { harness: 'codex', rankVector: expect.any(Object) },
+      ]);
+      const selectedCompatibility = plannerData.decision.handoffCompatibility.find(
+        (candidate) => candidate.profileId === plannerData.decision.rank[0]?.profileId,
+      );
+      expect(selectedCompatibility).toMatchObject({
+        overall: 'summarized',
+        states: expect.arrayContaining([
+          expect.objectContaining({ stateId: 'outcome-contract', classification: 'exact' }),
+          expect.objectContaining({ stateId: 'workspace', classification: 'exact' }),
+          expect.objectContaining({
+            stateId: 'visible-context',
+            classification: 'summarized',
+          }),
+          expect.objectContaining({ stateId: 'effect-frontier', classification: 'exact' }),
+        ]),
+        effectFrontier: {
+          doNotRepeatEffectIds: [expect.stringMatching(/^effect-/)],
+          conflictingEffectIds: [],
+        },
+      });
+      const prepared = timeline.find((entry) => entry.kind === 'handoff.prepared')?.data as {
+        checkpointId: string;
+        compositeCheckpointId: string;
+      };
+      expect(prepared).toMatchObject({
+        checkpointId: composite.checkpointId,
+        compositeCheckpointId: composite.checkpointId,
+      });
+      expect(timeline.find((entry) => entry.kind === 'handoff.acknowledged')?.data).toMatchObject({
+        checkpointId: composite.checkpointId,
+        handoffOrderingEstablished: true,
+        orderingEvidence: 'native-source-before-tool-request',
+      });
+      expect(result.receipt?.handoffIds).toHaveLength(1);
+      expect(result.receipt?.effects).toMatchObject([
+        { status: 'confirmed' },
+        { status: 'confirmed' },
+      ]);
+    } finally {
+      engine.close();
+    }
+  });
+
+  it('refreshes a handed-off frontier after restart and carries confirmed plus ambiguous Effects as no-repeat', async () => {
+    const fixture = await createFixture('planner-credit');
+    await chmod(fixture.codex, 0o644);
+    let dispatchCount = 0;
+    const ambiguousTarget = {
+      targetId: 'ambiguous-target',
+      lookup: async () => ({
+        status: 'ambiguous' as const,
+        evidenceRefs: ['target:lookup-ambiguous'],
+      }),
+      dispatch: async () => {
+        dispatchCount += 1;
+        return {
+          status: 'ambiguous' as const,
+          evidenceRefs: ['target:dispatch-ambiguous'],
+          detail: 'The target accepted no queryable terminal result.',
+        };
+      },
+    } satisfies QueryableEffectTarget<JsonValue, JsonValue>;
+    const adapters = () => ({
+      codexAdapter: new CodexAdapter({ command: fixture.codex }),
+      qoderAdapter: new QoderAdapter({ command: fixture.qoder }),
+      claudeAdapter: new ClaudeAdapter({ command: fixture.claude }),
+      externalEffectTargets: [ambiguousTarget],
+    });
+    const firstEngine = new MissionEngine({ stateDir: fixture.stateDir, ...adapters() });
+    const first = await firstEngine.run(fixture.missionFile, { workspace: fixture.workspace });
+    expect(first.status).toBe('waiting');
+    const sourceAttemptId = firstEngine.status(first.missionId).attempts[0]?.attemptId;
+    expect(sourceAttemptId).toBeDefined();
+    const ambiguousEffectId = 'effect-external-ambiguous';
+    await expect(
+      firstEngine.coordinateExternalEffect(first.missionId, {
+        attemptId: sourceAttemptId!,
+        effectId: ambiguousEffectId,
+        targetId: ambiguousTarget.targetId,
+        kind: 'publish-fixture',
+        resourceKey: 'fixture-record',
+        authorityRef: 'grant:test-only',
+        idempotencyKey: 'fixture-ambiguous-key',
+        payloadDigest: 'sha256:fixture-ambiguous-payload',
+        payload: { operation: 'publish-fixture' },
+      }),
+    ).rejects.toMatchObject({
+      name: 'ExternalEffectBlockedError',
+      observedStatus: 'ambiguous',
+    });
+    expect(dispatchCount).toBe(1);
+    expect(firstEngine.compositeCheckpoints(first.missionId)).toHaveLength(1);
+    firstEngine.close();
+
+    await chmod(fixture.codex, 0o755);
+    const reopened = new MissionEngine({ stateDir: fixture.stateDir, ...adapters() });
+    try {
+      const resumed = await reopened.resume(first.missionId);
+
+      expect(resumed).toMatchObject({
+        status: 'failed',
+        receipt: {
+          outcome: 'rejected',
+          unresolvedItems: [`effect:${ambiguousEffectId}:ambiguous`],
+        },
+      });
+      expect(dispatchCount).toBe(1);
+      expect(reopened.status(first.missionId).attempts).toMatchObject([
+        { harness: 'qoder', status: 'failed' },
+        { harness: 'codex', status: 'succeeded' },
+      ]);
+      const composites = reopened.compositeCheckpoints(first.missionId);
+      expect(composites).toHaveLength(2);
+      const refreshedComposite = composites.at(-1)!;
+      expect(refreshedComposite.externalEffectFrontier).toMatchObject([
+        { effectId: ambiguousEffectId, status: 'ambiguous' },
+      ]);
+      const timeline = reopened.timeline(first.missionId);
+      const decisions = timeline.filter((entry) => entry.kind === 'execution-planner.decision');
+      expect(decisions).toHaveLength(2);
+      const resumedDecision = decisions.at(-1)?.data as unknown as {
+        decision: {
+          binding: { selectedHarness: string };
+          handoffCompatibility: Array<{
+            effectFrontier: { doNotRepeatEffectIds: string[]; conflictingEffectIds: string[] };
+          }>;
+        };
+        sourceCompositeCheckpoint: { checkpointId: string };
+      };
+      expect(resumedDecision).toMatchObject({
+        decision: { binding: { selectedHarness: 'codex' } },
+        sourceCompositeCheckpoint: { checkpointId: refreshedComposite.checkpointId },
+      });
+      const noRepeatIds = new Set(
+        resumedDecision.decision.handoffCompatibility.flatMap(
+          (candidate) => candidate.effectFrontier.doNotRepeatEffectIds,
+        ),
+      );
+      expect(noRepeatIds.has(ambiguousEffectId)).toBe(true);
+      expect([...noRepeatIds].some((effectId) => effectId.startsWith('effect-attempt-'))).toBe(
+        true,
+      );
+      expect(
+        resumedDecision.decision.handoffCompatibility.every(
+          (candidate) => candidate.effectFrontier.conflictingEffectIds.length === 0,
+        ),
+      ).toBe(true);
+      const prepared = timeline.findLast((entry) => entry.kind === 'handoff.prepared')?.data as {
+        checkpointId: string;
+      };
+      expect(prepared.checkpointId).toBe(refreshedComposite.checkpointId);
+      const targetContext = timeline.findLast(
+        (entry) => entry.kind === 'context.controller_prompt' && entry.harness === 'codex',
+      )?.data as { nativeArtifact: { artifactId: string } };
+      const promptArtifact = await reopened.artifact(targetContext.nativeArtifact.artifactId);
+      expect(promptArtifact?.content).toContain(ambiguousEffectId);
+    } finally {
+      reopened.close();
+    }
+  });
+
   it('recovers a stopped runtime after controller loss and continues from its persisted checkpoint Capsule', async () => {
     const fixture = await createFixture('controller-crash');
     const baseline = snapshotGitWorkspace(fixture.workspace);
@@ -703,7 +1181,9 @@ process.stdin.on('end', () => {
   });
 });
 
-async function createFixture(mode: 'resume' | 'handoff' | 'controller-crash' | 'claude'): Promise<{
+async function createFixture(
+  mode: 'resume' | 'handoff' | 'controller-crash' | 'claude' | 'planner-credit',
+): Promise<{
   root: string;
   workspace: string;
   stateDir: string;
@@ -752,6 +1232,17 @@ process.stdin.setEncoding('utf8');
 process.stdin.on('data', chunk => { prompt += chunk; });
 process.stdin.on('end', () => {
   const checkpoint = join(process.cwd(), 'codex.txt');
+  if (${JSON.stringify(mode)} === 'planner-credit') {
+    const ack = prompt.match(/^MISSIONBRAID_ACK (.+)$/m)?.[0];
+    if (ack) console.log(JSON.stringify({ type: 'assistant', text: ack }));
+    console.log(JSON.stringify({ type: 'tool_call', name: 'write_file', id: 'tool-codex-target' }));
+    setTimeout(() => {
+      writeFileSync(join(process.cwd(), 'done.txt'), 'credit-limit-recovered\\n');
+      console.log(JSON.stringify({ type: 'tool_result', tool_use_id: 'tool-codex-target', status: 'completed' }));
+      process.exit(0);
+    }, 120);
+    return;
+  }
   if (${JSON.stringify(mode)} === 'controller-crash') {
     if (existsSync(checkpoint)) {
       const ack = prompt.match(/^MISSIONBRAID_ACK (.+)$/m)?.[0];
@@ -788,6 +1279,12 @@ let prompt = '';
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', chunk => { prompt += chunk; });
 process.stdin.on('end', () => {
+  if (${JSON.stringify(mode)} === 'planner-credit') {
+    writeFileSync(join(process.cwd(), 'qoder.txt'), 'credit-limit-checkpoint\\n');
+    console.log(JSON.stringify({ type: 'assistant', content: [{ text: 'workspace delta persisted before quota failure' }] }));
+    console.log(JSON.stringify({ type: 'result', subtype: 'error', error_code: 118 }));
+    process.exit(7);
+  }
   const ack = prompt.match(/^MISSIONBRAID_ACK (.+)$/m)?.[0];
   if (ack) console.log(JSON.stringify({ type: 'assistant', content: [{ text: ack }] }));
   setTimeout(() => { writeFileSync(join(process.cwd(), 'done.txt'), 'handed-off\\n'); process.exit(0); }, 1000);
@@ -822,6 +1319,15 @@ if (${JSON.stringify(mode)} === 'claude') {
   if (readFileSync(join(workspace, 'claude.txt'), 'utf8') !== 'claude-complete\\n') process.exit(3);
   process.exit(0);
 }
+if (${JSON.stringify(mode)} === 'planner-credit') {
+  if (readFileSync(join(workspace, 'qoder.txt'), 'utf8') !== 'credit-limit-checkpoint\\n') process.exit(3);
+  if (readFileSync(join(workspace, 'done.txt'), 'utf8') !== 'credit-limit-recovered\\n') process.exit(4);
+  const provenance = JSON.parse(readFileSync(provenanceFile, 'utf8'));
+  if (provenance.stages.length !== 2) process.exit(5);
+  if (provenance.stages[0].harness !== 'qoder' || provenance.stages[0].status !== 'handed_off') process.exit(6);
+  if (provenance.stages[1].harness !== 'codex' || provenance.stages[1].status !== 'succeeded') process.exit(7);
+  process.exit(0);
+}
 if (readFileSync(join(workspace, 'codex.txt'), 'utf8') !== 'checkpoint\\n') process.exit(3);
 if (!existsSync(join(workspace, 'done.txt'))) process.exit(4);
 const provenance = JSON.parse(readFileSync(provenanceFile, 'utf8'));
@@ -854,7 +1360,35 @@ if (${JSON.stringify(mode)} !== 'resume') {
       injectionBudgetTokens: 4000
     instruction: Continue the fixture.
     onFailure: stop`
-        : `  - stageId: codex-source
+        : mode === 'planner-credit'
+          ? `  - stageId: qoder-primary
+    profile:
+      harness: qoder
+      model: default
+      reasoningEffort: medium
+      permissionMode: bypass_permissions
+      injectionBudgetTokens: 4000
+    instruction: Continue until the native-protocol quota fixture reports its failure.
+    onFailure: handoff
+  - stageId: claude-read-only-rejected
+    profile:
+      harness: claude
+      model: deepseek-v4-pro
+      reasoningEffort: medium
+      permissionMode: plan
+      injectionBudgetTokens: 4000
+    instruction: This candidate lacks the frozen workspace-write capability.
+    onFailure: handoff
+  - stageId: codex-credit-fallback
+    profile:
+      harness: codex
+      model: default
+      reasoningEffort: medium
+      permissionMode: workspace-write
+      injectionBudgetTokens: 4000
+    instruction: Acknowledge the Composite Checkpoint Capsule and complete the Mission.
+    onFailure: stop`
+          : `  - stageId: codex-source
     profile:
       harness: codex
       model: default

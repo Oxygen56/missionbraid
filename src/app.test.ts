@@ -24,6 +24,9 @@ import type {
   MissionExecutionResult,
   MissionExecutionForkRequestV1,
   MissionExecutionForkResultV1,
+  MissionExecutionPlannerCandidateV1,
+  MissionExecutionPlannerOverrideRequestV1,
+  MissionExecutionPlannerOverrideV1,
   MissionExternalEffectRequestV1,
   MissionStatusView,
   MissionTimelineEntry,
@@ -544,6 +547,66 @@ describe('MissionBraid local app', () => {
   it('keeps the app bound to loopback hosts', async () => {
     await expect(startMissionBraidApp({ host: '0.0.0.0', port: 0 })).rejects.toThrow('loopback');
   });
+
+  it('records, exposes, and clears a fallback Profile override through the Workbench API', async () => {
+    const fixture = await createWorkspace();
+    const state = new FakeEngineState();
+    const missionId = 'mission-planner-override';
+    state.missions.set(missionId, projection(missionId, 'waiting'));
+    state.timelines.set(missionId, []);
+    state.plannerCandidates.set(missionId, [
+      plannerCandidate('primary', 'codex', 'gpt-5.6-sol'),
+      plannerCandidate('fallback', 'qoder', 'qwen3.8-max'),
+    ]);
+    const app = await startMissionBraidApp({
+      stateDir: fixture.stateDir,
+      port: 0,
+      engineFactory: () => new FakeEngine(state),
+      discoverRuntimes: async () => readyCatalog(),
+    });
+    try {
+      const set = await fetch(
+        `${app.url}/api/v1/missions/${missionId}/execution-planner/override`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ stageId: 'fallback', reason: 'Prefer the available quota' }),
+        },
+      );
+      expect(set.status).toBe(201);
+      expect(await set.json()).toMatchObject({
+        override: { missionId, stageId: 'fallback', reason: 'Prefer the available quota' },
+      });
+
+      const detail = await fetch(`${app.url}/api/v1/missions/${missionId}`);
+      expect(await detail.json()).toMatchObject({
+        executionPlanner: {
+          candidates: [
+            { stageId: 'primary', profileDefinition: { harness: 'codex' } },
+            { stageId: 'fallback', profileDefinition: { harness: 'qoder' } },
+          ],
+          override: { stageId: 'fallback' },
+        },
+        capabilities: {
+          setExecutionPlannerOverride: true,
+          clearExecutionPlannerOverride: true,
+        },
+      });
+
+      const clear = await fetch(
+        `${app.url}/api/v1/missions/${missionId}/execution-planner/override`,
+        {
+          method: 'DELETE',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ reason: 'Use automatic routing again' }),
+        },
+      );
+      expect(clear.status).toBe(200);
+      expect(state.plannerOverrides.has(missionId)).toBe(false);
+    } finally {
+      await app.close();
+    }
+  });
 });
 
 class FakeEngineState {
@@ -574,6 +637,8 @@ class FakeEngineState {
     readonly missionId: string;
     readonly input: MissionExecutionForkRequestV1;
   }> = [];
+  readonly plannerCandidates = new Map<string, MissionExecutionPlannerCandidateV1[]>();
+  readonly plannerOverrides = new Map<string, MissionExecutionPlannerOverrideV1>();
 }
 
 class FakeEngine implements AppEngine {
@@ -785,6 +850,42 @@ class FakeEngine implements AppEngine {
     return { record, receipt };
   }
 
+  executionPlannerCandidates(missionId: string): readonly MissionExecutionPlannerCandidateV1[] {
+    this.#require(missionId);
+    return this.#state.plannerCandidates.get(missionId) ?? [];
+  }
+
+  executionPlannerOverride(missionId: string): MissionExecutionPlannerOverrideV1 | undefined {
+    this.#require(missionId);
+    return this.#state.plannerOverrides.get(missionId);
+  }
+
+  async setExecutionPlannerOverride(
+    missionId: string,
+    request: MissionExecutionPlannerOverrideRequestV1,
+  ): Promise<MissionExecutionPlannerOverrideV1> {
+    this.#require(missionId);
+    const candidate = (this.#state.plannerCandidates.get(missionId) ?? []).find(
+      (item) => item.stageId === request.stageId,
+    );
+    if (candidate === undefined) throw new Error(`Unknown planner stage ${request.stageId}`);
+    const override: MissionExecutionPlannerOverrideV1 = {
+      overrideId: `planner-override-${missionId}`,
+      missionId,
+      stageId: request.stageId,
+      profileDefinitionId: candidate.profileDefinition.definitionId,
+      reason: request.reason,
+      recordedAt: '2026-08-24T03:00:00.000Z',
+    };
+    this.#state.plannerOverrides.set(missionId, override);
+    return override;
+  }
+
+  async clearExecutionPlannerOverride(missionId: string): Promise<void> {
+    this.#require(missionId);
+    this.#state.plannerOverrides.delete(missionId);
+  }
+
   status(missionId: string): MissionStatusView {
     return {
       mission: this.#require(missionId),
@@ -810,6 +911,22 @@ class FakeEngine implements AppEngine {
     if (mission === undefined) throw new Error(`Unknown Mission ${missionId}`);
     return mission;
   }
+}
+
+function plannerCandidate(
+  stageId: string,
+  harness: string,
+  requestedModel: string,
+): MissionExecutionPlannerCandidateV1 {
+  return {
+    stageId,
+    profileDefinition: {
+      definitionId: `profile-definition-${stageId}`,
+      harness,
+      requestedModel,
+      injectionBudgetTokens: 2_000,
+    },
+  };
 }
 
 function checkpointFixture(missionId: string, attemptId: string): CompositeCheckpointManifestV1 {
