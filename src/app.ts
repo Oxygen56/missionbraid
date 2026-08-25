@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path';
 
 import { APP_CSS, APP_HTML, APP_JAVASCRIPT } from './app-page.js';
 import type { NativeArtifactContent } from './artifact-store.js';
+import type { ContextGraphV1 } from './context-graph.js';
 import {
   MissionEngine,
   type ExecuteMissionOptions,
@@ -47,6 +48,7 @@ export interface AppEngine {
   command(commandId: string): MissionCommandV1 | undefined;
   commands(missionId?: string): MissionCommandV1[];
   artifact(artifactId: string): Promise<NativeArtifactContent | undefined>;
+  contextGraph(missionId: string): Promise<ContextGraphV1>;
   status(missionId: string): MissionStatusView;
   timeline(missionId: string): MissionTimelineEntry[];
   list(): MissionProjectionV1[];
@@ -111,6 +113,7 @@ export async function startMissionBraidApp(
   const now = options.now ?? (() => new Date());
   const id = options.id ?? randomUUID;
   const operations = new Map<string, RunningOperation>();
+  const eventStreams = new Set<ServerResponse>();
   const supervisorId = `supervisor-${id()}`;
   let closing = false;
   let draining = false;
@@ -284,6 +287,26 @@ export async function startMissionBraidApp(
       }
       return;
     }
+    const missionEventStreamId = matchMissionEventStreamId(url.pathname);
+    if (missionEventStreamId !== undefined && request.method === 'GET') {
+      const engine = engineFactory(stateDir);
+      try {
+        engine.status(missionEventStreamId);
+      } finally {
+        engine.close();
+      }
+      streamMissionEvents({
+        request,
+        response,
+        missionId: missionEventStreamId,
+        stateDir,
+        engineFactory,
+        now,
+        streams: eventStreams,
+        after: eventStreamCursor(request, url),
+      });
+      return;
+    }
     if (request.method === 'POST' && url.pathname === '/api/v1/missions') {
       if (closing) throw new AppHttpError(503, 'APP_STOPPING', 'MissionBraid app is stopping.');
       let draft: ReturnType<typeof createMissionDraft>;
@@ -379,6 +402,7 @@ export async function startMissionBraidApp(
         sendJson(response, 200, {
           ...status,
           timeline: engine.timeline(missionId),
+          contextGraph: await engine.contextGraph(missionId),
           operation: operationView(
             status.mission,
             operations.get(missionId),
@@ -427,6 +451,8 @@ export async function startMissionBraidApp(
       for (const operation of operations.values()) {
         if (operation.view.phase === 'running') operation.controller.abort();
       }
+      for (const stream of eventStreams) stream.end();
+      eventStreams.clear();
       await closeServer(server);
       await Promise.allSettled([...operations.values()].map((operation) => operation.promise));
     },
@@ -519,6 +545,96 @@ async function readJson(request: IncomingMessage): Promise<unknown> {
 function matchMissionId(pathname: string): string | undefined {
   const match = pathname.match(/^\/api\/v1\/missions\/([^/]+)$/);
   return match?.[1] === undefined ? undefined : decodeURIComponent(match[1]);
+}
+
+function matchMissionEventStreamId(pathname: string): string | undefined {
+  const match = pathname.match(/^\/api\/v1\/missions\/([^/]+)\/events$/);
+  return match?.[1] === undefined ? undefined : decodeURIComponent(match[1]);
+}
+
+function eventStreamCursor(request: IncomingMessage, url: URL): number {
+  const header = request.headers['last-event-id'];
+  const raw =
+    (Array.isArray(header) ? header.at(-1) : header) ?? url.searchParams.get('after') ?? '0';
+  const cursor = Number.parseInt(raw, 10);
+  return Number.isSafeInteger(cursor) && cursor >= 0 ? cursor : 0;
+}
+
+interface MissionEventStreamOptions {
+  readonly request: IncomingMessage;
+  readonly response: ServerResponse;
+  readonly missionId: string;
+  readonly stateDir: string;
+  readonly engineFactory: (stateDir: string) => AppEngine;
+  readonly now: () => Date;
+  readonly streams: Set<ServerResponse>;
+  readonly after: number;
+}
+
+/** Stream only events already committed to the durable Mission journal. */
+function streamMissionEvents(options: MissionEventStreamOptions): void {
+  const { request, response, missionId, stateDir, engineFactory, now, streams } = options;
+  let cursor = options.after;
+  let closed = false;
+  let polling = false;
+
+  response.statusCode = 200;
+  response.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+  response.setHeader('Cache-Control', 'no-store');
+  response.setHeader('Connection', 'keep-alive');
+  response.setHeader('X-Accel-Buffering', 'no');
+  response.flushHeaders();
+  streams.add(response);
+
+  const poll = (): void => {
+    if (closed || polling) return;
+    polling = true;
+    const engine = engineFactory(stateDir);
+    try {
+      for (const entry of engine.timeline(missionId)) {
+        if (entry.seq <= cursor) continue;
+        const sentAt = now().toISOString();
+        const recordedAtMs = Date.parse(entry.recordedAt);
+        const sentAtMs = Date.parse(sentAt);
+        const journalToWireLatencyMs =
+          Number.isFinite(recordedAtMs) && Number.isFinite(sentAtMs)
+            ? Math.max(0, sentAtMs - recordedAtMs)
+            : null;
+        response.write(`id: ${String(entry.seq)}\n`);
+        response.write('event: timeline\n');
+        response.write(
+          `data: ${JSON.stringify({ missionId, entry, sentAt, journalToWireLatencyMs })}\n\n`,
+        );
+        cursor = entry.seq;
+      }
+    } catch (error) {
+      response.write('event: stream-error\n');
+      response.write(
+        `data: ${JSON.stringify({ message: error instanceof Error ? error.message : String(error) })}\n\n`,
+      );
+    } finally {
+      engine.close();
+      polling = false;
+    }
+  };
+
+  const heartbeat = setInterval(() => {
+    if (!closed) response.write(`: heartbeat ${now().toISOString()}\n\n`);
+  }, 10_000);
+  heartbeat.unref();
+  const interval = setInterval(poll, 100);
+  interval.unref();
+
+  const cleanup = (): void => {
+    if (closed) return;
+    closed = true;
+    clearInterval(interval);
+    clearInterval(heartbeat);
+    streams.delete(response);
+  };
+  request.once('close', cleanup);
+  response.once('close', cleanup);
+  poll();
 }
 
 function matchArtifactId(pathname: string): string | undefined {

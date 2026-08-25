@@ -1356,6 +1356,36 @@ h3 {
   font-size: 0.64rem;
 }
 
+.timeline-heading-status {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.6rem 0.9rem;
+}
+
+.timeline-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--green-700, #2d8f5f);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+}
+
+.timeline-live::before {
+  width: 0.48rem;
+  height: 0.48rem;
+  border-radius: 999px;
+  background: currentColor;
+  content: '';
+  box-shadow: 0 0 0 0.22rem rgb(45 143 95 / 12%);
+}
+
+.timeline-live.is-reconnecting {
+  color: var(--amber-700, #9a6417);
+}
+
 .timeline {
   position: relative;
   display: grid;
@@ -2049,6 +2079,12 @@ const state = {
   runtimesLoading: false,
   missionsLoading: false,
   detailLoading: false,
+  eventStream: null,
+  eventStreamMissionId: null,
+  eventStreamConnected: false,
+  lastDeliveryLatencyMs: null,
+  liveRenderTimer: null,
+  liveDetailTimer: null,
   connection: { online: false, message: { key: 'connection.connecting' } },
   pageAlert: null,
   formMessage: null,
@@ -2755,6 +2791,9 @@ function timelineDescription(entry) {
   if (entry.kind === 'runtime.process_finished') {
     return t('timeline.description.runtimeFinished');
   }
+  if (entry.kind === 'context.controller_prompt') {
+    return t('timeline.description.controllerContext');
+  }
   return t('timeline.description.kernelFallback');
 }
 
@@ -2888,6 +2927,8 @@ function renderRuntimeEventFacts(dataValue) {
   const data = recordValue(dataValue) || {};
   const facts = createElement('div', 'runtime-event-facts');
   const artifact = recordValue(data.nativeArtifact);
+  const normalized = recordValue(data.normalized) || {};
+  const semanticFacts = Array.isArray(normalized.semanticFacts) ? normalized.semanticFacts : [];
   const causalParents = Array.isArray(data.causalParentIds) ? data.causalParentIds : [];
   const values = [
     t('intelligence.field.sourceSequence') + ' #' + displayValue(data.sourceSequence),
@@ -2899,6 +2940,13 @@ function renderRuntimeEventFacts(dataValue) {
     t('intelligence.field.nativeArtifact') +
       ' · ' +
       displayValue(artifact && (artifact.artifactId || artifact.relativePath)),
+    t('intelligence.field.semanticFacts') +
+      ' · ' +
+      displayValue(
+        semanticFacts.map(function (fact) {
+          return fact && typeof fact.kind === 'string' ? fact.kind : t('common.unknown');
+        }),
+      ),
   ];
   values.forEach(function (value) {
     facts.append(createElement('span', 'runtime-event-fact', value));
@@ -2930,7 +2978,9 @@ function renderTimeline(entries) {
     heading.append(title, meta);
     const description = createElement('p', 'timeline-description', timelineDescription(entry));
     card.append(heading, description);
-    if (entry.kind === 'runtime.event') card.append(renderRuntimeEventFacts(entry.data));
+    if (entry.kind === 'runtime.event' || entry.kind === 'context.controller_prompt') {
+      card.append(renderRuntimeEventFacts(entry.data));
+    }
     if (entry.data !== undefined) {
       const details = createElement('details', 'timeline-details');
       const summary = createElement('summary', '', t('timeline.viewKernelRecord'));
@@ -3273,6 +3323,120 @@ function renderRuntimeIntelligence(mission, timeline) {
   return section;
 }
 
+function renderContextGraph(value) {
+  const graph = recordValue(value) || {};
+  const nodes = Array.isArray(graph.nodes) ? graph.nodes : [];
+  const edges = Array.isArray(graph.edges) ? graph.edges : [];
+  const nodeById = new Map(
+    nodes
+      .filter(function (node) { return node && typeof node.nodeId === 'string'; })
+      .map(function (node) { return [node.nodeId, node]; }),
+  );
+  const visibleContexts = nodes
+    .filter(function (node) { return node && node.kind === 'context-item'; })
+    .slice(-40);
+  const evidenceChains = edges
+    .filter(function (edge) {
+      return edge && ['tool-file', 'file-test', 'event-observation'].includes(edge.kind);
+    })
+    .slice(-40)
+    .map(function (edge) {
+      return {
+        ...edge,
+        fromLabel: (nodeById.get(edge.fromNodeId) || {}).label || edge.fromNodeId,
+        toLabel: (nodeById.get(edge.toNodeId) || {}).label || edge.toNodeId,
+      };
+    });
+  const subagents = edges
+    .filter(function (edge) { return edge && edge.kind === 'subagent-lineage'; })
+    .slice(-30)
+    .map(function (edge) {
+      return {
+        ...edge,
+        fromLabel: (nodeById.get(edge.fromNodeId) || {}).label || edge.fromNodeId,
+        toLabel: (nodeById.get(edge.toNodeId) || {}).label || edge.toNodeId,
+      };
+    });
+  const contextDiffs = (Array.isArray(graph.contextDiffs) ? graph.contextDiffs : []).slice(-30);
+  const unavailable = (Array.isArray(graph.unavailable) ? graph.unavailable : []).slice(-30);
+  const section = createElement('section', 'runtime-intelligence context-graph');
+  const heading = createElement('div', 'intelligence-heading');
+  heading.append(
+    createElement('p', 'eyebrow', t('contextGraph.eyebrow')),
+    createElement('h3', '', t('contextGraph.heading')),
+  );
+  const grid = createElement('div', 'intelligence-grid');
+  grid.append(
+    renderIntelligenceCard({
+      titleKey: 'contextGraph.contextItems',
+      records: visibleContexts,
+      identityKeys: ['label', 'nodeId'],
+      facts: function (record) {
+        return [
+          ['contextGraph.field.kind', displayValue(record.kind)],
+          ['contextGraph.field.digest', displayValue(record.digest)],
+          ['contextGraph.field.evidence', displayValue(record.evidenceRefs)],
+        ];
+      },
+    }),
+    renderIntelligenceCard({
+      titleKey: 'contextGraph.evidenceChains',
+      records: evidenceChains,
+      identityKeys: ['edgeId'],
+      wide: true,
+      facts: function (record) {
+        return [
+          ['contextGraph.field.relation', displayValue(record.kind)],
+          ['contextGraph.field.from', displayValue(record.fromLabel)],
+          ['contextGraph.field.to', displayValue(record.toLabel)],
+          ['contextGraph.field.basis', displayValue(record.basis)],
+          ['contextGraph.field.evidence', displayValue(record.evidenceRefs)],
+        ];
+      },
+    }),
+    renderIntelligenceCard({
+      titleKey: 'contextGraph.contextDiffs',
+      records: contextDiffs,
+      identityKeys: ['diffId'],
+      facts: function (record) {
+        return [
+          ['contextGraph.field.from', displayValue(record.fromRuntimeEventId)],
+          ['contextGraph.field.to', displayValue(record.toRuntimeEventId)],
+          ['contextGraph.field.added', displayValue(record.added)],
+          ['contextGraph.field.removed', displayValue(record.removed)],
+          ['contextGraph.field.retained', displayValue(record.retained)],
+        ];
+      },
+    }),
+    renderIntelligenceCard({
+      titleKey: 'contextGraph.subagents',
+      records: subagents,
+      identityKeys: ['edgeId'],
+      facts: function (record) {
+        return [
+          ['contextGraph.field.from', displayValue(record.fromLabel)],
+          ['contextGraph.field.to', displayValue(record.toLabel)],
+          ['contextGraph.field.basis', displayValue(record.basis)],
+        ];
+      },
+    }),
+    renderIntelligenceCard({
+      titleKey: 'contextGraph.unavailable',
+      records: unavailable,
+      identityKeys: ['kind', 'boundaryId'],
+      wide: true,
+      facts: function (record) {
+        return [
+          ['contextGraph.field.reason', displayValue(record.reason)],
+          ['contextGraph.field.evidence', displayValue(record.evidenceRefs)],
+        ];
+      },
+    }),
+  );
+  section.append(heading, grid);
+  return section;
+}
+
 function receiptFromDetail(detail, mission) {
   if (detail && detail.receipt && typeof detail.receipt === 'object') return detail.receipt;
   if (mission && mission.receipt && typeof mission.receipt === 'object') return mission.receipt;
@@ -3443,7 +3607,19 @@ function renderDetail() {
       count: timeline.length,
     }),
   );
-  timelineHeading.append(timelineHeadingText, count);
+  const liveText = state.eventStreamConnected
+    ? Number.isFinite(state.lastDeliveryLatencyMs)
+      ? t('timeline.liveConnected', { latency: Math.round(state.lastDeliveryLatencyMs) })
+      : t('timeline.liveWaiting')
+    : t('timeline.liveDisconnected');
+  const live = createElement(
+    'span',
+    'timeline-live' + (state.eventStreamConnected ? '' : ' is-reconnecting'),
+    liveText,
+  );
+  const timelineStatus = createElement('div', 'timeline-heading-status');
+  timelineStatus.append(live, count);
+  timelineHeading.append(timelineHeadingText, timelineStatus);
   timelineSection.append(timelineHeading);
   if (timeline.length === 0) {
     timelineSection.append(
@@ -3460,7 +3636,12 @@ function renderDetail() {
   }
   const receipt = receiptFromDetail(detail, mission);
   if (receipt) timelineSection.append(renderReceipt(receipt));
-  content.append(hero, renderRuntimeIntelligence(mission, timeline), timelineSection);
+  content.append(
+    hero,
+    renderRuntimeIntelligence(mission, timeline),
+    renderContextGraph(detail.contextGraph),
+    timelineSection,
+  );
   elements.missionDetail.replaceChildren(content);
 }
 
@@ -3490,10 +3671,91 @@ async function loadDetail(missionId, options) {
 }
 
 function selectMission(missionId) {
+  closeEventStream();
   state.selectedMissionId = missionId;
   state.detail = null;
   renderMissionList();
   loadDetail(missionId);
+  openEventStream(missionId);
+}
+
+function closeEventStream() {
+  if (state.eventStream) state.eventStream.close();
+  state.eventStream = null;
+  state.eventStreamMissionId = null;
+  state.eventStreamConnected = false;
+}
+
+function latestTimelineSequence() {
+  return timelineFromDetail(state.detail).reduce(function (latest, entry) {
+    return Number.isSafeInteger(entry.seq) ? Math.max(latest, entry.seq) : latest;
+  }, 0);
+}
+
+function scheduleLiveRender() {
+  if (state.liveRenderTimer !== null) return;
+  state.liveRenderTimer = window.setTimeout(function () {
+    state.liveRenderTimer = null;
+    if (state.selectedMissionId === state.eventStreamMissionId) renderDetail();
+  }, 50);
+}
+
+function scheduleLiveDetailRefresh(missionId) {
+  if (state.liveDetailTimer !== null) return;
+  state.liveDetailTimer = window.setTimeout(async function () {
+    state.liveDetailTimer = null;
+    if (state.selectedMissionId !== missionId) return;
+    if (state.detailLoading) {
+      scheduleLiveDetailRefresh(missionId);
+      return;
+    }
+    await loadDetail(missionId, { quiet: true });
+  }, 500);
+}
+
+function openEventStream(missionId) {
+  if (!missionId || typeof EventSource !== 'function') return;
+  const after = latestTimelineSequence();
+  const source = new EventSource(
+    '/api/v1/missions/' + encodeURIComponent(missionId) + '/events?after=' + String(after),
+  );
+  state.eventStream = source;
+  state.eventStreamMissionId = missionId;
+  source.addEventListener('open', function () {
+    if (state.eventStream !== source) return;
+    state.eventStreamConnected = true;
+    scheduleLiveRender();
+    scheduleLiveDetailRefresh(missionId);
+  });
+  source.addEventListener('timeline', function (event) {
+    if (state.eventStream !== source || state.selectedMissionId !== missionId) return;
+    let payload;
+    try {
+      payload = JSON.parse(event.data);
+    } catch (_error) {
+      return;
+    }
+    if (!payload || !payload.entry || typeof payload.entry.seq !== 'number') return;
+    const detail = state.detail;
+    if (detail && typeof detail === 'object') {
+      if (!Array.isArray(detail.timeline)) detail.timeline = [];
+      if (!detail.timeline.some(function (entry) { return entry.seq === payload.entry.seq; })) {
+        detail.timeline.push(payload.entry);
+        detail.timeline.sort(function (left, right) { return left.seq - right.seq; });
+      }
+    }
+    state.lastDeliveryLatencyMs =
+      typeof payload.journalToWireLatencyMs === 'number'
+        ? Math.max(0, Date.now() - Date.parse(payload.sentAt) + payload.journalToWireLatencyMs)
+        : null;
+    state.eventStreamConnected = true;
+    scheduleLiveRender();
+  });
+  source.addEventListener('error', function () {
+    if (state.eventStream !== source) return;
+    state.eventStreamConnected = false;
+    scheduleLiveRender();
+  });
 }
 
 function routeStages(route) {

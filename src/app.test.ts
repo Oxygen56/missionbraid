@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { startMissionBraidApp, type AppEngine } from './app.js';
+import { deriveContextGraph } from './context-graph.js';
 import {
   DOMAIN_SCHEMA_VERSION,
   type MissionCommandActionV1,
@@ -298,6 +299,48 @@ describe('MissionBraid local app', () => {
     expect(state.missions.size).toBe(1);
   });
 
+  it('streams newly persisted timeline entries and resumes from a Mission sequence cursor', async () => {
+    const fixture = await createWorkspace();
+    const state = new FakeEngineState();
+    const missionId = 'mission-live';
+    state.missions.set(missionId, projection(missionId, 'running'));
+    state.timelines.set(missionId, [timeline(missionId, 'mission.created', 'Mission created')]);
+    const app = await startMissionBraidApp({
+      stateDir: fixture.stateDir,
+      port: 0,
+      engineFactory: () => new FakeEngine(state),
+      discoverRuntimes: async () => readyCatalog(),
+      now: () => new Date('2026-08-24T03:00:01.000Z'),
+    });
+    const controller = new AbortController();
+    try {
+      const response = await fetch(`${app.url}/api/v1/missions/${missionId}/events?after=1`, {
+        signal: controller.signal,
+      });
+      expect(response.status).toBe(200);
+      expect(response.headers.get('content-type')).toContain('text/event-stream');
+
+      state.timelines.get(missionId)?.push({
+        seq: 2,
+        occurredAt: '2026-08-24T03:00:00.900Z',
+        recordedAt: '2026-08-24T03:00:00.900Z',
+        category: 'runtime',
+        kind: 'runtime.event',
+        label: 'codex · tool · source #1',
+        data: { runtimeEventId: 'runtime-live-1', semanticKind: 'tool' },
+      });
+      const event = await readSseEvent(response);
+      expect(event).toContain('id: 2');
+      expect(event).toContain('event: timeline');
+      expect(event).toContain('"runtimeEventId":"runtime-live-1"');
+      expect(event).toContain('"journalToWireLatencyMs":100');
+      expect(event).not.toContain('id: 1');
+    } finally {
+      controller.abort();
+      await app.close();
+    }
+  });
+
   it('keeps the app bound to loopback hosts', async () => {
     await expect(startMissionBraidApp({ host: '0.0.0.0', port: 0 })).rejects.toThrow('loopback');
   });
@@ -434,6 +477,10 @@ class FakeEngine implements AppEngine {
     return this.#state.artifacts.get(artifactId);
   }
 
+  async contextGraph(missionId: string) {
+    return deriveContextGraph({ timeline: this.timeline(missionId) });
+  }
+
   status(missionId: string): MissionStatusView {
     return {
       mission: this.#require(missionId),
@@ -496,6 +543,7 @@ function timeline(missionId: string, kind: string, label: string): MissionTimeli
   return {
     seq: kind === 'mission.created' ? 1 : 2,
     occurredAt: '2026-08-24T03:00:00.000Z',
+    recordedAt: '2026-08-24T03:00:00.000Z',
     category: kind === 'receipt.issued' ? 'receipt' : 'mission',
     kind,
     label,
@@ -630,4 +678,30 @@ async function waitFor<T>(read: () => Promise<T | undefined>, timeoutMs = 2_000)
     await new Promise((resolveWait) => setTimeout(resolveWait, 10));
   }
   throw new Error(`Timed out after ${String(timeoutMs)}ms`);
+}
+
+async function readSseEvent(response: Response, timeoutMs = 2_000): Promise<string> {
+  if (response.body === null) throw new Error('SSE response did not expose a body');
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let content = '';
+  const deadline = Date.now() + timeoutMs;
+  try {
+    while (Date.now() < deadline) {
+      const remaining = deadline - Date.now();
+      const result = await Promise.race([
+        reader.read(),
+        new Promise<never>((_resolve, reject) =>
+          setTimeout(() => reject(new Error('Timed out reading SSE event')), remaining),
+        ),
+      ]);
+      if (result.done) break;
+      content += decoder.decode(result.value, { stream: true });
+      const boundary = content.indexOf('\n\n');
+      if (boundary >= 0) return content.slice(0, boundary);
+    }
+    throw new Error('SSE stream ended before an event was received');
+  } finally {
+    await reader.cancel().catch(() => undefined);
+  }
 }

@@ -14,6 +14,7 @@ import {
   projectCanonicalCapsule,
   type CanonicalCapsuleV1,
 } from './capsule.js';
+import { deriveContextGraph, type ContextGraphV1 } from './context-graph.js';
 import {
   DOMAIN_SCHEMA_VERSION,
   type ContractV1,
@@ -33,7 +34,11 @@ import {
   type StoredEventV1,
   type WorkspaceFenceV1,
 } from './domain.js';
-import { NativeArtifactStore, type NativeArtifactContent } from './artifact-store.js';
+import {
+  NativeArtifactStore,
+  sanitizeNativeArtifact,
+  type NativeArtifactContent,
+} from './artifact-store.js';
 import {
   PROVENANCE_SCHEMA_VERSION,
   type ProvenanceManifestV1,
@@ -57,6 +62,7 @@ import {
   resolveCooperativeHandoffOrdering,
   type RuntimeSourcePosition,
 } from './runtime-events.js';
+import { extractRuntimeSemanticFacts } from './runtime-semantics.js';
 import { runCommandVerifier, type CommandVerificationResultV1 } from './verifier.js';
 import {
   createStageWorkspaceDelta,
@@ -116,6 +122,7 @@ export interface MissionStatusView {
 export interface MissionTimelineEntry {
   readonly seq: number;
   readonly occurredAt: string;
+  readonly recordedAt: string;
   readonly category:
     | 'mission'
     | 'profile'
@@ -409,6 +416,22 @@ export class MissionEngine {
 
   async artifact(artifactId: string): Promise<NativeArtifactContent | undefined> {
     return await this.#artifacts.get(artifactId);
+  }
+
+  async contextGraph(missionId: string): Promise<ContextGraphV1> {
+    const timeline = this.timeline(missionId);
+    const artifactIds = new Set<string>();
+    for (const entry of timeline) {
+      const data = isJsonObject(entry.data) ? entry.data : undefined;
+      const artifact = isJsonObject(data?.nativeArtifact) ? data.nativeArtifact : undefined;
+      if (typeof artifact?.artifactId === 'string') artifactIds.add(artifact.artifactId);
+    }
+    const nativeArtifacts = (
+      await Promise.all(
+        [...artifactIds].map(async (artifactId) => await this.#artifacts.get(artifactId)),
+      )
+    ).filter((artifact): artifact is NativeArtifactContent => artifact !== undefined);
+    return deriveContextGraph({ timeline, nativeArtifacts });
   }
 
   async executeCommand(commandId: string, signal?: AbortSignal): Promise<MissionExecutionResult> {
@@ -828,12 +851,13 @@ export class MissionEngine {
     const runtimeEventIdByNativeIdentity = new Map<string, string>();
     const reportedProfiles = new Set<string>();
     const onOutput = async (line: RuntimeOutputLine): Promise<void> => {
+      const sanitized = sanitizeNativeArtifact(line.line);
       const artifact = await this.#artifacts.putLine(line.line);
       const causalParentIds = nativeParentCorrelationIds(line.value).flatMap((parentId) => {
         const runtimeEventId = runtimeEventIdByNativeIdentity.get(parentId);
         return runtimeEventId === undefined ? [] : [runtimeEventId];
       });
-      const runtimeEvent = normalizeRuntimeOutput(
+      const baseRuntimeEvent = normalizeRuntimeOutput(
         line,
         {
           missionId,
@@ -846,6 +870,19 @@ export class MissionEngine {
         },
         artifact,
       );
+      const semanticFacts = extractRuntimeSemanticFacts(baseRuntimeEvent, {
+        artifactId: artifact.artifactId,
+        sha256: artifact.sha256,
+        mediaType: artifact.mediaType,
+        content: sanitized.content,
+      });
+      const runtimeEvent = {
+        ...baseRuntimeEvent,
+        normalized: {
+          ...(isJsonObject(baseRuntimeEvent.normalized) ? baseRuntimeEvent.normalized : {}),
+          semanticFacts: semanticFacts as unknown as JsonValue,
+        },
+      };
       this.#append(
         {
           schemaVersion: DOMAIN_SCHEMA_VERSION,
@@ -900,6 +937,46 @@ export class MissionEngine {
       };
     };
     const prompt = createAttemptPrompt(spec, stage, mission.contract, projectedCapsuleText);
+    const promptArtifact = await this.#artifacts.putLine(prompt);
+    const contextSnapshotId = `context-snapshot-${hashPayload({
+      attemptId,
+      bindingId,
+      promptSha256: promptArtifact.sha256,
+    }).slice(0, 28)}`;
+    this.#observe(
+      missionId,
+      'context.controller_prompt',
+      {
+        contextSnapshotId,
+        attemptId,
+        branchId,
+        bindingId,
+        stageId: stage.stageId,
+        contractId: mission.contract.contractId,
+        profileId: profile.profileId,
+        source: 'missionbraid-controller',
+        adapterBinding: 'native-process-prompt-argument',
+        visibility: 'known',
+        completeness: 'partial',
+        nativeArtifact: promptArtifact as unknown as JsonValue,
+        components: [
+          'outcome_contract',
+          'mission_constraints',
+          'acceptance_criteria',
+          'stage_instruction',
+          ...(capsule === undefined ? [] : ['handoff_capsule']),
+          'controller_boundary_instruction',
+        ],
+        unavailable: [
+          'complete_effective_context',
+          'hidden_chain_of_thought',
+          'kv_cache',
+          'signed_or_private_thinking',
+        ],
+      },
+      fence,
+      attemptId,
+    );
     const runtimeResult = await this.#runRuntime(stage, profile, {
       workspace: spec.workspace,
       prompt,
@@ -1563,6 +1640,7 @@ function timelineEntry(
   const base = {
     seq: event.seq,
     occurredAt: event.occurredAt,
+    recordedAt: event.recordedAt,
     ...(event.attemptId === undefined ? {} : { attemptId: event.attemptId }),
     ...(attemptHarness === undefined ? {} : { harness: attemptHarness }),
   };
@@ -1758,10 +1836,15 @@ function observationLabel(kind: string): string {
     'handoff.rejected': 'Handoff rejected',
     'runtime.process_started': 'Runtime process started',
     'runtime.process_finished': 'Runtime process finished',
+    'context.controller_prompt': 'Observable controller context recorded',
     'verification.completed': 'Acceptance criterion verified',
     'failure.observed': 'Failure observed',
   };
   return labels[kind] ?? kind;
+}
+
+function isJsonObject(value: unknown): value is Record<string, JsonValue> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
 function profileDefinition(stage: AttemptStageSpecV1): RuntimeProfileDefinitionV1 {
