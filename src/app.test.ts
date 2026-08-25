@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { startMissionBraidApp, type AppEngine } from './app.js';
+import type { CompositeCheckpointManifestV1 } from './composite-checkpoint.js';
 import { deriveContextGraph } from './context-graph.js';
 import {
   DOMAIN_SCHEMA_VERSION,
@@ -397,6 +398,37 @@ describe('MissionBraid local app', () => {
     }
   });
 
+  it('creates a Composite Checkpoint through the normal Mission API', async () => {
+    const fixture = await createWorkspace();
+    const state = new FakeEngineState();
+    const missionId = 'mission-checkpoint';
+    state.missions.set(missionId, projection(missionId, 'succeeded'));
+    state.timelines.set(missionId, [timeline(missionId, 'mission.created', 'Mission created')]);
+    const app = await startMissionBraidApp({
+      stateDir: fixture.stateDir,
+      port: 0,
+      engineFactory: () => new FakeEngine(state),
+      discoverRuntimes: async () => readyCatalog(),
+    });
+    try {
+      const response = await fetch(`${app.url}/api/v1/missions/${missionId}/checkpoints`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ attemptId: 'attempt-checkpoint' }),
+      });
+      expect(response.status).toBe(201);
+      expect(await response.json()).toMatchObject({
+        checkpoint: {
+          checkpointId: 'checkpoint-app-fixture',
+          source: { missionId, attemptId: 'attempt-checkpoint' },
+        },
+      });
+      expect(state.checkpointRequests).toEqual([{ missionId, attemptId: 'attempt-checkpoint' }]);
+    } finally {
+      await app.close();
+    }
+  });
+
   it('keeps the app bound to loopback hosts', async () => {
     await expect(startMissionBraidApp({ host: '0.0.0.0', port: 0 })).rejects.toThrow('loopback');
   });
@@ -418,6 +450,10 @@ class FakeEngineState {
   readonly externalEffects: Array<{
     readonly missionId: string;
     readonly input: MissionExternalEffectRequestV1;
+  }> = [];
+  readonly checkpointRequests: Array<{
+    readonly missionId: string;
+    readonly attemptId?: string;
   }> = [];
 }
 
@@ -552,6 +588,43 @@ class FakeEngine implements AppEngine {
       source: 'dispatch',
       receipt: { recordId: 'record-fixture' },
       evidenceRefs: ['target:record-fixture'],
+    };
+  }
+
+  async createCompositeCheckpoint(
+    missionId: string,
+    requestedAttemptId?: string,
+  ): Promise<CompositeCheckpointManifestV1> {
+    this.#require(missionId);
+    this.#state.checkpointRequests.push({
+      missionId,
+      ...(requestedAttemptId === undefined ? {} : { attemptId: requestedAttemptId }),
+    });
+    return {
+      schemaVersion: 'missionbraid.dev/composite-checkpoint/v1',
+      checkpointId: 'checkpoint-app-fixture',
+      manifestHash: 'sha256:checkpoint-app-fixture',
+      source: {
+        missionId,
+        branchId: `branch-root-${missionId}`,
+        attemptId: requestedAttemptId ?? 'attempt-latest',
+        contractId: 'contract-app-fixture',
+        profileId: 'profile-app-fixture',
+        workspaceKey: 'workspace-app-fixture',
+      },
+      eventPrefix: { throughSeq: 1, headHash: 'head-hash' },
+      workspace: {
+        workspaceKey: 'workspace-app-fixture',
+        state: 'restorable-artifact',
+        workspaceDigest: 'workspace-digest',
+        artifactRef: `git-commit:${'a'.repeat(40)}`,
+        artifactDigest: `git-tree:${'b'.repeat(40)}`,
+      },
+      process: { status: 'stopped', stoppedAt: '2026-08-24T03:00:00.000Z' },
+      nativeSession: { status: 'unavailable', harness: 'codex', reason: 'not exposed' },
+      externalEffectFrontier: [],
+      components: [],
+      capturedAt: '2026-08-24T03:00:00.000Z',
     };
   }
 

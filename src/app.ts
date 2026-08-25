@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path';
 
 import { APP_CSS, APP_HTML, APP_JAVASCRIPT } from './app-page.js';
 import type { NativeArtifactContent } from './artifact-store.js';
+import type { CompositeCheckpointManifestV1 } from './composite-checkpoint.js';
 import type { ContextGraphV1 } from './context-graph.js';
 import {
   MissionEngine,
@@ -20,6 +21,7 @@ import {
 import { createMissionDraft, MissionDraftError } from './mission-draft.js';
 import { discoverRuntimeCatalog, type RuntimeCatalogEntry } from './runtime-catalog.js';
 import type {
+  BranchV1,
   JsonValue,
   MissionCommandActionV1,
   MissionCommandV1,
@@ -58,6 +60,12 @@ export interface AppEngine {
   commands(missionId?: string): MissionCommandV1[];
   artifact(artifactId: string): Promise<NativeArtifactContent | undefined>;
   contextGraph(missionId: string): Promise<ContextGraphV1>;
+  branches?(missionId: string): readonly BranchV1[];
+  compositeCheckpoints?(missionId: string): readonly CompositeCheckpointManifestV1[];
+  createCompositeCheckpoint?(
+    missionId: string,
+    requestedAttemptId?: string,
+  ): Promise<CompositeCheckpointManifestV1>;
   pendingToolGates?(missionId: string): Promise<readonly MissionToolGateView[]>;
   decideToolGate?(
     missionId: string,
@@ -481,6 +489,27 @@ export async function startMissionBraidApp(
       }
       return;
     }
+    const checkpointMissionId = matchCheckpointCollection(url.pathname);
+    if (checkpointMissionId !== undefined && request.method === 'POST') {
+      const engine = engineFactory(stateDir);
+      try {
+        if (engine.createCompositeCheckpoint === undefined) {
+          throw new AppHttpError(
+            501,
+            'COMPOSITE_CHECKPOINT_UNAVAILABLE',
+            'Composite Checkpoint creation is unavailable.',
+          );
+        }
+        const body = requireJsonRecord(await readJson(request));
+        const attemptId =
+          body.attemptId === undefined ? undefined : requireJsonString(body.attemptId, 'attemptId');
+        const checkpoint = await engine.createCompositeCheckpoint(checkpointMissionId, attemptId);
+        sendJson(response, 201, { checkpoint });
+      } finally {
+        engine.close();
+      }
+      return;
+    }
     const missionId = matchMissionId(url.pathname);
     if (missionId !== undefined && request.method === 'GET') {
       const engine = engineFactory(stateDir);
@@ -493,6 +522,8 @@ export async function startMissionBraidApp(
           timeline: engine.timeline(missionId),
           contextGraph: await engine.contextGraph(missionId),
           toolGates,
+          branches: engine.branches?.(missionId) ?? [],
+          compositeCheckpoints: engine.compositeCheckpoints?.(missionId) ?? [],
           operation: operationView(
             status.mission,
             operations.get(missionId),
@@ -767,6 +798,11 @@ function matchExternalEffectAction(
   );
   if (match?.[1] === undefined || match[2] === undefined) return undefined;
   return { missionId: decodeURIComponent(match[1]), effectId: decodeURIComponent(match[2]) };
+}
+
+function matchCheckpointCollection(pathname: string): string | undefined {
+  const match = pathname.match(/^\/api\/v1\/missions\/([^/]+)\/checkpoints$/);
+  return match?.[1] === undefined ? undefined : decodeURIComponent(match[1]);
 }
 
 function requireExternalEffectBody(

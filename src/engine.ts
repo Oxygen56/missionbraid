@@ -494,6 +494,11 @@ export class MissionEngine {
     });
   }
 
+  branches(missionId: string): readonly BranchV1[] {
+    this.#requireMission(missionId);
+    return this.#store.listBranches(missionId);
+  }
+
   async createCompositeCheckpoint(
     missionId: string,
     requestedAttemptId?: string,
