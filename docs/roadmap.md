@@ -1,8 +1,8 @@
 # MissionBraid Product Roadmap
 
 > **Plan:** ten major product iterations in total. Iteration 1 is the verified
-> local foundation. Iteration 2 is implemented and validated by an integrated
-> same-host real three-Harness Workbench record. Iterations 3–10 remain planned.
+> local foundation. Iterations 2–4 are implemented and validated by retained
+> same-host real-Runtime Workbench records. Iterations 5–10 remain planned.
 > The number describes dependency-complete product releases, not calendar
 > sprints.
 
@@ -43,8 +43,8 @@ engineering outputs but cannot complete an iteration by themselves.
 | ----------------------------------------------- | ----------------------------------------------------------------------------------------- | ----------------------- |
 | 1. Mission continuity foundation                | One Mission survives process and Harness changes and closes with a Receipt                | Implemented local slice |
 | 2. Runtime intelligence and Event IR            | Effective Profiles and native events share one typed Runtime model                        | Validated local slice   |
-| 3. Live flight recorder and Context Graph       | Developers see context, tools, files, tests, cost, and subagents while work runs          | Planned                 |
-| 4. Tool gateway and live debugger               | A real mutable tool can be stopped before dispatch and changed or rejected                | Planned                 |
+| 3. Live flight recorder and Context Graph       | Developers see context, tools, files, tests, cost, and subagents while work runs          | Validated local slice   |
+| 4. Tool gateway and live debugger               | A real mutable tool can be stopped before dispatch and changed or rejected                | Validated local slice   |
 | 5. Composite checkpoints, Fork, and Replay      | A retained execution boundary becomes an isolated executable comparison Branch            | Planned                 |
 | 6. Adaptive planning and cross-Harness handoff  | Profiles are selected explainably and Handoff occurs only when a Runtime change is needed | Planned                 |
 | 7. Failure intelligence and diagnostic Branches | Evidence and single-variable probes distinguish likely failure layers                     | Planned                 |
@@ -184,6 +184,12 @@ subagents, usage, and failures in one live timeline.
 The feature is a streamed stdout panel, a completed-session animation, or a
 timeline whose entries cannot be tied back to native evidence.
 
+### Completion evidence
+
+The [retained Iteration 3 record](../evidence/iteration-3-flight-recorder-local-2026-08-26.json)
+captures live Codex and Claude Code protocol paths in the normal Workbench,
+failed-test causality, local redaction, latency, and restart-stable evidence.
+
 ## Iteration 4 — Tool gateway and live debugger
 
 ### User-visible result
@@ -221,6 +227,15 @@ terminate the run.
 
 The system alerts after execution, pauses only a UI animation, uses only a mock
 tool, or shows an approval dialog that is not on the execution path.
+
+### Completion evidence
+
+The [native Tool Gateway record](../evidence/iteration-4-tool-gateway-local-2026-08-26.json)
+and [external Effect recovery record](../evidence/iteration-4-external-effect-local-2026-08-26.json)
+capture the two required real paths: a Claude Code `PreToolUse` Write is changed
+in the browser before dispatch, and a queryable HTTP Effect is reconciled after
+controller `SIGKILL` without a second dispatch. Both remain same-host local
+evidence, not production or independent reproduction.
 
 ## Iteration 5 — Composite checkpoints, Fork, and Replay
 

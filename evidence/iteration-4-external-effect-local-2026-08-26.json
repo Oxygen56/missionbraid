@@ -1,0 +1,55 @@
+{
+  "schemaVersion": "missionbraid.dev/evidence/iteration-4-external-effect/v1",
+  "evidenceLevel": "same-host-local-real-http-target-and-controller-sigkill",
+  "recordedOn": "2026-08-25",
+  "productEntry": "versioned local external Effect coordination API plus Workbench timeline",
+  "implementation": {
+    "revision": "1d7b37971d89458658852b2598b46be357e7f41d",
+    "tree": "8dd2f682b8c869f362f34bdfefee3bc6b1bbdcd0",
+    "dirtyBeforeRun": false,
+    "nodeVersion": "v26.4.0"
+  },
+  "missionId": "mission-c1dd7267-5069-435d-a7d2-8925e0bd805f",
+  "attemptId": "attempt-73232f16-2eed-4fe4-a97c-7efeb1b34091",
+  "effectId": "effect-iteration-4-crash-reconcile",
+  "target": {
+    "targetId": "iteration-4-http-target",
+    "idempotencyKey": "iteration-4-create-once",
+    "postCount": 1,
+    "callOrder": ["POST:iteration-4-create-once", "GET:iteration-4-create-once"],
+    "receipt": {
+      "idempotencyKey": "iteration-4-create-once",
+      "recordId": "receipt-1",
+      "body": {
+        "operation": "create",
+        "value": "MissionBraid external Effect proof"
+      }
+    }
+  },
+  "injectedCrash": {
+    "signal": "SIGKILL",
+    "afterTargetAccepted": true,
+    "beforeExecutedTransitionPersisted": true,
+    "durableStatusBeforeRestart": "dispatch_started",
+    "staleLeaseRecoveryDelayMs": 30503
+  },
+  "reconciliation": {
+    "source": "lookup",
+    "lookupBeforeAnyRetry": true,
+    "duplicateDispatches": 0,
+    "intendedSeq": 651,
+    "dispatchStartedSeq": 653,
+    "reconcileStartedSeq": 655,
+    "confirmedSeq": 656
+  },
+  "refreshedReceipt": {
+    "commandId": "command-b01c584c-415c-4212-9ae5-ad3fb4b451a1",
+    "receiptId": "receipt-5f9e5b7f-3798-40ae-8f07-4730916bd8c6"
+  },
+  "restartRecovery": {
+    "source": "persisted",
+    "targetCallsAdded": 0
+  },
+  "claimBoundary": "This proves a registered queryable HTTP Effect target accepted one request after intended and dispatch_started were durable, the controller was killed before the local result transition, and a restarted Workbench reconciled by target lookup without a second dispatch. The refreshed Receipt includes the confirmed Effect and another restart returns persisted state without target traffic. It does not prove arbitrary non-queryable services, compensation policy, organizational authorization, production use, or independent external reproduction.",
+  "proofRoot": "/var/folders/s6/97lfn3_942g3b1w0cw82sgz00000gn/T/missionbraid-i4-tool-gateway-qzH0YM"
+}

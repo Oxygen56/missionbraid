@@ -6,7 +6,11 @@ production adoption are different results.
 
 ## Start here
 
-The strongest product-shaped result is the
+The strongest current product-shaped results are the
+[Iteration 3 live flight recorder](iteration-3-flight-recorder-local-2026-08-26.json),
+[Iteration 4 native Tool Gateway](iteration-4-tool-gateway-local-2026-08-26.json),
+and [Iteration 4 external Effect recovery](iteration-4-external-effect-local-2026-08-26.json).
+Together they extend the earlier
 [Iteration 2 three-Harness Workbench run](iteration-2-three-harness-local-2026-08-25.json).
 
 It records one clean-revision, same-host local Mission submitted through the
@@ -24,29 +28,35 @@ normal Workbench API:
 - a new Workbench process restored the same Mission head, Receipt, source
   sequences, and causal links.
 
-The Handoff result is ordering evidence, not an enforced live tool gate. The
-record does **not** prove automatic routing, executable Fork/Replay, arbitrary
-Harness compatibility, cross-host or third-party reproduction, hostile-Runtime
-isolation, production readiness, or adoption.
+The retained records now prove live native event inspection, one real Claude
+Code pre-tool gate with a browser-modified input, and exactly-once recovery for
+one queryable HTTP Effect after controller `SIGKILL`. They do **not** prove
+automatic routing, executable Fork/Replay, arbitrary Harness compatibility,
+cross-host or third-party reproduction, hostile-Runtime isolation, production
+readiness, or adoption.
 
-## Iteration 2 local validation
+## Iterations 2–4 local validation
 
 Iteration 2 is implemented in source, including Codex/Qoder/Claude Code
 execution Adapters, the root Branch, the four-part Runtime Profile model,
 source-scoped Event IR with sanitized native artifacts, durable command/outbox
 recovery, and the bilingual Workbench.
 
-The linked record satisfies the Iteration 2 completion gate at the
-**same-host local real-Runtime** level. Its implementation revision is
-`d14201b`, the worktree was clean before the run, all three Attempts succeeded,
-the event chain is valid, the Receipt is verified, and restart restoration is
-stable. Iteration 3+ capabilities and stronger cross-host or production
-evidence remain open.
+The linked records satisfy the Iteration 2, 3, and 4 completion gates at the
+**same-host local real-Runtime** level. Iteration 3 retains live Codex and Claude
+Code events, a causal failed-test path, redaction, measured journal-to-browser
+latency, and restart-stable ordering. Iteration 4 retains both the native
+pre-dispatch Tool Gateway flow and the external Effect crash/reconciliation
+flow. Iteration 5+ capabilities and stronger cross-host or production evidence
+remain open.
 
 ## Evidence catalog
 
 | Record                                                                                          | Evidence level                                    | What it establishes                                                                                                                 | What it does not establish                                                                        |
 | ----------------------------------------------------------------------------------------------- | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| [Iteration 4 native Tool Gateway](iteration-4-tool-gateway-local-2026-08-26.json)               | Same-host real native hook and browser            | Pre-dispatch block, browser input modification, Kernel decision before release, same-Mission Receipt, restart                       | Universal Harness control, child-process containment, production or external reproduction         |
+| [Iteration 4 external Effect recovery](iteration-4-external-effect-local-2026-08-26.json)       | Same-host real HTTP target and controller crash   | Durable intent, one dispatch, controller `SIGKILL`, lookup-before-retry reconciliation, Receipt, restart                            | Non-queryable targets, universal exactly-once, production or external reproduction                |
+| [Iteration 3 live flight recorder](iteration-3-flight-recorder-local-2026-08-26.json)           | Same-host live real Runtime and browser           | Live Codex/Claude events, Context Graph, failed-test causality, redaction, latency, restart                                         | Hidden model state, all Harness semantics, production or external reproduction                    |
 | [Iteration 2 Codex→Qoder→Claude](iteration-2-three-harness-local-2026-08-25.json)               | Same-host local real Runtime                      | Three real Attempts, Runtime model, source-scoped Event IR/native artifacts, cooperative Handoff ordering, Receipt, restart         | Tool gate, auto-routing, Fork/Replay, cross-host or production results                            |
 | [Unified Workbench Codex→Qoder](unified-workbench-codex-qoder-local-2026-08-24.json)            | Clean-public-clone local real Runtime             | Product entry, ordered real Attempts, matching checkpoint/baseline workspace snapshot, distinct workspace digests, Receipt, restart | Enforced pre-mutation gate, automatic planning, broad adapters, third-party or production results |
 | [E0 controller recovery](e0-local-2026-08-24.json)                                              | Local real Runtime                                | One controlled Mission recovers after controller `SIGKILL` and closes against the original Contract                                 | Independent reproduction or general crash safety                                                  |
@@ -78,10 +88,10 @@ successful path as inevitable.
 
 ## Reproduction boundary
 
-All current records are local and same-host. Clean-clone runs isolate repository
+All current records are local and same-host. Clean-worktree or clean-clone runs isolate repository
 revision, Mission state, and target workspace, but may reuse authenticated
 Runtime installations, user-level instructions, Skills, MCP configuration, and
 other host state. The next evidence-level upgrade is a third-party or cross-host
-reproduction under a documented Runtime Profile boundary. Live tool gating,
-automatic routing, and executable Fork/Replay require later product iterations,
-not a stronger restatement of this same-host record.
+reproduction under a documented Runtime Profile boundary. Automatic routing and
+executable Fork/Replay require later product iterations, not a stronger
+restatement of these same-host records.

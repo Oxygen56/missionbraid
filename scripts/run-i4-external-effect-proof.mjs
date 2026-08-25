@@ -149,6 +149,7 @@ try {
     evidenceLevel: 'same-host-local-real-http-target-and-controller-sigkill',
     recordedOn: new Date().toISOString().slice(0, 10),
     productEntry: 'versioned local external Effect coordination API plus Workbench timeline',
+    implementation: toolEvidence.implementation,
     missionId,
     attemptId,
     effectId,

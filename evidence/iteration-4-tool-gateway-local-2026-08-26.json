@@ -1,0 +1,66 @@
+{
+  "schemaVersion": "missionbraid.dev/evidence/iteration-4-tool-gateway/v1",
+  "evidenceLevel": "same-host-local-real-native-hook-and-browser",
+  "recordedOn": "2026-08-25",
+  "implementation": {
+    "revision": "1d7b37971d89458658852b2598b46be357e7f41d",
+    "tree": "8dd2f682b8c869f362f34bdfefee3bc6b1bbdcd0",
+    "dirtyBeforeRun": false,
+    "nodeVersion": "v26.4.0"
+  },
+  "runtime": {
+    "harness": "claude",
+    "version": "2.1.245"
+  },
+  "productEntry": "local Workbench native pre-tool decision card",
+  "missionId": "mission-c1dd7267-5069-435d-a7d2-8925e0bd805f",
+  "receiptId": "receipt-f9cd2a4b-d9ed-46eb-b213-f31cf50aa167",
+  "modifiedGate": {
+    "attemptId": "attempt-73232f16-2eed-4fe4-a97c-7efeb1b34091",
+    "gateId": "gate-6e6af782f04510d66e4646ae64a45fb4",
+    "effectId": "effect-72739c5fde3e31541ececddda6254e33",
+    "requestSha256": "1a7d0af849fc29eca9a5444eb944f3fd7cc873ef99476f85cf08e46e873c3528",
+    "originalInput": {
+      "content": "ORIGINAL\n",
+      "file_path": "/private/var/folders/s6/97lfn3_942g3b1w0cw82sgz00000gn/T/missionbraid-i4-tool-gateway-qzH0YM/workspace/original.txt"
+    },
+    "updatedInput": {
+      "content": "APPROVED\n",
+      "file_path": "/var/folders/s6/97lfn3_942g3b1w0cw82sgz00000gn/T/missionbraid-i4-tool-gateway-qzH0YM/workspace/approved.txt"
+    },
+    "originalSideEffectAbsentBeforeDecision": true,
+    "workbenchCardText": "Write 正在等待范围：branch_local_workspace · 控制：enforced原样批准按修改后输入执行拒绝",
+    "requestedSeq": 488,
+    "decidedSeq": 489,
+    "dispatchStartedSeq": 490,
+    "resultSeq": 495,
+    "confirmedSeq": 496
+  },
+  "browserDecisions": [
+    {
+      "gateId": "gate-744aca13c263ced566a4a6df34bb2d34",
+      "decision": "approve",
+      "toolName": "Bash"
+    },
+    {
+      "gateId": "gate-6e6af782f04510d66e4646ae64a45fb4",
+      "decision": "modify"
+    },
+    {
+      "gateId": "gate-4e4898eebcef54d54f6403c336607239",
+      "decision": "approve",
+      "toolName": "Bash"
+    }
+  ],
+  "filesystemResult": {
+    "originalFileAbsent": true,
+    "approvedFileContent": "APPROVED\n"
+  },
+  "restartRecovery": {
+    "sameMissionHead": true,
+    "sameReceipt": true,
+    "sameDecisionEvidence": true
+  },
+  "claimBoundary": "This proves a real Claude Code native PreToolUse hook blocked a mutable Write before dispatch, the normal Workbench displayed the sanitized request, a browser user changed its supported input, the Kernel persisted the decision before release, the changed operation executed, and the same Mission reached a verified Receipt with restart-stable evidence. It does not yet prove MCP proxy coverage, arbitrary Harness pre-tool control, hostile child-process containment, external Effect crash reconciliation, production use, or independent external reproduction.",
+  "proofRoot": "/var/folders/s6/97lfn3_942g3b1w0cw82sgz00000gn/T/missionbraid-i4-tool-gateway-qzH0YM"
+}
