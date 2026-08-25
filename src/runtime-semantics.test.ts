@@ -217,6 +217,36 @@ describe('runtime semantic extraction', () => {
     expect(
       JSON.stringify(extractRuntimeSemanticFacts(failedNodeTest.event, failedNodeTest.artifact)),
     ).not.toContain('behavior contract');
+
+    const failedNodeTestWithNativeExit = fixture('claude-stream-json', 'user', 'message', {
+      type: 'user',
+      message: {
+        role: 'user',
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: 'tool-test-2',
+            content: 'Exit code 1\n✖ behavior contract\nℹ tests 1\nℹ pass 0\nℹ fail 1',
+            is_error: true,
+          },
+        ],
+      },
+    });
+    expect(
+      extractRuntimeSemanticFacts(
+        failedNodeTestWithNativeExit.event,
+        failedNodeTestWithNativeExit.artifact,
+      ),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'test_run',
+          status: 'failed',
+          exitCode: 1,
+          evidence: 'derived',
+        }),
+      ]),
+    );
   });
 
   it('extracts Qoder initialization, usage, and explicit subagent lifecycle shapes', () => {

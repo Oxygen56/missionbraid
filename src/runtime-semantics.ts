@@ -705,7 +705,9 @@ function testOutput(record: Record<string, unknown>): { readonly exitCode?: numb
       /(?:^|\n)(?:FAILED|PASSED|FAIL|PASS)\b/m.test(candidate) &&
       /(?:test|spec|suite)/i.test(candidate);
     if (!nodeTestSummary && !genericTestSummary) continue;
-    const exitMatch = /(?:^|\n)EXIT:\s*(-?\d+)\s*(?:\n|$)/m.exec(candidate);
+    const exitMatch = /(?:^|\n)(?:Error:\s*)?(?:EXIT:|Exit code)\s*(-?\d+)\s*(?:\n|$)/im.exec(
+      candidate,
+    );
     const exitCode = exitMatch?.[1] === undefined ? undefined : Number(exitMatch[1]);
     return Number.isSafeInteger(exitCode) ? { exitCode: exitCode as number } : {};
   }
