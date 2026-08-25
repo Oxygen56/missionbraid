@@ -1,0 +1,259 @@
+{
+  "schemaVersion": "missionbraid.dev/evidence/iteration-5-execution-fork/v1",
+  "evidenceLevel": "same-host-local-real-native-runtime-browser-and-git-worktree",
+  "recordedOn": "2026-08-25",
+  "implementation": {
+    "revision": "9c87524b1976ac928d4d6aeee3080e256f77eb5e",
+    "headTree": "22c2ccd875c22a651a572f244bc75cf7c231f089",
+    "indexTree": "22c2ccd875c22a651a572f244bc75cf7c231f089",
+    "dirtyBeforeRun": true,
+    "nodeVersion": "v26.4.0"
+  },
+  "runtime": {
+    "harness": "codex",
+    "version": "0.149.0-alpha.4.3",
+    "model": "gpt-5.6-sol",
+    "reasoningEffort": "medium"
+  },
+  "timing": {
+    "missionCreatedAt": "2026-08-25T19:19:45.819Z",
+    "parentRuntimeStartedAt": "2026-08-25T19:19:45.893Z",
+    "parentRuntimeFinishedAt": "2026-08-25T19:20:28.848Z",
+    "parentRuntimeMs": 42955,
+    "forkPlannedAt": "2026-08-25T19:20:32.435Z",
+    "forkRuntimeStartedAt": "2026-08-25T19:20:32.626Z",
+    "forkRuntimeFinishedAt": "2026-08-25T19:21:08.461Z",
+    "forkRuntimeMs": 35835,
+    "childReceiptIssuedAt": "2026-08-25T19:21:08.973Z",
+    "forkToReceiptMs": 36538,
+    "missionToChildReceiptMs": 83154,
+    "measurement": "durable Mission Kernel occurredAt timestamps"
+  },
+  "productEntry": "built local Workbench and versioned API: parent Mission -> Composite Checkpoint -> Execution Fork -> child Branch Receipt",
+  "mission": {
+    "missionId": "mission-069924dd-f55c-441f-b943-edbe81c780b9",
+    "parentAttemptId": "attempt-69b217b4-52a8-4e95-b10e-6889f98c2287",
+    "parentReceiptId": "receipt-67719bcb-c8be-4c12-bda4-e72fa0ddc11f",
+    "parentBranchId": "branch-root-4a945549-90c8-4a8b-bf94-41de90fbdd29",
+    "childBranchId": "branch-fork-f645ee03-e8ac-44e8-9c6a-1233b6e3c72c",
+    "childReceiptId": "receipt-15c9e9e9-8b46-43ca-8260-817c27555101",
+    "finalHeadHash": "5c1c6a9a70f77acbf8bf262c6bb3f9e3bfe21b83c3756ca3be0a4842d87c9452"
+  },
+  "parentRuntime": {
+    "initialHead": "b5bc6fb0628e17a8e692352ff3dd23d33a01b1c9",
+    "resultBeforeBoundaryCommit": {
+      "head": "b5bc6fb0628e17a8e692352ff3dd23d33a01b1c9",
+      "tree": "40b425f900ba69ebf9b636148852d6526d491106",
+      "status": ["M mode.txt"]
+    },
+    "committedHead": "680e679ca2fc2874e8989506ce2a1e08f16cc4ef",
+    "committedTree": "94f12596502757174768bef4af161933d3aaafd4",
+    "cleanStatus": [],
+    "boundaryCommitOwner": "local-proof-controller-after-verifying-the-real-runtime-delta",
+    "mode": "PARENT",
+    "semanticFactKinds": [
+      "model_call",
+      "failure",
+      "message",
+      "tool_request",
+      "tool_result",
+      "workspace_change",
+      "usage"
+    ]
+  },
+  "inheritedExternalEffect": {
+    "effectId": "effect-iteration-5-inherited-no-repeat",
+    "targetId": "iteration-5-queryable-target",
+    "idempotencyKey": "iteration-5-create-once",
+    "status": "confirmed",
+    "decision": "inherit-no-repeat",
+    "targetPostCount": 1,
+    "targetCallOrder": ["POST:iteration-5-create-once"],
+    "callsAddedByForkOrRestart": 0
+  },
+  "checkpoint": {
+    "checkpointId": "checkpoint-ebdc6b65ed9e665bfc8270f0e37cfaefb14d3396ea433321ab124d4300e8c522",
+    "manifestHash": "sha256:ebdc6b65ed9e665bfc8270f0e37cfaefb14d3396ea433321ab124d4300e8c522",
+    "source": {
+      "attemptId": "attempt-69b217b4-52a8-4e95-b10e-6889f98c2287",
+      "branchId": "branch-root-4a945549-90c8-4a8b-bf94-41de90fbdd29",
+      "contractId": "contract-1154858bd90ec99b21fca9fbf6de",
+      "missionId": "mission-069924dd-f55c-441f-b943-edbe81c780b9",
+      "profileId": "profile-snapshot-7d6738fecc286051ff79afee28d5",
+      "workspaceKey": "workspace-6500a304ca9ba5fa9717773fe5fce33a"
+    },
+    "workspace": {
+      "artifactDigest": "git-tree:94f12596502757174768bef4af161933d3aaafd4",
+      "artifactRef": "git-commit:680e679ca2fc2874e8989506ce2a1e08f16cc4ef",
+      "state": "restorable-artifact",
+      "workspaceDigest": "b7d3b9fad4b2ffa1d379354db1073fa5d6b712099c3c21c10c6ccf517970aa52",
+      "workspaceKey": "workspace-6500a304ca9ba5fa9717773fe5fce33a"
+    },
+    "componentDispositions": [
+      {
+        "component": "mission",
+        "disposition": "portable"
+      },
+      {
+        "component": "branch",
+        "disposition": "portable"
+      },
+      {
+        "component": "attempt",
+        "disposition": "portable"
+      },
+      {
+        "component": "contract",
+        "disposition": "portable"
+      },
+      {
+        "component": "profile",
+        "disposition": "portable"
+      },
+      {
+        "component": "event-prefix",
+        "disposition": "portable"
+      },
+      {
+        "component": "visible-context",
+        "disposition": "portable"
+      },
+      {
+        "component": "workspace",
+        "disposition": "recoverable"
+      },
+      {
+        "component": "permissions",
+        "disposition": "portable"
+      },
+      {
+        "component": "effect-frontier",
+        "disposition": "inspect-only"
+      },
+      {
+        "component": "process",
+        "disposition": "inspect-only"
+      },
+      {
+        "component": "native-session",
+        "disposition": "unavailable"
+      }
+    ]
+  },
+  "executionFork": {
+    "forkId": "execution-fork-e02e5916d8b2ecb7067f3f9754d7a3c268be003a3d99c9817cb4d8c14a61fae9",
+    "phase": "finished",
+    "lineageId": "execution-fork-lineage-bff5d07d19fcee01cf064b2cfdd67ef6544634cf53be691f8cd789cbe5553188",
+    "intervention": {
+      "interventionId": "intervention-ui-baaec311-bba4-4986-9829-0233d5a66300",
+      "kind": "guidance",
+      "targetRef": "stage:codex-parent-and-fork",
+      "afterDigest": "sha256:404afedbde543dd824e1611c81b7e88cab40d705278b0f2010662711a817bd58",
+      "description": "Change only mode.txt from exactly PARENT to exactly FORK-GUIDANCE, run node verify.mjs, and leave the Branch B change uncommitted so its isolated delta remains visible.",
+      "authorityChange": "unchanged"
+    },
+    "sameRuntimeProfile": true,
+    "isolatedWorktreePath": "/private/var/folders/s6/97lfn3_942g3b1w0cw82sgz00000gn/T/missionbraid-i5-execution-fork-PVUgST/state/worktrees/mission-069924dd-f55c-441f-b943-edbe81c780b9/worktree-be165dce799a433d8083da6ef014d629",
+    "sourceWorkspaceUnchanged": true,
+    "sourceSnapshot": {
+      "head": "680e679ca2fc2874e8989506ce2a1e08f16cc4ef",
+      "tree": "94f12596502757174768bef4af161933d3aaafd4",
+      "status": []
+    },
+    "childSnapshot": {
+      "head": "680e679ca2fc2874e8989506ce2a1e08f16cc4ef",
+      "tree": "94f12596502757174768bef4af161933d3aaafd4",
+      "status": ["M mode.txt"]
+    },
+    "childMode": "FORK-GUIDANCE",
+    "runtimeRunId": "runtime-run-dd15d3760f3e59ee061652aba5232ac0",
+    "runtimeStatus": "completed",
+    "runtimeEvidenceKinds": ["runtime", "model", "tool", "workspace", "verification"],
+    "toolExecutionEvidenceRefs": [
+      "evidence:evidence-6445c71a22a5298d57619943ba63a251",
+      "evidence:evidence-ca7f1f1ad044c24244fdcc826350b794"
+    ],
+    "verificationEvidenceRefs": ["evidence:evidence-0bbd084d70c8005873d52cf6cb4b32db"],
+    "kernelEventOrder": {
+      "planned": 319,
+      "createStarted": 322,
+      "dispatchStarted": 323,
+      "worktreeCreated": 324,
+      "runtimeStarted": 325,
+      "attemptStarted": 327,
+      "runtimeFinished": 635,
+      "effectExecuted": 637,
+      "receiptInputReady": 638,
+      "effectConfirmed": 639,
+      "receiptIssued": 640
+    }
+  },
+  "workbench": {
+    "checkpointCreatedThroughBrowser": true,
+    "executionForkSubmittedThroughBrowser": true,
+    "operationModeStates": [
+      {
+        "id": "playback",
+        "disabled": true,
+        "text": "历史回看这里暂不可执行只查看已保存的历史，不产生新证据。"
+      },
+      {
+        "id": "cached-replay",
+        "disabled": true,
+        "text": "缓存重放这里暂不可执行复用已保存的模型与工具输出，不运行真实工具。"
+      },
+      {
+        "id": "counterfactual-resample",
+        "disabled": true,
+        "text": "反事实重采样这里暂不可执行面对缓存工具证据重新采样模型，不写入真实工作区。"
+      },
+      {
+        "id": "execution-fork",
+        "disabled": false,
+        "text": "真实执行分叉真实执行入口把完整 Checkpoint 恢复到新的隔离工作树，再让模型和工具真实继续。"
+      }
+    ],
+    "beforeRestart": {
+      "branchIds": [
+        "branch-root-4a945549-90c8-4a8b-bf94-41de90fbdd29",
+        "branch-fork-f645ee03-e8ac-44e8-9c6a-1233b6e3c72c"
+      ],
+      "checkpointIds": [
+        "checkpoint-ebdc6b65ed9e665bfc8270f0e37cfaefb14d3396ea433321ab124d4300e8c522"
+      ],
+      "forkIds": [
+        "execution-fork-e02e5916d8b2ecb7067f3f9754d7a3c268be003a3d99c9817cb4d8c14a61fae9"
+      ],
+      "receiptVisible": true,
+      "chineseBranchLabelsVisible": true,
+      "effectInheritanceVisible": true,
+      "locale": "zh-CN"
+    },
+    "afterRestart": {
+      "branchIds": [
+        "branch-root-4a945549-90c8-4a8b-bf94-41de90fbdd29",
+        "branch-fork-f645ee03-e8ac-44e8-9c6a-1233b6e3c72c"
+      ],
+      "checkpointIds": [
+        "checkpoint-ebdc6b65ed9e665bfc8270f0e37cfaefb14d3396ea433321ab124d4300e8c522"
+      ],
+      "forkIds": [
+        "execution-fork-e02e5916d8b2ecb7067f3f9754d7a3c268be003a3d99c9817cb4d8c14a61fae9"
+      ],
+      "receiptVisible": true,
+      "chineseBranchLabelsVisible": true,
+      "effectInheritanceVisible": true,
+      "locale": "zh-CN"
+    }
+  },
+  "restartRecovery": {
+    "sameMissionHead": true,
+    "sameChildReceipt": true,
+    "sameBranches": true,
+    "sameCheckpoint": true,
+    "sameExecutionFork": true,
+    "noExternalTargetTraffic": true
+  },
+  "claimBoundary": "This proves on one local host that the built MissionBraid Workbench and API ran a real Codex parent Mission to a verified one-file result; after the local proof controller inspected and committed exactly that result because the Codex workspace sandbox cannot write Git metadata, MissionBraid captured a complete Git-backed Composite Checkpoint, created Branch B from that exact commit after one declared guidance Intervention, ran a fresh real Codex native process with terminal tool evidence only in the isolated Git worktree, passed the deterministic Contract verifier, and let the Mission Kernel issue a child-Branch Receipt. It also proves one confirmed queryable external Effect was inherited as no-repeat, the source workspace stayed unchanged, the Workbench rendered A/B, Checkpoint, Fork, Effect inheritance, and Receipt, and all of that reconstructed after restart. It does not claim that Codex created the parent Git commit, native session resume or native session fork, arbitrary external systems, multi-host execution, production use, or independent external reproduction.",
+  "proofRoot": "/var/folders/s6/97lfn3_942g3b1w0cw82sgz00000gn/T/missionbraid-i5-execution-fork-PVUgST"
+}
