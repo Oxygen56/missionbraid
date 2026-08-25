@@ -70,6 +70,30 @@ export const MISSIONBRAID_PACKAGE_CONTRACT_V1 = {
       types: './dist/src/package-contract.d.ts',
       import: './dist/src/package-contract.js',
     },
+    './outcome-studio': {
+      types: './dist/src/outcome-studio.d.ts',
+      import: './dist/src/outcome-studio.js',
+    },
+    './outcome-studio/v1': {
+      types: './dist/src/outcome-studio.d.ts',
+      import: './dist/src/outcome-studio.js',
+    },
+    './mission-plan': {
+      types: './dist/src/mission-plan.d.ts',
+      import: './dist/src/mission-plan.js',
+    },
+    './mission-plan/v1': {
+      types: './dist/src/mission-plan.d.ts',
+      import: './dist/src/mission-plan.js',
+    },
+    './mission-plan-runtime': {
+      types: './dist/src/mission-plan-runtime.d.ts',
+      import: './dist/src/mission-plan-runtime.js',
+    },
+    './mission-plan-runtime/v1': {
+      types: './dist/src/mission-plan-runtime.d.ts',
+      import: './dist/src/mission-plan-runtime.js',
+    },
     './examples/minimal-adapter': {
       types: './dist/examples/minimal-adapter.d.ts',
       import: './dist/examples/minimal-adapter.js',

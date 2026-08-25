@@ -114,6 +114,21 @@ import {
 import { executionForkEventToMissionEvents } from './mission-execution-fork.js';
 import { NativeAdapterRuntimeContinuationPort } from './runtime-continuation.js';
 import {
+  deriveMissionFailureIntelligence,
+  type DiagnosticForkProjectionInputV1,
+  type MissionFailureIntelligenceProjectionV1,
+} from './mission-failure-intelligence.js';
+import {
+  createMissionOutcomeStudioView,
+  type MissionOutcomeStudioInputV1,
+  type MissionOutcomeStudioViewV1,
+} from './mission-outcome-studio.js';
+import {
+  verifyIncidentScenario,
+  type IncidentScenarioV1,
+  type OutcomeCiResultV1,
+} from './outcome-studio.js';
+import {
   EXECUTION_PLANNER_POLICY_VERSION,
   planExecution,
   type CandidateHandoffStateV1,
@@ -135,6 +150,23 @@ import {
   type GitWorkspaceSnapshotV1,
   type StageWorkspaceDeltaV1,
 } from './workspace.js';
+import {
+  analyzeSelectiveInvalidation,
+  createContractRevision,
+  createMissionPlanRevision,
+  type ActivePlanAttemptV1,
+  type ContractRequirementV1,
+  type ContractRevisionV1,
+  type MissionPlanRevisionV1,
+  type PlanArtifactV1,
+  type SelectiveInvalidationV1,
+} from './mission-plan.js';
+import {
+  projectMissionPlanRuntime,
+  type MissionPlanRuntimeProjectionV1,
+} from './mission-plan-runtime.js';
+
+export type { MissionPlanRuntimeProjectionV1 } from './mission-plan-runtime.js';
 
 const LEASE_TTL_MS = 30_000;
 const LEASE_RENEW_MS = 10_000;
@@ -153,6 +185,12 @@ export interface MissionEngineOptions {
   readonly modelOnlyResamplePort?: ModelOnlyResamplePortV1;
 }
 
+export interface MissionOutcomeStudioScenarioCollectionV1 {
+  readonly missionId: string;
+  readonly scenarios: readonly IncidentScenarioV1[];
+  readonly ciResults: readonly OutcomeCiResultV1[];
+}
+
 export interface ExecuteMissionOptions {
   readonly workspace?: string;
   readonly signal?: AbortSignal;
@@ -169,6 +207,26 @@ export interface MissionExecutionResult {
 export interface MissionCreationResult {
   readonly missionId: string;
   readonly status: Extract<MissionProjectionV1['status'], 'pending'>;
+}
+
+export interface MissionPlanView {
+  readonly contractRevision: ContractRevisionV1;
+  readonly planRevision: MissionPlanRevisionV1;
+  readonly invalidations: readonly SelectiveInvalidationV1[];
+}
+
+export interface ReviseMissionContractInputV1 {
+  readonly contract: ContractV1;
+  readonly requirements: readonly ContractRequirementV1[];
+  readonly reason: string;
+  readonly evidenceRefs?: readonly string[];
+  readonly authorityChanges?: Parameters<typeof createContractRevision>[0]['authorityChanges'];
+}
+
+export interface ReviseMissionContractResultV1 {
+  readonly contractRevision: ContractRevisionV1;
+  readonly planRevision: MissionPlanRevisionV1;
+  readonly invalidation: SelectiveInvalidationV1;
 }
 
 export interface MissionStatusView {
@@ -224,6 +282,13 @@ export interface MissionExecutionForkRequestV1 {
   /** I5 keeps the source Runtime Profile; I6 may explicitly select another eligible stage. */
   readonly stageId?: string;
   readonly childBranchId?: string;
+  /** Optional Kernel-bound diagnostic candidate. Generic Forks remain unchanged. */
+  readonly diagnosticCandidateId?: string;
+}
+
+export interface MissionDiagnosticForkRequestV1
+  extends Omit<MissionExecutionForkRequestV1, 'diagnosticCandidateId'> {
+  readonly candidateId: string;
 }
 
 export interface MissionExecutionForkResultV1 {
@@ -410,6 +475,40 @@ export class MissionEngine {
       const detection = await this.#detect(spec.attemptPlan[0]?.profile.harness ?? 'codex');
       const profile = createProfile(spec.attemptPlan[0]!, detection, spec.workspace);
       const createdAt = this.#now().toISOString();
+      const contractRevision = createContractRevision({
+        missionId,
+        contract,
+        requirements: requirementsFromSpec(spec),
+        provenance: { reason: 'Initial Mission Contract', evidenceRefs: [`mission:${missionId}`] },
+        createdAt,
+      });
+      const planRevision = createMissionPlanRevision({
+        planId: `plan-${missionId}`,
+        missionId,
+        contractRevision,
+        nodes: spec.attemptPlan.map((stage, index) => ({
+          nodeId: stage.stageId,
+          kind: 'task' as const,
+          title: stage.stageId,
+          requirementIds: requirementsFromSpec(spec).map((r) => r.requirementId),
+          inputArtifactIds: [],
+          declaredOutputKeys: [`stage:${stage.stageId}`],
+          requiredAuthorityScopes: ['workspace'],
+          // Plan projection is descriptive; execution Attempts retain the real Mission workspace.
+          // Marking it read-only prevents the DAG validator from mistaking sequential stages for
+          // concurrently writable owners of the same workspace.
+          workspace: { access: 'read-only' as const, workspaceKey, sharedResourceKeys: [] },
+          provenanceEvidenceRefs: [`mission:${missionId}:stage:${stage.stageId}`],
+        })),
+        edges: spec.attemptPlan.slice(1).map((stage, index) => ({
+          fromNodeId: spec.attemptPlan[index]!.stageId,
+          toNodeId: stage.stageId,
+          relation: 'depends-on' as const,
+          evidenceRefs: [`mission:${missionId}`],
+        })),
+        provenance: { source: 'deterministic-planner', evidenceRefs: [`mission:${missionId}`] },
+        createdAt,
+      });
       const createdEvent: EventV1 = {
         schemaVersion: DOMAIN_SCHEMA_VERSION,
         eventId: `event-${this.#id()}`,
@@ -481,8 +580,39 @@ export class MissionEngine {
           } as unknown as JsonValue,
         },
       };
+      const planEvents: EventV1[] = [
+        {
+          schemaVersion: DOMAIN_SCHEMA_VERSION,
+          eventId: `event-${this.#id()}`,
+          missionId,
+          occurredAt: createdAt,
+          type: 'runtime.observation',
+          payload: {
+            kind: 'mission.contract_revision.created',
+            data: contractRevision as unknown as JsonValue,
+          },
+        },
+        {
+          schemaVersion: DOMAIN_SCHEMA_VERSION,
+          eventId: `event-${this.#id()}`,
+          missionId,
+          occurredAt: createdAt,
+          type: 'runtime.observation',
+          payload: {
+            kind: 'mission.plan_revision.created',
+            data: planRevision as unknown as JsonValue,
+          },
+        },
+      ];
       this.#store.appendEvents(
-        [createdEvent, branchEvent, catalogEvent, ...definitionEvents, specSnapshotEvent],
+        [
+          createdEvent,
+          branchEvent,
+          catalogEvent,
+          ...definitionEvents,
+          specSnapshotEvent,
+          ...planEvents,
+        ],
         fence,
       );
       return { missionId, status: 'pending' };
@@ -586,6 +716,306 @@ export class MissionEngine {
       )
     ).filter((artifact): artifact is NativeArtifactContent => artifact !== undefined);
     return deriveContextGraph({ timeline, nativeArtifacts });
+  }
+
+  /** Rebuilds branch-scoped Failure Intelligence from the persisted Kernel chain. */
+  async failureIntelligence(
+    missionId: string,
+    branchId?: string,
+  ): Promise<MissionFailureIntelligenceProjectionV1> {
+    const mission = this.#requireMission(missionId);
+    const selectedBranchId = branchId ?? mission.rootBranchId;
+    if (
+      selectedBranchId === undefined ||
+      this.#store.getBranch(missionId, selectedBranchId) === undefined
+    ) {
+      throw new MissionExecutionError(
+        `Branch ${selectedBranchId ?? 'unknown'} does not belong to Mission ${missionId}`,
+      );
+    }
+    const events = this.#store.listEvents(missionId);
+    const contextGraph = await this.contextGraph(missionId);
+    const checkpoints = this.compositeCheckpoints(missionId)
+      .filter((checkpoint) => checkpoint.source.branchId === selectedBranchId)
+      .sort((left, right) => left.eventPrefix.throughSeq - right.eventPrefix.throughSeq);
+    const checkpoint = checkpoints.at(-1);
+    const diagnosticForks: DiagnosticForkProjectionInputV1[] = [];
+    if (checkpoint !== undefined) {
+      const requests = events.flatMap((event) => {
+        if (
+          event.type !== 'runtime.observation' ||
+          event.payload.kind !== 'failure.diagnostic_requested' ||
+          !isJsonObject(event.payload.data) ||
+          event.payload.data.branchId !== selectedBranchId ||
+          event.payload.data.checkpointId !== checkpoint.checkpointId ||
+          typeof event.payload.data.candidateId !== 'string' ||
+          !isJsonObject(event.payload.data.changedVariable) ||
+          typeof event.payload.data.interventionId !== 'string'
+        ) {
+          return [];
+        }
+        return [
+          {
+            candidateId: event.payload.data.candidateId,
+            changedVariable: event.payload.data.changedVariable,
+            interventionId: event.payload.data.interventionId,
+            childBranchId:
+              typeof event.payload.data.childBranchId === 'string'
+                ? event.payload.data.childBranchId
+                : undefined,
+          },
+        ];
+      });
+      if (requests.length > 0) {
+        const forks = await this.executionForks(missionId);
+        for (const request of requests) {
+          const fork = forks.find(
+            (candidate) =>
+              candidate.lineage.parentCheckpointId === checkpoint.checkpointId &&
+              candidate.lineage.parentBranchId === selectedBranchId &&
+              candidate.lineage.intervention.interventionId === request.interventionId &&
+              (request.childBranchId === undefined ||
+                candidate.lineage.childBranchId === request.childBranchId),
+          );
+          if (fork === undefined) continue;
+          const receiptEvent = events.find(
+            (event) =>
+              event.type === 'receipt.issued' &&
+              (event.payload.receipt.branchId ?? event.payload.receipt.rootBranchId) ===
+                fork.lineage.childBranchId,
+          );
+          const verificationRefs = fork.runtimeResult?.verificationEvidenceRefs ?? [];
+          diagnosticForks.push({
+            candidateId: request.candidateId,
+            changedVariable:
+              request.changedVariable as unknown as DiagnosticForkProjectionInputV1['changedVariable'],
+            fork,
+            evaluation: 'deterministic',
+            ...(receiptEvent === undefined ? {} : { receiptEventId: receiptEvent.eventId }),
+            ...(verificationRefs.length === 0 ? {} : { evaluationEvidenceRefs: verificationRefs }),
+          });
+        }
+      }
+    }
+    return deriveMissionFailureIntelligence({
+      missionId,
+      branchId: selectedBranchId,
+      events,
+      contextGraph,
+      ...(checkpoint === undefined ? {} : { checkpoint }),
+      ...(diagnosticForks.length === 0 ? {} : { diagnosticForks }),
+    });
+  }
+
+  /**
+   * Rebuild the Outcome/Eval/Incident Studio projection from immutable Mission
+   * evidence.  This is intentionally a read-only projection: the Studio
+   * never changes Kernel state, accepts a Branch, or signs the Kernel Receipt.
+   */
+  async outcomeStudio(missionId: string, branchId?: string): Promise<MissionOutcomeStudioViewV1> {
+    const mission = this.#requireMission(missionId);
+    const events = this.#store.listEvents(missionId);
+    const created = events.find(
+      (event): event is Extract<StoredEventV1, { type: 'mission.created' }> =>
+        event.type === 'mission.created',
+    );
+    if (created === undefined) {
+      throw new MissionExecutionError(`Mission ${missionId} has no creation event`);
+    }
+    const branches = this.#store.listBranches(missionId);
+    const receipts = events
+      .filter(
+        (event): event is Extract<StoredEventV1, { type: 'receipt.issued' }> =>
+          event.type === 'receipt.issued',
+      )
+      .map((event) => event.payload.receipt);
+    const contractRevisions = events
+      .filter(
+        (event): event is Extract<StoredEventV1, { type: 'runtime.observation' }> =>
+          event.type === 'runtime.observation' &&
+          event.payload.kind === 'mission.contract_revision.created' &&
+          isJsonObject(event.payload.data),
+      )
+      .map((event) => event.payload.data as unknown as ContractRevisionV1)
+      .filter((revision) => revision.contract !== undefined)
+      .sort((left, right) => left.revisionNumber - right.revisionNumber);
+    const latestContract = contractRevisions.at(-1)?.contract ?? created.payload.contract;
+    const latestReceipt = [...receipts].at(-1);
+    const selectedBranchId =
+      branchId ?? latestReceipt?.branchId ?? latestReceipt?.rootBranchId ?? mission.rootBranchId;
+    if (selectedBranchId === undefined) {
+      throw new MissionExecutionError(`Mission ${missionId} has no Branch identity`);
+    }
+    const selected = branches.find((candidate) => candidate.branchId === selectedBranchId);
+    if (selected === undefined) {
+      throw new MissionExecutionError(
+        `Branch ${selectedBranchId} is not persisted for Mission ${missionId}`,
+      );
+    }
+
+    const checkpoints = this.compositeCheckpoints(missionId);
+    const forkRecords = await this.executionForks(missionId);
+    const effects = projectMissionEffects(events);
+
+    const build = (
+      branch: BranchV1,
+    ): {
+      readonly input: MissionOutcomeStudioInputV1;
+      readonly view: MissionOutcomeStudioViewV1;
+    } => {
+      const directCheckpoint = [...checkpoints]
+        .filter((checkpoint) => checkpoint.source.branchId === branch.branchId)
+        .sort((left, right) => left.eventPrefix.throughSeq - right.eventPrefix.throughSeq)
+        .at(-1);
+      const baseCheckpoint =
+        directCheckpoint ??
+        (branch.baseCheckpointId === undefined
+          ? undefined
+          : checkpoints.find((checkpoint) => checkpoint.checkpointId === branch.baseCheckpointId));
+      const startedAttempts = events
+        .filter(
+          (event): event is Extract<StoredEventV1, { type: 'attempt.started' }> =>
+            event.type === 'attempt.started' && event.payload.attempt.branchId === branch.branchId,
+        )
+        .map((event) => event.payload.attempt);
+      const bindings = events
+        .filter(
+          (event): event is Extract<StoredEventV1, { type: 'attempt.bound' }> =>
+            event.type === 'attempt.bound' && event.payload.binding.branchId === branch.branchId,
+        )
+        .map((event) => event.payload.binding);
+      const binding =
+        [...bindings]
+          .reverse()
+          .find((candidate) => candidate.attemptId === baseCheckpoint?.source.attemptId) ??
+        bindings.at(-1);
+      const attempt =
+        (binding === undefined
+          ? undefined
+          : startedAttempts.find((candidate) => candidate.attemptId === binding.attemptId)) ??
+        (baseCheckpoint === undefined
+          ? undefined
+          : events
+              .filter(
+                (event): event is Extract<StoredEventV1, { type: 'attempt.started' }> =>
+                  event.type === 'attempt.started' &&
+                  event.payload.attempt.attemptId === baseCheckpoint.source.attemptId,
+              )
+              .map((event) => event.payload.attempt)
+              .at(-1));
+      const profile =
+        attempt === undefined
+          ? created.payload.profile
+          : profileForAttempt(events, attempt, created.payload.profile);
+      const receipt = [...receipts]
+        .reverse()
+        .find((candidate) => (candidate.branchId ?? candidate.rootBranchId) === branch.branchId);
+      const branchContract =
+        (receipt === undefined
+          ? undefined
+          : [...contractRevisions]
+              .reverse()
+              .find((revision) => revision.contract.contractId === receipt.contractId)?.contract) ??
+        latestContract;
+      const fork = forkRecords.find(
+        (candidate) => candidate.lineage.childBranchId === branch.branchId,
+      );
+      const createdAt =
+        receipt?.issuedAt ?? baseCheckpoint?.capturedAt ?? branch.createdAt ?? mission.createdAt;
+      const input: MissionOutcomeStudioInputV1 = {
+        mission: created.payload.mission,
+        contract: branchContract,
+        profile,
+        branch,
+        ...(binding === undefined ? {} : { attemptBinding: binding }),
+        ...(baseCheckpoint === undefined ? {} : { checkpoint: baseCheckpoint }),
+        ...(fork === undefined ? {} : { intervention: fork.lineage.intervention }),
+        events,
+        effects,
+        ...(receipt === undefined ? {} : { receipt }),
+        createdAt,
+      };
+      return { input, view: createMissionOutcomeStudioView(input) };
+    };
+
+    const initial = build(selected);
+    const siblingBranches = branches
+      .filter((candidate) => candidate.branchId !== selected.branchId)
+      .map((candidate) => build(candidate).view.branch)
+      .filter((candidate): candidate is NonNullable<typeof candidate> => candidate !== null);
+    if (initial.view.branch === null || siblingBranches.length === 0) return initial.view;
+    return createMissionOutcomeStudioView({ ...initial.input, siblingBranches });
+  }
+
+  /** Persist the sanitized Studio scenario and CI projection as observations.
+   * Kernel events and receipts remain authoritative; these records are an
+   * evidence export that can be reopened or downloaded by the Workbench.
+   */
+  async saveOutcomeStudioScenario(
+    missionId: string,
+    branchId?: string,
+  ): Promise<MissionOutcomeStudioScenarioCollectionV1> {
+    const mission = this.#requireMission(missionId);
+    const view = await this.outcomeStudio(missionId, branchId);
+    if (view.incidentScenario === null || view.ciResult === null) {
+      throw new MissionExecutionError(
+        `Mission ${missionId} has no complete Outcome Studio scenario`,
+      );
+    }
+    verifyIncidentScenario(view.incidentScenario);
+    const ownerId = `outcome-studio-save-${this.#id()}`;
+    await this.#withLease(mission.workspaceKey, ownerId, async (fence) => {
+      const existing = this.outcomeStudioScenarios(missionId);
+      if (
+        !existing.scenarios.some(
+          (scenario) => scenario.scenarioId === view.incidentScenario!.scenarioId,
+        )
+      ) {
+        this.#observe(
+          missionId,
+          'outcome-studio.incident-scenario.saved',
+          view.incidentScenario as unknown as JsonValue,
+          fence,
+        );
+      }
+      if (!existing.ciResults.some((result) => result.resultId === view.ciResult!.resultId)) {
+        this.#observe(
+          missionId,
+          'outcome-studio.ci-result.saved',
+          view.ciResult as unknown as JsonValue,
+          fence,
+        );
+      }
+    });
+    return this.outcomeStudioScenarios(missionId);
+  }
+
+  outcomeStudioScenarios(missionId: string): MissionOutcomeStudioScenarioCollectionV1 {
+    this.#requireMission(missionId);
+    const scenarios: IncidentScenarioV1[] = [];
+    const ciResults: OutcomeCiResultV1[] = [];
+    for (const event of this.#store.listEvents(missionId)) {
+      if (event.type !== 'runtime.observation' || !isJsonObject(event.payload.data)) continue;
+      if (event.payload.kind === 'outcome-studio.incident-scenario.saved') {
+        try {
+          const value = event.payload.data as unknown as IncidentScenarioV1;
+          verifyIncidentScenario(value);
+          scenarios.push(value);
+        } catch {
+          // Ignore malformed historical exports; the Kernel remains readable.
+        }
+      } else if (event.payload.kind === 'outcome-studio.ci-result.saved') {
+        const value = event.payload.data as unknown as OutcomeCiResultV1;
+        if (typeof value.resultId === 'string' && typeof value.resultHash === 'string') {
+          ciResults.push(value);
+        }
+      }
+    }
+    return { missionId, scenarios, ciResults };
+  }
+
+  async exportOutcomeStudioScenarios(missionId: string): Promise<string> {
+    return JSON.stringify(this.outcomeStudioScenarios(missionId), null, 2);
   }
 
   compositeCheckpoints(missionId: string): readonly CompositeCheckpointManifestV1[] {
@@ -965,6 +1395,29 @@ export class MissionEngine {
         `Composite Checkpoint ${request.checkpointId} does not belong to Mission ${missionId}`,
       );
     }
+
+    let diagnosticVariable: unknown;
+    if (request.diagnosticCandidateId !== undefined) {
+      const intelligence = await this.failureIntelligence(missionId, checkpoint.source.branchId);
+      const candidate = intelligence.graph.candidates.find(
+        (item) => item.candidateId === request.diagnosticCandidateId,
+      );
+      const proposal = intelligence.graph.diagnosticBranchProposals.find(
+        (item) => item.candidateId === request.diagnosticCandidateId,
+      );
+      if (
+        candidate === undefined ||
+        proposal === undefined ||
+        !proposal.ready ||
+        proposal.baseCheckpointId !== checkpoint.checkpointId ||
+        proposal.baseCheckpointDigest !== checkpoint.manifestHash
+      ) {
+        throw new MissionExecutionError(
+          'Diagnostic Fork candidate is not ready on the supplied Composite Checkpoint',
+        );
+      }
+      diagnosticVariable = proposal.changedVariable;
+    }
     if (
       checkpoint.source.missionId !== missionId ||
       checkpoint.source.contractId !== mission.contract.contractId
@@ -1025,6 +1478,29 @@ export class MissionEngine {
     const ownerId = `execution-fork-${this.#id()}`;
 
     return await this.#withLease(mission.workspaceKey, ownerId, async (fence) => {
+      if (request.diagnosticCandidateId !== undefined && isJsonObject(diagnosticVariable)) {
+        this.#store.appendEvent(
+          {
+            schemaVersion: DOMAIN_SCHEMA_VERSION,
+            eventId: `event-diagnostic-request-${identityDigest}`,
+            missionId,
+            occurredAt: bindingBoundAt,
+            type: 'runtime.observation',
+            payload: {
+              kind: 'failure.diagnostic_requested',
+              data: {
+                branchId: checkpoint.source.branchId,
+                checkpointId: checkpoint.checkpointId,
+                candidateId: request.diagnosticCandidateId,
+                changedVariable: diagnosticVariable,
+                interventionId: request.intervention.interventionId,
+                childBranchId,
+              } as unknown as JsonValue,
+            },
+          },
+          fence,
+        );
+      }
       await this.#writeProvenanceProjection(missionId);
       const fileJournal = new FileExecutionForkEvidenceJournal(
         join(this.#stateDir, 'execution-forks'),
@@ -1125,6 +1601,24 @@ export class MissionEngine {
       );
       return { record, receipt };
     });
+  }
+
+  async executeDiagnosticFork(
+    missionId: string,
+    request: MissionDiagnosticForkRequestV1,
+    signal?: AbortSignal,
+  ): Promise<MissionExecutionForkResultV1> {
+    return await this.executeFork(
+      missionId,
+      {
+        checkpointId: request.checkpointId,
+        intervention: request.intervention,
+        ...(request.stageId === undefined ? {} : { stageId: request.stageId }),
+        ...(request.childBranchId === undefined ? {} : { childBranchId: request.childBranchId }),
+        diagnosticCandidateId: request.candidateId,
+      },
+      signal,
+    );
   }
 
   async pendingToolGates(missionId: string): Promise<readonly MissionToolGateView[]> {
@@ -1381,6 +1875,263 @@ export class MissionEngine {
           }),
       attempts,
     };
+  }
+
+  missionPlan(missionId: string): MissionPlanView {
+    this.#requireMission(missionId);
+    const observations = this.#store
+      .listEvents(missionId)
+      .filter(
+        (event): event is Extract<StoredEventV1, { type: 'runtime.observation' }> =>
+          event.type === 'runtime.observation',
+      );
+    const revisions = observations.filter(
+      (event) => event.payload.kind === 'mission.contract_revision.created',
+    );
+    const plans = observations.filter(
+      (event) => event.payload.kind === 'mission.plan_revision.created',
+    );
+    const contractRevision = revisions.at(-1)?.payload.data as unknown as
+      | ContractRevisionV1
+      | undefined;
+    const planRevision = plans.at(-1)?.payload.data as unknown as MissionPlanRevisionV1 | undefined;
+    if (contractRevision === undefined || planRevision === undefined) {
+      throw new MissionExecutionError(`Mission ${missionId} has no Mission Plan revision`);
+    }
+    const invalidations = observations
+      .filter((event) => event.payload.kind === 'mission.selective_invalidation.created')
+      .map((event) => event.payload.data as unknown as SelectiveInvalidationV1);
+    return { contractRevision, planRevision, invalidations };
+  }
+
+  /**
+   * Rebuilds the live Mission Plan graph from persisted Attempt and revision
+   * evidence. This is a projection only: it never starts, stops, or rebinds an
+   * Agent. A node is `succeeded` only when a verifier-backed PlanArtifact is
+   * available; a finished Attempt without that artifact remains unknown.
+   */
+  missionPlanRuntime(missionId: string): MissionPlanRuntimeProjectionV1 {
+    this.#requireMission(missionId);
+    const planView = this.missionPlan(missionId);
+    const events = this.#store.listEvents(missionId);
+    const state = reconstructExecutionState(events);
+    const verifiedReceipts = events
+      .filter(
+        (event): event is Extract<StoredEventV1, { type: 'receipt.issued' }> =>
+          event.type === 'receipt.issued' && event.payload.receipt.outcome === 'verified',
+      )
+      .map((event) => event.payload.receipt);
+    const receiptByAttemptId = new Map<string, ReceiptV1>();
+    for (const receipt of verifiedReceipts) {
+      for (const attemptId of receipt.attemptIds ?? []) {
+        if (!receiptByAttemptId.has(attemptId)) receiptByAttemptId.set(attemptId, receipt);
+      }
+    }
+    const checkpointStatusByAttemptId = new Map(
+      state.checkpoints.map((checkpoint) => [checkpoint.attemptId, checkpoint.status] as const),
+    );
+    const activeAttempts: ActivePlanAttemptV1[] = [];
+    const finishedAttempts: ActivePlanAttemptV1[] = [];
+    for (const plan of state.plans.values()) {
+      const terminalStatus =
+        checkpointStatusByAttemptId.get(plan.attemptId) === 'handed_off'
+          ? 'handed_off'
+          : state.finished.get(plan.attemptId);
+      const attempt = {
+        attemptId: plan.attemptId,
+        agentId: plan.harness,
+        nodeId: plan.stageId,
+        nodeVersion:
+          planView.planRevision.nodes.find((node) => node.nodeId === plan.stageId)?.nodeVersion ??
+          `unknown:${plan.stageId}`,
+        planRevisionId: planView.planRevision.planRevisionId,
+        contractRevisionId: planView.contractRevision.contractRevisionId,
+        status: terminalStatus === undefined ? ('running' as const) : ('finished' as const),
+        ...(terminalStatus === undefined ? {} : { terminalStatus }),
+        authorityRefs: ['workspace'],
+        evidenceRefs: [`attempt:${plan.attemptId}`],
+      } satisfies ActivePlanAttemptV1;
+      if (terminalStatus === undefined) activeAttempts.push(attempt);
+      else finishedAttempts.push(attempt);
+    }
+    const artifacts: PlanArtifactV1[] = state.checkpoints.flatMap((checkpoint) => {
+      if (checkpoint.status !== 'succeeded' && checkpoint.status !== 'handed_off') return [];
+      const receipt = receiptByAttemptId.get(checkpoint.attemptId);
+      // A checkpoint is a workspace boundary, not proof that a plan node
+      // succeeded.  Only a verified Branch-bound Receipt can promote it to a
+      // PlanArtifact; otherwise the runtime projection stays `unknown`.
+      if (receipt === undefined) return [];
+      const node = planView.planRevision.nodes.find(
+        (candidate) => candidate.nodeId === checkpoint.stageId,
+      );
+      return [
+        {
+          schemaVersion: 'missionbraid.dev/plan-artifact/v1',
+          artifactId: `plan-artifact:${checkpoint.checkpointId}`,
+          artifactDigest: checkpoint.delta.afterWorkspaceDigest,
+          missionId,
+          planId: planView.planRevision.planId,
+          planRevisionId: planView.planRevision.planRevisionId,
+          contractRevisionId: planView.contractRevision.contractRevisionId,
+          producedByNodeId: checkpoint.stageId,
+          producerNodeVersion: node?.nodeVersion ?? `unknown:${checkpoint.stageId}`,
+          requirementIds: node?.requirementIds ?? [],
+          sourceArtifactIds: [],
+          verifierEvidence: receipt.verifications.map((verification) => ({
+            evidenceId: `receipt:${receipt.receiptId}:criterion:${verification.criterionId}`,
+            evaluator: 'deterministic' as const,
+            verifierId: `receipt:${receipt.receiptId}`,
+            subjectId: checkpoint.attemptId,
+            subjectDigest: checkpoint.delta.afterWorkspaceDigest ?? checkpoint.checkpointId,
+            result: {
+              criterionId: verification.criterionId,
+              status: verification.status,
+              evidenceRefs: verification.evidenceRefs,
+            },
+            evidenceRefs: [`receipt:${receipt.receiptId}`, ...verification.evidenceRefs],
+          })),
+          evidenceRefs: [
+            `checkpoint:${checkpoint.checkpointId}`,
+            `attempt:${checkpoint.attemptId}`,
+            `receipt:${receipt.receiptId}`,
+          ],
+        },
+      ];
+    });
+    return projectMissionPlanRuntime({
+      plan: planView.planRevision,
+      activeAttempts,
+      finishedAttempts,
+      artifacts,
+      invalidations: planView.invalidations,
+    });
+  }
+
+  async reviseMissionContract(
+    missionId: string,
+    input: ReviseMissionContractInputV1,
+  ): Promise<ReviseMissionContractResultV1> {
+    const mission = this.#requireMission(missionId);
+    const ownerId = `contract-revision-${this.#id()}`;
+    return await this.#withLease(mission.workspaceKey, ownerId, async (fence) => {
+      const current = this.missionPlan(missionId);
+      const createdAt = this.#now().toISOString();
+      const next = createContractRevision({
+        missionId,
+        contract: input.contract,
+        requirements: input.requirements,
+        ...(input.authorityChanges === undefined
+          ? {}
+          : { authorityChanges: input.authorityChanges }),
+        previousRevision: current.contractRevision,
+        provenance: { reason: input.reason, evidenceRefs: input.evidenceRefs ?? [] },
+        createdAt,
+      });
+      const state = reconstructExecutionState(this.#store.listEvents(missionId));
+      const activeAttempts: ActivePlanAttemptV1[] = [...state.plans.values()].flatMap((plan) => {
+        const node = current.planRevision.nodes.find(
+          (candidate) => candidate.nodeId === plan.stageId,
+        );
+        if (node === undefined || state.finished.has(plan.attemptId)) return [];
+        return [
+          {
+            attemptId: plan.attemptId,
+            agentId: plan.harness,
+            nodeId: node.nodeId,
+            nodeVersion: node.nodeVersion,
+            planRevisionId: current.planRevision.planRevisionId,
+            contractRevisionId: current.contractRevision.contractRevisionId,
+            status: 'running',
+            authorityRefs: ['workspace'],
+            evidenceRefs: [`attempt:${plan.attemptId}`],
+          },
+        ];
+      });
+      const invalidation = analyzeSelectiveInvalidation({
+        plan: current.planRevision,
+        previousContractRevision: current.contractRevision,
+        nextContractRevision: next,
+        activeAttempts,
+      });
+      // A Contract revision is also a Mission Plan boundary.  Keep the DAG
+      // immutable and create a new content-addressed revision, even when the
+      // node topology is unchanged; otherwise the next execution would still
+      // appear bound to the old Contract revision after a requirement change.
+      const nextPlan = createMissionPlanRevision({
+        planId: current.planRevision.planId,
+        missionId,
+        contractRevision: next,
+        parentRevision: current.planRevision,
+        nodes: current.planRevision.nodes.map((node) => ({
+          nodeId: node.nodeId,
+          kind: node.kind,
+          title: node.title,
+          // The initial plan intentionally binds every execution stage to the
+          // Mission Contract. Rebind the same topology to the new immutable
+          // requirement set so removed IDs cannot make the revision invalid.
+          requirementIds: next.requirements.map((requirement) => requirement.requirementId),
+          inputArtifactIds: node.inputArtifactIds,
+          declaredOutputKeys: node.declaredOutputKeys,
+          requiredAuthorityScopes: node.requiredAuthorityScopes,
+          workspace: node.workspace,
+          provenanceEvidenceRefs: node.provenanceEvidenceRefs,
+        })),
+        edges: current.planRevision.edges.map((edge) => ({
+          fromNodeId: edge.fromNodeId,
+          toNodeId: edge.toNodeId,
+          relation: edge.relation,
+          evidenceRefs: edge.evidenceRefs,
+        })),
+        sharedResources: current.planRevision.sharedResources,
+        provenance: {
+          source: 'deterministic-planner',
+          evidenceRefs: uniqueStrings([
+            ...current.planRevision.provenance.evidenceRefs,
+            ...next.provenance.evidenceRefs,
+          ]),
+        },
+        createdAt,
+      });
+      this.#store.appendEvents(
+        [
+          {
+            schemaVersion: DOMAIN_SCHEMA_VERSION,
+            eventId: `event-${this.#id()}`,
+            missionId,
+            occurredAt: createdAt,
+            type: 'runtime.observation',
+            payload: {
+              kind: 'mission.contract_revision.created',
+              data: next as unknown as JsonValue,
+            },
+          },
+          {
+            schemaVersion: DOMAIN_SCHEMA_VERSION,
+            eventId: `event-${this.#id()}`,
+            missionId,
+            occurredAt: createdAt,
+            type: 'runtime.observation',
+            payload: {
+              kind: 'mission.plan_revision.created',
+              data: nextPlan as unknown as JsonValue,
+            },
+          },
+          {
+            schemaVersion: DOMAIN_SCHEMA_VERSION,
+            eventId: `event-${this.#id()}`,
+            missionId,
+            occurredAt: createdAt,
+            type: 'runtime.observation',
+            payload: {
+              kind: 'mission.selective_invalidation.created',
+              data: invalidation as unknown as JsonValue,
+            },
+          },
+        ],
+        fence,
+      );
+      return { contractRevision: next, planRevision: nextPlan, invalidation };
+    });
   }
 
   list(): MissionProjectionV1[] {
@@ -3324,6 +4075,32 @@ function createContract(spec: MissionSpecV1, now: Date): ContractV1 {
     ...contractBody,
     createdAt: now.toISOString(),
   };
+}
+
+function requirementsFromSpec(spec: MissionSpecV1): ContractRequirementV1[] {
+  return [
+    {
+      requirementId: 'objective',
+      kind: 'objective',
+      statement: spec.objective,
+      acceptanceCriterionIds: [],
+      evidenceRefs: [],
+    },
+    ...spec.constraints.map((statement, index) => ({
+      requirementId: `constraint-${index + 1}`,
+      kind: 'constraint' as const,
+      statement,
+      acceptanceCriterionIds: [],
+      evidenceRefs: [],
+    })),
+    ...spec.acceptanceCriteria.map((criterion) => ({
+      requirementId: `acceptance-${criterion.id}`,
+      kind: 'acceptance-criterion' as const,
+      statement: criterion.description,
+      acceptanceCriterionIds: [criterion.id],
+      evidenceRefs: [],
+    })),
+  ];
 }
 
 function timelineEntry(

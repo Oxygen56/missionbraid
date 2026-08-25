@@ -25,6 +25,7 @@ import type {
   MissionCreationResult,
   MissionExecutionResult,
   MissionExecutionForkRequestV1,
+  MissionDiagnosticForkRequestV1,
   MissionExecutionForkResultV1,
   MissionCheckpointReplayResultV1,
   MissionExecutionPlannerCandidateV1,
@@ -35,6 +36,7 @@ import type {
   MissionTimelineEntry,
 } from './engine.js';
 import type { RuntimeCatalogEntry } from './runtime-catalog.js';
+import type { MissionFailureIntelligenceProjectionV1 } from './mission-failure-intelligence.js';
 
 const roots: string[] = [];
 
@@ -547,6 +549,108 @@ describe('MissionBraid local app', () => {
     }
   });
 
+  it('serves Failure Intelligence and routes an authorized diagnostic Fork', async () => {
+    const fixture = await createWorkspace();
+    const state = new FakeEngineState();
+    const missionId = 'mission-failure-intelligence';
+    const checkpoint = checkpointFixture(missionId, 'attempt-source');
+    state.missions.set(missionId, projection(missionId, 'succeeded'));
+    state.timelines.set(missionId, []);
+    state.checkpoints.set(missionId, [checkpoint]);
+    state.failureProjection = {
+      schemaVersion: 1,
+      authority: 'derived-evidence-only',
+      missionId,
+      branchId: `branch-root-${missionId}`,
+      throughSeq: 1,
+      headHash: 'head-hash',
+      failureIntelligenceInput: { persistedRuntimeFacts: [] },
+      unavailable: [],
+      graph: {
+        schemaVersion: 1,
+        authority: 'derived-evidence-only',
+        nodes: [],
+        edges: [],
+        candidates: [
+          {
+            candidateId: 'candidate-tool',
+            detector: 'tool-error',
+            layer: 'tool',
+            title: 'Tool result was rejected',
+            status: 'observed',
+            rankScore: 10,
+            rank: 1,
+            supportingEvidenceRefs: [],
+            counterEvidenceRefs: [],
+            decisiveEvidenceRefs: [],
+            missingEvidence: [],
+            recommendedAction: 'Retry with a bounded alternative',
+          },
+        ],
+        diagnosticBranchProposals: [
+          {
+            proposalId: 'proposal-tool',
+            candidateId: 'candidate-tool',
+            execution: 'proposal-only',
+            ready: true,
+            baseCheckpointId: checkpoint.checkpointId,
+            baseCheckpointDigest: checkpoint.manifestHash,
+            changedVariable: { dimension: 'tool', key: 'tool:search', operation: 'replace' },
+            preserve: ['outcome-contract', 'all-other-observable-inputs'],
+            expectedDiscriminator: 'tool result changes',
+            requiresExplicitAuthorization: true,
+            missingPreconditions: [],
+            evidenceRefs: [],
+          },
+        ],
+      },
+    };
+    const app = await startMissionBraidApp({
+      stateDir: fixture.stateDir,
+      port: 0,
+      engineFactory: () => new FakeEngine(state),
+      discoverRuntimes: async () => readyCatalog(),
+    });
+    try {
+      const intelligence = await fetch(
+        `${app.url}/api/v1/missions/${missionId}/failure-intelligence`,
+      );
+      expect(intelligence.status).toBe(200);
+      expect(await intelligence.json()).toMatchObject({
+        missionId,
+        graph: { candidates: [{ candidateId: 'candidate-tool' }] },
+      });
+      const fork = await fetch(
+        `${app.url}/api/v1/missions/${missionId}/failure-intelligence/candidate-tool/forks`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            checkpointId: checkpoint.checkpointId,
+            childBranchId: 'branch-diagnostic',
+            intervention: {
+              interventionId: 'intervention-diagnostic',
+              kind: 'tool-result',
+              targetRef: 'tool:search',
+              afterDigest: 'sha256:alternative',
+              description: 'Try the bounded alternative.',
+              authorityChange: 'unchanged',
+            },
+          }),
+        },
+      );
+      expect(fork.status).toBe(201);
+      expect(state.diagnosticForkRequests).toEqual([
+        expect.objectContaining({
+          candidateId: 'candidate-tool',
+          checkpointId: checkpoint.checkpointId,
+        }),
+      ]);
+    } finally {
+      await app.close();
+    }
+  });
+
   it('runs each honest Checkpoint Replay mode through the versioned Workbench API', async () => {
     const fixture = await createWorkspace();
     const state = new FakeEngineState();
@@ -737,6 +841,8 @@ class FakeEngineState {
     readonly missionId: string;
     readonly input: MissionExecutionForkRequestV1;
   }> = [];
+  readonly diagnosticForkRequests: MissionDiagnosticForkRequestV1[] = [];
+  failureProjection?: MissionFailureIntelligenceProjectionV1;
   readonly replayRequests: Array<{
     readonly missionId: string;
     readonly checkpointId: string;
@@ -958,6 +1064,22 @@ class FakeEngine implements AppEngine {
       issuedAt: '2026-08-24T03:02:00.000Z',
     };
     return { record, receipt };
+  }
+
+  async executeDiagnosticFork(
+    missionId: string,
+    input: MissionDiagnosticForkRequestV1,
+  ): Promise<MissionExecutionForkResultV1> {
+    this.#state.diagnosticForkRequests.push(input);
+    return await this.executeFork(missionId, input);
+  }
+
+  async failureIntelligence(missionId: string) {
+    this.#require(missionId);
+    if (this.#state.failureProjection === undefined) {
+      throw new Error('Failure Intelligence fixture not configured');
+    }
+    return this.#state.failureProjection;
   }
 
   async replayCheckpoint(

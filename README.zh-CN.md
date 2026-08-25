@@ -16,13 +16,17 @@ Workbench（运行时工作台）**。它让 Codex、Qoder、Claude Code、OpenC
 正常路径会继续使用同一个 Harness。只有任务确实需要时，才使用 Branch、Handoff、
 自适应路由或 CI 导出。
 
-> **状态：** pre-alpha、本地优先、从源码运行。仓库目前已经实现一条真实的
-> Codex-to-Qoder-to-Claude Code Mission；Root Branch；Runtime Profile Definition、Catalog
-> Observation、不可变 Snapshot 和 Attempt Binding；按来源定序的 Event IR
-> 与脱敏 Native Artifact；以及可在重启后继续的持久 Command/Outbox。
-> 第 2 次迭代已经通过一条跨越三个 Harness 的同机真实 Workbench Mission
-> 验证，包括已验证 Receipt 和重启后的稳定恢复。Context Graph 实时调试、工具拦截、
-> 可执行 Fork、自适应规划和其他第 3 次以后的能力仍是目标架构。
+> **状态：** pre-alpha、本地优先、从源码运行。第 1–5 次迭代已经完成本地证据门；
+> 第 5 次迭代的真实工作区继续路径仍然是 Execution Fork，但四种 Replay 语义已经实现并有
+> 单独的本地记录。第 6 次迭代有受控中断的自适应 Handoff 本地证据；第 7–9 次是实现、API
+> 和本地测试切片，第 10 次有内部 clean-install package smoke。它们都不是独立外部复现或
+> 生产证据。
+> 当前 Workbench 可以运行真实 Codex、Qoder 和 Claude Code Attempt；实时展示 Context
+> Graph；控制一条真实 Claude Code 工具调用前边界；在控制器崩溃后对账一个可查询的外部
+> Effect；并从 Git 支撑的 Composite Checkpoint 创建隔离子 Branch，由全新的真实 Codex
+> 进程继续执行并生成绑定该 Branch 的 Receipt。Playback、Cached Replay、Counterfactual
+> Resampling 和 Execution Fork 具有明确不同的语义：只有 Execution Fork 会在隔离工作区
+> 中继续运行真实工具。自适应规划的受控中断记录见[第 6 次迭代证据](evidence/iteration-6-adaptive-handoff-local-2026-08-26.json)。
 
 ![MissionBraid 本地 Workbench 总览](docs/assets/missionbraid-workbench-overview.png)
 
@@ -30,13 +34,13 @@ Workbench（运行时工作台）**。它让 Codex、Qoder、Claude Code、OpenC
 
 ## 一张表了解产品
 
-|              | MissionBraid                                                                                                                                                                                                                                                               |
-| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 用户问题     | 修改模型、Prompt、Skill、工具、Memory 策略、权限或 Runtime 都可能改变 Agent 行为，但源码差异和零散日志无法说明真正运行的有效 Agent。                                                                                                                                       |
-| 产品         | 用一个 Workbench 绑定有效 Agent Revision、运行持久 Mission、实时检查上下文和工具、修改受支持的输入、从有价值的边界重跑、对比行为并验收结果。                                                                                                                               |
-| 核心抽象     | **Mission** 持有目标、执行 Branch、证据、Effect 和完成状态；Harness 只是可替换的 Runtime。                                                                                                                                                                                 |
-| 当前已经实现 | 双语本地 Workbench、Mission Kernel、Codex/Qoder/Claude Code 执行 Adapter、Root Branch、已解析的 Runtime Profile 与 Binding、按来源定序的 Event IR 与脱敏 Native Artifact、持久 Command/Outbox 恢复、工作区 Checkpoint 证据、Handoff Capsule、Verifier 和 Outcome Receipt。 |
-| 交付计划     | **共 10 次主要产品迭代。第 1、2 次已在本地实现并验证；第 3–10 次已规划。**                                                                                                                                                                                                 |
+|              | MissionBraid                                                                                                                                                                                                                                                                                      |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 用户问题     | 修改模型、Prompt、Skill、工具、Memory 策略、权限或 Runtime 都可能改变 Agent 行为，但源码差异和零散日志无法说明真正运行的有效 Agent。                                                                                                                                                              |
+| 产品         | 用一个 Workbench 绑定有效 Agent Revision、运行持久 Mission、实时检查上下文和工具、修改受支持的输入、从有价值的边界重跑、对比行为并验收结果。                                                                                                                                                      |
+| 核心抽象     | **Mission** 持有目标、执行 Branch、证据、Effect 和完成状态；Harness 只是可替换的 Runtime。                                                                                                                                                                                                        |
+| 当前已经实现 | 双语本地 Workbench、Mission Kernel、三个原生执行 Adapter、Runtime Profile、实时 Event IR 与 Context Graph、工具调用前 Gate、外部 Effect 对账、Git 支撑的 Composite Checkpoint、Execution Fork、四种 Replay 语义、受控自适应 Handoff、故障情报、Mission Plan 运行投影、Outcome Studio 与场景导出。 |
+| 交付计划     | **共 10 次主要产品迭代。第 1–5 次有同机本地证据；第 6 次有受控中断的同机证据；第 7–9 次是实现/API/本地测试切片；第 10 次是内部 clean-install package smoke。更强的独立、跨主机和生产证据仍未建立。**                                                                                              |
 
 ## 为什么要做 MissionBraid
 
@@ -188,17 +192,32 @@ Kandev 可以通过公开的 Provider 边界，为成熟的工作区和进程执
   Snapshot 和 Mission 专属 Attempt Binding；
 - 显式 Adapter 能力声明，以及不伪造数据的 unknown/unsupported Runtime 字段；
 - 按来源定序的归一化 Runtime 事件，并链接到脱敏、按内容寻址的 Native 格式证据；
+- 实时事件传输、Context Graph、相邻上下文差异，以及与来源相连的模型、工具、工作区和测试证据；
 - 持久 Command/Outbox 路径，已接受的执行意图不会因应用重启丢失；
 - 额外目标 Harness 的固定发现条目；
-- Attempt 前基线和工作区 Checkpoint 证据（digest/delta，不是可恢复快照）；
+- 一条真实 Claude Code 原生工具调用前 Gate，以及受保护、可查询的外部 Effect 对账；
+- Git 支撑的 Composite Checkpoint：工作区组件指向可恢复的准确 commit/tree，其他组件明确分类；
+- 不可变父子 Branch 谱系，以及在隔离 Git worktree 中启动全新原生进程的 Execution Fork；
+- Playback、Cached Replay、Counterfactual Resampling 和 Execution Fork 四种明确区分的 Replay
+  语义；其中只有 Execution Fork 会继续执行真实工作区工具；
 - 有预算约束、绑定 Provenance 的 Handoff Capsule；
+- 可查询的自适应 Planner、故障情报候选、Mission Plan 节点执行投影，以及 Outcome Studio
+  的 Agent Revision/回归场景/CI 结果投影与场景导出接口；
 - 显式的可变工作区 Effect Identity；
 - 进程外验收和 Hash 绑定的 Outcome Receipt；
+- 可安装包的公开 API 契约和第三方 Adapter 本地一致性检查；
 - 重启后的状态恢复，以及中断 Mission 的继续运行。
 
-当前最强的公开证据证明了一条同机 Workbench Mission 跨越 Codex、Qoder 和
-Claude Code，得到已验证 Receipt，并在重启后稳定恢复。它不证明自动路由、实时工具拦截、
-可执行 Fork/Replay、跨主机复现、生产级隔离或第三方采用。
+当前最强的公开证据分为两条同机 Workbench 流程。第 5 次迭代中，真实 Codex 先产生父 Branch 结果，
+浏览器据此创建 Composite Checkpoint，再在隔离 Git worktree 中启动全新的真实 Codex
+Execution Fork；父子 Branch 分离，子 Branch 通过确定性验证并生成 Receipt，一个外部 Effect
+按 `inherit-no-repeat` 继承，重启后状态仍可恢复。更早的记录分别证明了三 Harness Mission、
+实时 Context Graph、原生 Claude 工具 Gate 和外部 Effect 崩溃恢复；同一条第 5 次迭代记录还
+通过浏览器触发了 Playback、Cached Replay 和 Counterfactual Resampling：它们分别只回看、
+复用已持久化未来证据、或在无工具的模型安全模式中重采样，不启动真实工作区工具。第 6 次
+迭代记录了受控 Codex 中断后的确定性 Profile 过滤/排序、Capsule 确认、真实 Qoder/Claude
+目标绑定和 Receipt。上述记录不证明原生 Session fork/resume、自然 Harness 故障迁移、
+跨主机复现、生产级隔离或第三方采用。
 
 ## 当前 Runtime 支持情况
 
@@ -214,18 +233,18 @@ Claude Code，得到已验证 Receipt，并在重启后稳定恢复。它不证�
 
 ## 十次产品迭代
 
-| 迭代 | 用户可见结果                                                                  | 状态       |
-| ---: | ----------------------------------------------------------------------------- | ---------- |
-|    1 | 一条 Mission 能从中断中恢复，完成 Codex → Qoder 接力，并以已验证 Receipt 结束 | 本地已实现 |
-|    2 | Runtime Profile 和 Native 事件通过统一 Event IR 变得可观察                    | 本地已验证 |
-|    3 | 开发者可以检查实时执行、上下文组装、工具流和工作区变更                        | 已规划     |
-|    4 | 工具调用可以在支持的前/后边界停止，并在继续前修改                             | 已规划     |
-|    5 | 保留的执行边界支持诚实 Playback、Replay 和可执行对比 Branch                   | 已规划     |
-|    6 | 可复现的 Planner 选择 Profile，并只在需要更换 Runtime 时执行 Handoff          | 已规划     |
-|    7 | 使用可观察的模型/上下文/工具/Harness/环境证据归因故障                         | 已规划     |
-|    8 | Multi-Agent 工作成为持久 Mission Graph，并支持理解修订的协同                  | 已规划     |
-|    9 | Agent Revision 对比、Regression Scenario、Eval、Receipt 与 CI 导出            | 已规划     |
-|   10 | 外部开发者可以安装、扩展并复现完整 Runtime Workbench                          | 已规划     |
+| 迭代 | 用户可见结果                                                                        | 状态                     |
+| ---: | ----------------------------------------------------------------------------------- | ------------------------ |
+|    1 | 一条 Mission 能从中断中恢复，完成 Codex → Qoder 接力，并以已验证 Receipt 结束       | 本地已实现               |
+|    2 | Runtime Profile 和 Native 事件通过统一 Event IR 变得可观察                          | 本地已验证               |
+|    3 | 开发者可以检查实时执行、上下文组装、工具流和工作区变更                              | 本地已验证               |
+|    4 | 一条受支持的工具调用可以在发出前停止，并在继续前修改                                | 本地已验证               |
+|    5 | 从保留的边界创建隔离的 Execution Fork，并提供 Playback/Cached/Counterfactual Replay | 本地已验证               |
+|    6 | 可复现的 Planner 选择 Profile，并只在受控中断后需要时执行 Handoff                   | 受控本地已验证           |
+|    7 | 使用可观察的模型/上下文/工具/Harness/环境证据归因故障                               | 实现/API/本地测试切片    |
+|    8 | Multi-Agent 工作成为持久 Mission Graph，并支持理解修订的协同                        | 实现/API/本地测试切片    |
+|    9 | Agent Revision 对比、Regression Scenario、Eval、Receipt 与 CI 导出                  | 实现/API/本地测试切片    |
+|   10 | 外部开发者可以安装、扩展并复现完整 Runtime Workbench                                | 内部 clean-install smoke |
 
 每次迭代都必须结束于一条真实的 Workbench 用户流程，而不是孤立的 Schema、Adapter 或测试套件。
 详见[迭代路线](docs/roadmap.md)。
@@ -276,6 +295,31 @@ Complete the dependency-free JSONL Effect Ledger in this disposable repository. 
 
 ## 证据
 
+[第 5 次迭代机器可读记录](evidence/iteration-5-execution-fork-local-2026-08-26.json)
+将一条同机产品流程绑定到：
+
+- 一条真实 Codex 父 Mission，其单文件修改结果通过绑定的确定性 Verifier；
+- 本地证明控制器检查该 Codex 产生的差异后创建父 Git commit；Codex 工作区沙箱没有写入 Git 元数据；
+- 浏览器创建的 Git 支撑 Composite Checkpoint 和一项明确的 Guidance Intervention；
+- 只在 Branch B 隔离 Git worktree 中运行的全新真实 Codex 进程，Branch A 保持不变；
+- Runtime、模型、工具、工作区和验证证据，以及绑定子 Branch 的 Receipt；
+- 一个已确认、可查询的外部 Effect 以 `inherit-no-repeat` 继承，Fork 和重启期间没有再次调用目标；
+- 新 Workbench 进程恢复出相同的 Branch、Checkpoint、Fork、Effect 状态和 Receipt。
+
+这是从明确 Git 边界创建的 **Execution Fork**，不是原生 Codex Session fork 或 resume。
+它是同机证据，不是跨主机、独立复现、生产证据，也不证明父 Git commit 由 Codex 创建。
+
+[第 5 次迭代 Replay 记录](evidence/iteration-5-checkpoint-replay-local-2026-08-26.json)
+另外证明了同一 Composite Checkpoint 的三种非执行 Replay：Playback 不写入 Branch 或
+Kernel；Cached Replay 只复用已经持久化的未来 Artifact 并创建证据 Branch；
+Counterfactual Resampling 在隔离的模型安全模式中只产生模型证据，Outcome 保持 unknown。
+三种 Replay 都不启动工作区工具，也不声称能迁移原生 Session。
+
+[第 6 次迭代自适应 Handoff 记录](evidence/iteration-6-adaptive-handoff-local-2026-08-26.json)
+证明受控 Codex 中断后，Planner 会确定性地过滤/排序本机 Profile，绑定 Qoder 或 Claude
+目标，要求 Capsule 在首个工具请求前确认，并以 no-repeat Effect、Verifier 和 Receipt
+收口。这里的中断是证明控制边界的受控 Provider 行为，不是自然的模型、额度或网络故障。
+
 [第 2 次迭代机器可读记录](evidence/iteration-2-three-harness-local-2026-08-25.json)
 将一个干净修订绑定到：
 
@@ -289,7 +333,10 @@ Complete the dependency-free JSONL Effect Ledger in this disposable repository. 
 早期的 [Codex-to-Qoder 记录](evidence/unified-workbench-codex-qoder-local-2026-08-24.json)
 保留了相匹配的源 Checkpoint/目标 Baseline 工作区快照，以及不同的前后工作区 Digest；本项目不用它声称已实现受强制的修改前拦截。
 
-目前所有记录都是本地同机结果。[证据索引](evidence/README.md)严格区分已经演示的结果与目标架构。这些记录不证明实时工具拦截、自动路由、可执行 Fork/Replay、跨主机复现或生产就绪。
+目前所有运行记录都是本地同机结果。[证据索引](evidence/README.md)严格区分已经演示的结果与目标架构。
+第 7–9 次迭代当前是实现/API/本地测试切片，没有真实 Runtime 证据；第 10 次是内部
+clean-install package smoke。现有记录不证明原生 Session 迁移、自然 Harness 故障迁移、
+跨主机或独立外部复现、生产就绪或第三方采用。
 
 ## 文档
 

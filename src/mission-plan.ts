@@ -205,6 +205,8 @@ export interface ActivePlanAttemptV1 {
   readonly planRevisionId: string;
   readonly contractRevisionId: string;
   readonly status: 'running' | 'finished';
+  /** Terminal Attempt outcome when status is `finished`; absent in imported legacy records. */
+  readonly terminalStatus?: 'succeeded' | 'failed' | 'abandoned' | 'handed_off';
   /** Observable source authority; it is never transferred by impact analysis. */
   readonly authorityRefs: readonly string[];
   readonly evidenceRefs: readonly string[];

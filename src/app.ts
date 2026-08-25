@@ -21,9 +21,17 @@ import {
   type MissionExecutionPlannerOverrideRequestV1,
   type MissionExecutionPlannerOverrideV1,
   type MissionExecutionForkRequestV1,
+  type MissionDiagnosticForkRequestV1,
   type MissionExecutionForkResultV1,
   type MissionCheckpointReplayResultV1,
+  type MissionPlanView,
+  type MissionPlanRuntimeProjectionV1,
+  type ReviseMissionContractInputV1,
+  type ReviseMissionContractResultV1,
+  type MissionOutcomeStudioScenarioCollectionV1,
 } from './engine.js';
+import type { MissionFailureIntelligenceProjectionV1 } from './mission-failure-intelligence.js';
+import type { MissionOutcomeStudioViewV1 } from './mission-outcome-studio.js';
 import type { CheckpointReplayRecordV1 } from './checkpoint-replay.js';
 import type { MissionCheckpointReplayRequestV1 } from './mission-checkpoint-replay.js';
 import { createMissionDraft, MissionDraftError } from './mission-draft.js';
@@ -73,6 +81,12 @@ export interface AppEngine {
   compositeCheckpoints?(missionId: string): readonly CompositeCheckpointManifestV1[];
   executionForks?(missionId: string): Promise<readonly ExecutionForkRecordV1[]>;
   checkpointReplays?(missionId: string): Promise<readonly CheckpointReplayRecordV1[]>;
+  missionPlan?(missionId: string): MissionPlanView;
+  missionPlanRuntime?(missionId: string): MissionPlanRuntimeProjectionV1;
+  reviseMissionContract?(
+    missionId: string,
+    input: ReviseMissionContractInputV1,
+  ): Promise<ReviseMissionContractResultV1>;
   createCompositeCheckpoint?(
     missionId: string,
     requestedAttemptId?: string,
@@ -81,6 +95,21 @@ export interface AppEngine {
     missionId: string,
     input: MissionExecutionForkRequestV1,
   ): Promise<MissionExecutionForkResultV1>;
+  executeDiagnosticFork?(
+    missionId: string,
+    input: MissionDiagnosticForkRequestV1,
+  ): Promise<MissionExecutionForkResultV1>;
+  failureIntelligence?(
+    missionId: string,
+    branchId?: string,
+  ): Promise<MissionFailureIntelligenceProjectionV1>;
+  outcomeStudio?(missionId: string, branchId?: string): Promise<MissionOutcomeStudioViewV1>;
+  outcomeStudioScenarios?(missionId: string): MissionOutcomeStudioScenarioCollectionV1;
+  saveOutcomeStudioScenario?(
+    missionId: string,
+    branchId?: string,
+  ): Promise<MissionOutcomeStudioScenarioCollectionV1>;
+  exportOutcomeStudioScenarios?(missionId: string): Promise<string>;
   replayCheckpoint?(
     missionId: string,
     checkpointId: string,
@@ -341,6 +370,51 @@ export async function startMissionBraidApp(
       }
       return;
     }
+    const missionPlanId = matchMissionPlan(url.pathname);
+    if (missionPlanId !== undefined && request.method === 'GET') {
+      const engine = engineFactory(stateDir);
+      try {
+        if (engine.missionPlan === undefined)
+          throw new AppHttpError(501, 'MISSION_PLAN_UNAVAILABLE');
+        sendJson(response, 200, engine.missionPlan(missionPlanId));
+      } finally {
+        engine.close();
+      }
+      return;
+    }
+    const missionPlanRuntimeId = matchMissionPlanRuntime(url.pathname);
+    if (missionPlanRuntimeId !== undefined && request.method === 'GET') {
+      const engine = engineFactory(stateDir);
+      try {
+        if (engine.missionPlanRuntime === undefined)
+          throw new AppHttpError(501, 'MISSION_PLAN_RUNTIME_UNAVAILABLE');
+        sendJson(response, 200, engine.missionPlanRuntime(missionPlanRuntimeId));
+      } finally {
+        engine.close();
+      }
+      return;
+    }
+    const reviseMissionId = matchMissionContractRevision(url.pathname);
+    if (reviseMissionId !== undefined && request.method === 'POST') {
+      const engine = engineFactory(stateDir);
+      try {
+        if (engine.reviseMissionContract === undefined)
+          throw new AppHttpError(501, 'MISSION_PLAN_UNAVAILABLE');
+        const body = requireJsonRecord(await readJson(request));
+        const result = await engine.reviseMissionContract(reviseMissionId, {
+          contract: body.contract as ReviseMissionContractInputV1['contract'],
+          requirements: body.requirements as ReviseMissionContractInputV1['requirements'],
+          reason: requireJsonString(body.reason, 'reason'),
+          evidenceRefs: body.evidenceRefs === undefined ? [] : (body.evidenceRefs as string[]),
+          authorityChanges:
+            body.authorityChanges as ReviseMissionContractInputV1['authorityChanges'],
+        });
+        sendJson(response, 201, result);
+      } finally {
+        engine.close();
+      }
+      return;
+    }
     const missionEventStreamId = matchMissionEventStreamId(url.pathname);
     if (missionEventStreamId !== undefined && request.method === 'GET') {
       const engine = engineFactory(stateDir);
@@ -537,6 +611,32 @@ export async function startMissionBraidApp(
       }
       return;
     }
+    const diagnosticFork = matchDiagnosticForkCollection(url.pathname);
+    if (diagnosticFork !== undefined && request.method === 'POST') {
+      const engine = engineFactory(stateDir);
+      try {
+        if (engine.executeDiagnosticFork === undefined) {
+          throw new AppHttpError(
+            501,
+            'DIAGNOSTIC_FORK_UNAVAILABLE',
+            'Failure Intelligence diagnostic Fork is unavailable.',
+          );
+        }
+        const raw = requireJsonRecord(await readJson(request));
+        const body = requireExecutionForkBody(raw);
+        const result = await engine.executeDiagnosticFork(diagnosticFork.missionId, {
+          candidateId: diagnosticFork.candidateId,
+          checkpointId: requireExecutionForkString(raw.checkpointId, 'checkpointId'),
+          intervention: body.intervention,
+          ...(body.stageId === undefined ? {} : { stageId: body.stageId }),
+          ...(body.childBranchId === undefined ? {} : { childBranchId: body.childBranchId }),
+        });
+        sendJson(response, 201, { executionFork: result.record, receipt: result.receipt });
+      } finally {
+        engine.close();
+      }
+      return;
+    }
     const checkpointFork = matchCheckpointForkCollection(url.pathname);
     if (checkpointFork !== undefined && request.method === 'POST') {
       const engine = engineFactory(stateDir);
@@ -556,6 +656,117 @@ export async function startMissionBraidApp(
           ...(body.childBranchId === undefined ? {} : { childBranchId: body.childBranchId }),
         });
         sendJson(response, 201, { executionFork: result.record, receipt: result.receipt });
+      } finally {
+        engine.close();
+      }
+      return;
+    }
+    const failureIntelligenceMissionId = matchMissionFailureIntelligence(url.pathname);
+    if (failureIntelligenceMissionId !== undefined && request.method === 'GET') {
+      const engine = engineFactory(stateDir);
+      try {
+        if (engine.failureIntelligence === undefined) {
+          throw new AppHttpError(
+            501,
+            'FAILURE_INTELLIGENCE_UNAVAILABLE',
+            'Failure Intelligence is unavailable.',
+          );
+        }
+        const branchId = url.searchParams.get('branchId') ?? undefined;
+        sendJson(
+          response,
+          200,
+          await engine.failureIntelligence(failureIntelligenceMissionId, branchId),
+        );
+      } finally {
+        engine.close();
+      }
+      return;
+    }
+    const outcomeStudioMissionId = matchMissionOutcomeStudio(url.pathname);
+    const outcomeStudioScenarioExportMissionId = matchMissionOutcomeStudioScenarioExport(
+      url.pathname,
+    );
+    if (outcomeStudioScenarioExportMissionId !== undefined && request.method === 'GET') {
+      const engine = engineFactory(stateDir);
+      try {
+        if (engine.exportOutcomeStudioScenarios === undefined) {
+          throw new AppHttpError(
+            501,
+            'OUTCOME_STUDIO_UNAVAILABLE',
+            'Outcome Studio is unavailable.',
+          );
+        }
+        const payload = await engine.exportOutcomeStudioScenarios(
+          outcomeStudioScenarioExportMissionId,
+        );
+        response.statusCode = 200;
+        response.setHeader('Content-Type', 'application/json; charset=utf-8');
+        response.setHeader(
+          'Content-Disposition',
+          'attachment; filename="outcome-studio-scenarios.json"',
+        );
+        response.end(payload);
+      } finally {
+        engine.close();
+      }
+      return;
+    }
+    const outcomeStudioScenariosMissionId = matchMissionOutcomeStudioScenarios(url.pathname);
+    if (
+      outcomeStudioScenariosMissionId !== undefined &&
+      (request.method === 'GET' || request.method === 'POST')
+    ) {
+      const engine = engineFactory(stateDir);
+      try {
+        if (request.method === 'GET') {
+          if (engine.outcomeStudioScenarios === undefined) {
+            throw new AppHttpError(
+              501,
+              'OUTCOME_STUDIO_UNAVAILABLE',
+              'Outcome Studio is unavailable.',
+            );
+          }
+          sendJson(response, 200, engine.outcomeStudioScenarios(outcomeStudioScenariosMissionId));
+        } else {
+          if (engine.saveOutcomeStudioScenario === undefined) {
+            throw new AppHttpError(
+              501,
+              'OUTCOME_STUDIO_UNAVAILABLE',
+              'Outcome Studio is unavailable.',
+            );
+          }
+          const body = await readJson(request);
+          const branchId =
+            body !== null &&
+            typeof body === 'object' &&
+            !Array.isArray(body) &&
+            typeof (body as Record<string, unknown>).branchId === 'string'
+              ? ((body as Record<string, unknown>).branchId as string)
+              : undefined;
+          sendJson(
+            response,
+            201,
+            await engine.saveOutcomeStudioScenario(outcomeStudioScenariosMissionId, branchId),
+          );
+        }
+      } finally {
+        engine.close();
+      }
+      return;
+    }
+    if (outcomeStudioMissionId !== undefined && request.method === 'GET') {
+      const engine = engineFactory(stateDir);
+      try {
+        if (engine.outcomeStudio === undefined) {
+          throw new AppHttpError(
+            501,
+            'OUTCOME_STUDIO_UNAVAILABLE',
+            'Outcome Studio is unavailable.',
+          );
+        }
+        const branchId = url.searchParams.get('branchId') ?? undefined;
+        sendJson(response, 200, await engine.outcomeStudio(outcomeStudioMissionId, branchId));
       } finally {
         engine.close();
       }
@@ -636,10 +847,47 @@ export async function startMissionBraidApp(
         const status = engine.status(missionId);
         const toolGates =
           engine.pendingToolGates === undefined ? [] : await engine.pendingToolGates(missionId);
+        let failureIntelligence: MissionFailureIntelligenceProjectionV1 | null = null;
+        if (engine.failureIntelligence !== undefined) {
+          try {
+            failureIntelligence = await engine.failureIntelligence(missionId);
+          } catch {
+            // The detail page remains useful when a branch has no complete
+            // evidence projection yet; the dedicated route remains strict.
+            failureIntelligence = null;
+          }
+        }
+        let missionPlan: unknown = null;
+        if (engine.missionPlan !== undefined) {
+          try {
+            missionPlan = engine.missionPlan(missionId);
+          } catch {
+            missionPlan = null;
+          }
+        }
+        let missionPlanRuntime: MissionPlanRuntimeProjectionV1 | null = null;
+        if (engine.missionPlanRuntime !== undefined) {
+          try {
+            missionPlanRuntime = engine.missionPlanRuntime(missionId);
+          } catch {
+            missionPlanRuntime = null;
+          }
+        }
+        let outcomeStudio: MissionOutcomeStudioViewV1 | null = null;
+        if (engine.outcomeStudio !== undefined) {
+          try {
+            outcomeStudio = await engine.outcomeStudio(missionId);
+          } catch {
+            // Outcome Studio is an evidence projection; absence of a complete
+            // Checkpoint/Receipt must not hide the authoritative Mission view.
+            outcomeStudio = null;
+          }
+        }
         sendJson(response, 200, {
           ...status,
           timeline: engine.timeline(missionId),
           contextGraph: await engine.contextGraph(missionId),
+          failureIntelligence,
           toolGates,
           branches: engine.branches?.(missionId) ?? [],
           compositeCheckpoints: engine.compositeCheckpoints?.(missionId) ?? [],
@@ -647,6 +895,9 @@ export async function startMissionBraidApp(
             engine.executionForks === undefined ? [] : await engine.executionForks(missionId),
           checkpointReplays:
             engine.checkpointReplays === undefined ? [] : await engine.checkpointReplays(missionId),
+          missionPlan,
+          missionPlanRuntime,
+          outcomeStudio,
           executionPlanner: {
             candidates: engine.executionPlannerCandidates?.(missionId) ?? [],
             override: engine.executionPlannerOverride?.(missionId) ?? null,
@@ -654,6 +905,10 @@ export async function startMissionBraidApp(
           capabilities: {
             createCompositeCheckpoint: engine.createCompositeCheckpoint !== undefined,
             executeFork: engine.executeFork !== undefined,
+            executeDiagnosticFork: engine.executeDiagnosticFork !== undefined,
+            failureIntelligence: engine.failureIntelligence !== undefined,
+            outcomeStudio: engine.outcomeStudio !== undefined,
+            missionPlanRuntime: engine.missionPlanRuntime !== undefined,
             replayCheckpoint: engine.replayCheckpoint !== undefined,
             setExecutionPlannerOverride: engine.setExecutionPlannerOverride !== undefined,
             clearExecutionPlannerOverride: engine.clearExecutionPlannerOverride !== undefined,
@@ -799,6 +1054,41 @@ async function readJson(request: IncomingMessage): Promise<unknown> {
 
 function matchMissionId(pathname: string): string | undefined {
   const match = pathname.match(/^\/api\/v1\/missions\/([^/]+)$/);
+  return match?.[1] === undefined ? undefined : decodeURIComponent(match[1]);
+}
+
+function matchMissionPlan(pathname: string): string | undefined {
+  const match = pathname.match(/^\/api\/v1\/missions\/([^/]+)\/plan$/);
+  return match?.[1] === undefined ? undefined : decodeURIComponent(match[1]);
+}
+
+function matchMissionPlanRuntime(pathname: string): string | undefined {
+  const match = pathname.match(/^\/api\/v1\/missions\/([^/]+)\/plan\/runtime$/);
+  return match?.[1] === undefined ? undefined : decodeURIComponent(match[1]);
+}
+
+function matchMissionContractRevision(pathname: string): string | undefined {
+  const match = pathname.match(/^\/api\/v1\/missions\/([^/]+)\/contract-revisions$/);
+  return match?.[1] === undefined ? undefined : decodeURIComponent(match[1]);
+}
+
+function matchMissionFailureIntelligence(pathname: string): string | undefined {
+  const match = pathname.match(/^\/api\/v1\/missions\/([^/]+)\/failure-intelligence$/);
+  return match?.[1] === undefined ? undefined : decodeURIComponent(match[1]);
+}
+
+function matchMissionOutcomeStudio(pathname: string): string | undefined {
+  const match = pathname.match(/^\/api\/v1\/missions\/([^/]+)\/outcome-studio$/);
+  return match?.[1] === undefined ? undefined : decodeURIComponent(match[1]);
+}
+
+function matchMissionOutcomeStudioScenarios(pathname: string): string | undefined {
+  const match = pathname.match(/^\/api\/v1\/missions\/([^/]+)\/outcome-studio\/scenarios$/);
+  return match?.[1] === undefined ? undefined : decodeURIComponent(match[1]);
+}
+
+function matchMissionOutcomeStudioScenarioExport(pathname: string): string | undefined {
+  const match = pathname.match(/^\/api\/v1\/missions\/([^/]+)\/outcome-studio\/scenarios\/export$/);
   return match?.[1] === undefined ? undefined : decodeURIComponent(match[1]);
 }
 
@@ -963,6 +1253,19 @@ function matchCheckpointForkCollection(
   return {
     missionId: decodeURIComponent(match[1]),
     checkpointId: decodeURIComponent(match[2]),
+  };
+}
+
+function matchDiagnosticForkCollection(
+  pathname: string,
+): { readonly missionId: string; readonly candidateId: string } | undefined {
+  const match = pathname.match(
+    /^\/api\/v1\/missions\/([^/]+)\/failure-intelligence\/([^/]+)\/forks$/,
+  );
+  if (match?.[1] === undefined || match[2] === undefined) return undefined;
+  return {
+    missionId: decodeURIComponent(match[1]),
+    candidateId: decodeURIComponent(match[2]),
   };
 }
 

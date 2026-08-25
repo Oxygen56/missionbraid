@@ -17,3 +17,9 @@ export const MISSIONBRAID_PUBLIC_API_SURFACE_V1 = {
 export * from './adapter-sdk.js';
 export * from './adapter-conformance.js';
 export * from './package-contract.js';
+// These modules are pure, content-addressed projections. They expose the
+// Agent Revision/Evaluation and Mission Plan contracts without exposing the
+// Mission Kernel's mutable state machines.
+export * from './outcome-studio.js';
+export * from './mission-plan.js';
+export * from './mission-plan-runtime.js';

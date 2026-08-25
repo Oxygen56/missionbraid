@@ -4437,27 +4437,38 @@ function renderForkIntervention(missionId, checkpoint, enabled) {
     submit.disabled = true;
     status.textContent = t('continuity.creatingFork');
     try {
-      await requestJson(
-        '/api/v1/missions/' +
+      const diagnosticCandidateId = form.dataset.diagnosticCandidateId;
+      const endpoint = diagnosticCandidateId
+        ? '/api/v1/missions/' +
+          encodeURIComponent(missionId) +
+          '/failure-intelligence/' +
+          encodeURIComponent(diagnosticCandidateId) +
+          '/forks'
+        : '/api/v1/missions/' +
           encodeURIComponent(missionId) +
           '/checkpoints/' +
           encodeURIComponent(checkpointId) +
-          '/forks',
+          '/forks';
+      const payload = {
+        ...(diagnosticCandidateId ? { checkpointId: checkpointId } : {}),
+        intervention: {
+          interventionId: interventionId,
+          kind: kind.value,
+          targetRef: targetRef,
+          afterDigest: afterDigest,
+          description: detail,
+          authorityChange: authority.value,
+        },
+      };
+      await requestJson(
+        endpoint,
         {
           method: 'POST',
-          body: JSON.stringify({
-            intervention: {
-              interventionId: interventionId,
-              kind: kind.value,
-              targetRef: targetRef,
-              afterDigest: afterDigest,
-              description: detail,
-              authorityChange: authority.value,
-            },
-          }),
+          body: JSON.stringify(payload),
         },
       );
       interventionId = null;
+      delete form.dataset.diagnosticCandidateId;
       showPageAlert(translated('continuity.forkCreated'));
       await loadMissions({ quiet: true });
       await loadDetail(missionId, { quiet: true });
@@ -4671,6 +4682,234 @@ function renderCheckpointReplay(record) {
   if (failure && failure.detail) card.append(createElement('p', 'operation-note', failure.detail));
   if (unknown && unknown.detail) card.append(createElement('p', 'operation-note', unknown.detail));
   return card;
+}
+
+function diagnosticKindForVariable(variable) {
+  const value = recordValue(variable) || {};
+  switch (value.dimension) {
+    case 'model':
+      return 'guidance';
+    case 'context':
+      return 'context';
+    case 'tool':
+      return 'tool-result';
+    case 'harness':
+      return 'profile';
+    case 'environment':
+      return 'workspace';
+    case 'missionbraid':
+      return 'permission-narrowing';
+    default:
+      return null;
+  }
+}
+
+function renderFailureIntelligence(detail, missionId) {
+  const projection = recordValue(detail.failureIntelligence);
+  if (!projection) return null;
+  const graph = recordValue(projection.graph) || {};
+  const candidates = Array.isArray(graph.candidates) ? graph.candidates : [];
+  const proposals = Array.isArray(graph.diagnosticBranchProposals)
+    ? graph.diagnosticBranchProposals
+    : [];
+  const gaps = Array.isArray(projection.unavailable) ? projection.unavailable : [];
+  const section = createElement('section', 'runtime-intelligence failure-intelligence');
+  const heading = createElement('div', 'intelligence-heading');
+  heading.append(
+    createElement('p', 'eyebrow', t('failureIntelligence.eyebrow')),
+    createElement('h3', '', t('failureIntelligence.heading')),
+    createElement('p', 'continuity-description', t('failureIntelligence.description')),
+  );
+  const grid = createElement('div', 'intelligence-grid');
+  const card = createElement('article', 'intelligence-card intelligence-card-wide');
+  const cardHeading = createElement('div', 'intelligence-card-heading');
+  cardHeading.append(
+    createElement('h4', '', t('failureIntelligence.candidateCount', { count: candidates.length })),
+    createElement('span', 'continuity-label', projection.branchId || t('failureIntelligence.unknown')),
+  );
+  card.append(cardHeading);
+  if (candidates.length === 0) {
+    card.append(createElement('p', 'empty-note', t('failureIntelligence.noCandidates')));
+  } else {
+    const records = createElement('div', 'runtime-event-records');
+    candidates.forEach(function (candidate) {
+      const value = recordValue(candidate) || {};
+      const item = createElement('article', 'intelligence-record');
+      item.append(
+        createElement('p', 'intelligence-record-title', value.title || t('failureIntelligence.unknown')),
+        createElement('p', 'continuity-status',
+          t('failureIntelligence.status') + ' · ' + displayValue(value.status) +
+          ' · ' + t('failureIntelligence.layer') + ' · ' + displayValue(value.layer)),
+        createElement('p', '', t('failureIntelligence.rank') + ' · ' + displayValue(value.rank)),
+      );
+      if (Array.isArray(value.missingEvidence) && value.missingEvidence.length > 0) {
+        item.append(
+          createElement(
+            'p',
+            'operation-note',
+            t('failureIntelligence.missing') + ' · ' + displayValue(value.missingEvidence),
+          ),
+        );
+      }
+      const proposal = proposals.find(function (entry) {
+        return recordValue(entry)?.candidateId === value.candidateId;
+      });
+      const proposalValue = recordValue(proposal);
+      if (proposalValue && proposalValue.ready === true) {
+        item.append(createElement('p', 'continuity-status', t('failureIntelligence.diagnosticReady')));
+        const kind = diagnosticKindForVariable(proposalValue.changedVariable);
+        if (kind && typeof proposalValue.baseCheckpointId === 'string') {
+          const button = createElement(
+            'button',
+            'continuity-action is-secondary',
+            t('failureIntelligence.diagnosticButton'),
+          );
+          button.type = 'button';
+          button.dataset.diagnosticCandidateId = String(value.candidateId || '');
+          button.addEventListener('click', function () {
+            const form = document.querySelector(
+              '[data-execution-fork-action="' +
+                CSS.escape(String(proposalValue.baseCheckpointId)) +
+                '"]',
+            );
+            if (!form) {
+              showPageAlert(t('failureIntelligence.diagnosticUnavailable'));
+              return;
+            }
+            form.dataset.diagnosticCandidateId = String(value.candidateId || '');
+            const controls = form.querySelectorAll('input, select, textarea');
+            if (controls[0]) controls[0].value = kind;
+            if (controls[1]) controls[1].value = String(proposalValue.changedVariable?.key || '');
+            if (controls[3]) controls[3].value = String(value.title || '');
+            const status = form.querySelector('.continuity-status');
+            if (status) status.textContent = t('failureIntelligence.diagnosticPrepared');
+            form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            if (controls[1]) controls[1].focus();
+          });
+          item.append(button);
+        }
+      } else if (proposalValue) {
+        item.append(createElement('p', 'operation-note', t('failureIntelligence.diagnosticUnavailable')));
+      }
+      records.append(item);
+    });
+    card.append(records);
+  }
+  grid.append(card);
+  if (gaps.length > 0) {
+    const gapCard = createElement('article', 'intelligence-card');
+    gapCard.append(
+      createElement('h4', '', t('failureIntelligence.gaps')),
+      createElement('p', 'operation-note', displayValue(gaps.map(function (gap) {
+        const value = recordValue(gap) || {};
+        return value.reason || value.kind || t('failureIntelligence.unknown');
+      }))),
+    );
+    grid.append(gapCard);
+  }
+  section.append(heading, grid);
+  return section;
+}
+
+function renderOutcomeStudio(detail, missionId) {
+  const view = recordValue(detail.outcomeStudio);
+  if (!view) return null;
+  const section = createElement('section', 'runtime-intelligence outcome-studio');
+  const heading = createElement('div', 'intelligence-heading');
+  heading.append(
+    createElement('p', 'eyebrow', t('outcomeStudio.eyebrow')),
+    createElement('h3', '', t('outcomeStudio.heading')),
+    createElement('p', 'continuity-description', t('outcomeStudio.description')),
+  );
+  const grid = createElement('div', 'intelligence-grid');
+  const card = createElement('article', 'intelligence-card intelligence-card-wide');
+  const agentRevision = recordValue(view.agentRevision);
+  const suite = recordValue(view.evaluationSuite);
+  const branch = recordValue(view.branch);
+  const evaluation = branch ? recordValue(branch.evaluation) : null;
+  const criteria = evaluation && Array.isArray(evaluation.criteria) ? evaluation.criteria : [];
+  const counts = criteria.reduce(
+    function (acc, criterion) {
+      const value = recordValue(criterion);
+      const status = value?.status;
+      if (status === 'passed') acc.passed += 1;
+      else if (status === 'failed') acc.failed += 1;
+      else acc.unknown += 1;
+      return acc;
+    },
+    { passed: 0, failed: 0, unknown: 0 },
+  );
+  const summary = createElement('div', 'intelligence-facts');
+  const fact = function (label, value) {
+    const row = createElement('div', 'intelligence-fact');
+    row.append(createElement('dt', '', label), createElement('dd', '', value));
+    return row;
+  };
+  summary.append(
+    fact(t('outcomeStudio.agentRevision'), agentRevision?.revisionId || t('outcomeStudio.notReady')),
+    fact(t('outcomeStudio.evaluationSuite'), suite?.suiteId || t('outcomeStudio.notReady')),
+    fact(t('outcomeStudio.branch'), branch?.branchId || t('outcomeStudio.notReady')),
+    fact(
+      t('outcomeStudio.criteria'),
+      criteria.length === 0
+        ? t('outcomeStudio.notReady')
+        : counts.passed + ' passed · ' + counts.failed + ' failed · ' + counts.unknown + ' unknown',
+    ),
+  );
+  card.append(summary);
+  const comparison = recordValue(view.comparison);
+  const incident = recordValue(view.incidentScenario);
+  const ci = recordValue(view.ciResult);
+  const unknown = Array.isArray(view.unknown) ? view.unknown : [];
+  const side = createElement('article', 'intelligence-card');
+  side.append(
+    fact(
+      t('outcomeStudio.comparison'),
+      comparison?.branchIds ? displayValue(comparison.branchIds) : t('outcomeStudio.notReady'),
+    ),
+    fact(
+      t('outcomeStudio.incident'),
+      incident?.scenarioId || t('outcomeStudio.notReady'),
+    ),
+    fact(t('outcomeStudio.ci'), ci?.status || t('outcomeStudio.notReady')),
+    fact(
+      t('outcomeStudio.unknown'),
+      unknown.length === 0 ? t('intelligence.none') : displayValue(unknown),
+    ),
+  );
+  grid.append(card, side);
+  const actions = createElement('div', 'detail-actions');
+  const save = createElement('button', 'continuity-action', t('outcomeStudio.saveScenario'));
+  save.type = 'button';
+  save.disabled = !(incident && ci);
+  save.addEventListener('click', async function () {
+    if (!(incident && ci)) {
+      showPageAlert(t('outcomeStudio.scenarioUnavailable'));
+      return;
+    }
+    save.disabled = true;
+    try {
+      await requestJson(
+        '/api/v1/missions/' + encodeURIComponent(missionId) + '/outcome-studio/scenarios',
+        { method: 'POST', body: JSON.stringify({ branchId: branch?.branchId || undefined }) },
+      );
+      showPageAlert(t('outcomeStudio.scenarioSaved'));
+    } catch (error) {
+      showPageAlert(messageText(errorMessage(error, t('outcomeStudio.scenarioUnavailable'))));
+    } finally {
+      save.disabled = !(incident && ci);
+    }
+  });
+  const exportButton = createElement('button', 'continuity-action is-secondary', t('outcomeStudio.exportScenarios'));
+  exportButton.type = 'button';
+  exportButton.addEventListener('click', function () {
+    window.location.href =
+      '/api/v1/missions/' + encodeURIComponent(missionId) + '/outcome-studio/scenarios/export';
+  });
+  actions.append(save, exportButton);
+  section.append(actions);
+  section.prepend(heading);
+  return section;
 }
 
 function renderContinuityFork(executionFork, receipt) {
@@ -4942,6 +5181,64 @@ function renderDetail() {
   }
   hero.append(actions);
 
+  const planView = detail.missionPlan && typeof detail.missionPlan === 'object' ? detail.missionPlan : null;
+  if (planView) {
+    const planSection = createElement('section', 'continuity-group');
+    planSection.append(
+      createElement('p', 'eyebrow', t('missionPlan.eyebrow')),
+      createElement('h3', '', t('missionPlan.heading')),
+      createElement(
+        'p',
+        'continuity-description',
+        t('missionPlan.revision', {
+          contract: String(planView.contractRevision?.revisionNumber ?? '—'),
+          plan: String(planView.planRevision?.revisionNumber ?? '—'),
+        }),
+      ),
+    );
+    const nodes = Array.isArray(planView.planRevision?.nodes) ? planView.planRevision.nodes : [];
+    planSection.append(
+      createElement('p', 'empty-note', t('missionPlan.nodeCount', { count: nodes.length })),
+    );
+    const runtime = detail.missionPlanRuntime && typeof detail.missionPlanRuntime === 'object'
+      ? detail.missionPlanRuntime
+      : null;
+    if (runtime) {
+      const runtimeRecord = recordValue(runtime) || {};
+      const runtimeFacts = [
+        [t('missionPlan.ready'), runtimeRecord.readyNodeIds],
+        [t('missionPlan.running'), runtimeRecord.runningNodeIds],
+        [t('missionPlan.stale'), runtimeRecord.staleNodeIds],
+        [t('missionPlan.blocked'), runtimeRecord.blockedNodeIds],
+        [t('missionPlan.unknown'), runtimeRecord.unknownNodeIds],
+      ]
+        .map(([label, value]) => String(label) + ': ' + displayValue(value))
+        .join(' · ');
+      planSection.append(
+        createElement('p', 'continuity-label', t('missionPlan.runtimeSummary')),
+        createElement('p', 'empty-note', runtimeFacts),
+      );
+    }
+    const revise = createElement('button', 'continuity-action', t('missionPlan.revise'));
+    revise.type = 'button';
+    revise.addEventListener('click', async function () {
+      const reason = window.prompt(t('missionPlan.revisionReason'));
+      if (!reason) return;
+      try {
+        const contract = planView.contractRevision.contract;
+        await requestJson('/api/v1/missions/' + encodeURIComponent(missionId) + '/contract-revisions', {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ contract, requirements: planView.contractRevision.requirements, reason }),
+        });
+        await loadDetail(missionId, { quiet: true });
+      } catch (error) {
+        showPageAlert(messageText(errorMessage(error, t('missionPlan.revisionFailed'))));
+      }
+    });
+    planSection.append(revise);
+    hero.append(planSection);
+  }
+
   const timeline = timelineFromDetail(detail);
   const timelineSection = createElement('section', 'timeline-section');
   const timelineHeading = createElement('div', 'timeline-section-heading');
@@ -4994,6 +5291,8 @@ function renderDetail() {
   content.append(
     renderRuntimeIntelligence(mission, timeline),
     renderContextGraph(detail.contextGraph),
+    renderOutcomeStudio(detail, missionId),
+    renderFailureIntelligence(detail, missionId),
     timelineSection,
   );
   elements.missionDetail.replaceChildren(content);

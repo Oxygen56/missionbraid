@@ -65,6 +65,18 @@ describe('versioned public API and package contract', () => {
         types: './dist/src/adapter-conformance.d.ts',
         import: './dist/src/adapter-conformance.js',
       },
+      './outcome-studio/v1': {
+        types: './dist/src/outcome-studio.d.ts',
+        import: './dist/src/outcome-studio.js',
+      },
+      './mission-plan/v1': {
+        types: './dist/src/mission-plan.d.ts',
+        import: './dist/src/mission-plan.js',
+      },
+      './mission-plan-runtime/v1': {
+        types: './dist/src/mission-plan-runtime.d.ts',
+        import: './dist/src/mission-plan-runtime.js',
+      },
     });
 
     const unwired = publicApi.validatePackageManifestV1({

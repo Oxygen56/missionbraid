@@ -198,8 +198,9 @@ foundation:
 3. Select Codex, Qoder, or an ordered Codex-to-Qoder route.
 4. Run real native Runtime processes against a disposable workspace.
 5. Persist Attempt, workspace baseline/checkpoint evidence, Effect, Capsule,
-   verification, and Receipt events. The current checkpoint evidence is a Git
-   digest/delta boundary, not a restorable snapshot.
+   verification, and Receipt events. The original continuity record used a Git
+   digest/delta boundary; the later Iteration 5 path adds a Git-backed
+   restorable Composite Checkpoint for Execution Fork and Replay.
 6. Restart the Workbench and restore the same Mission result.
 
 The current implemented control loop is:
@@ -232,9 +233,10 @@ sequenceDiagram
 ```
 
 The Iteration 1 flow above proves the Mission can outlive a process and cross
-one real Runtime boundary. It does not yet provide the target live debugger,
-executable time-travel branches, adaptive planner, or general failure
-attribution.
+one real Runtime boundary. The later slices add live observation, executable
+branches, Replay semantics, adaptive Handoff, failure intelligence, plan
+runtime projection, and Outcome Studio; their evidence levels are stated
+below rather than inferred from the original continuity run.
 
 Iteration 2 is now implemented in source:
 
@@ -261,21 +263,63 @@ restart. The two Handoff acknowledgements precede their target's first observed
 tool-request event in the native source stream. This is cooperative ordering
 evidence, not an enforced live tool gate.
 
+## Current implementation and evidence by iteration
+
+The repository now contains the following later product slices:
+
+- **Iteration 3 — live flight recorder.** The Workbench projects live Runtime
+  events and a Context Graph with source-linked native evidence, redaction,
+  latency, and restart-stable ordering. The retained record is same-host local.
+- **Iteration 4 — controlled tools and Effects.** A supported Claude Code tool
+  request can be gated before dispatch, and a queryable external Effect can be
+  reconciled after controller interruption. These are capability-specific local
+  proofs, not universal Harness control or exactly-once execution.
+- **Iteration 5 — Checkpoint and Replay.** Playback, Cached Replay,
+  Counterfactual Resampling, and Execution Fork are separate implemented
+  semantics. Playback does not write history; Cached Replay reuses persisted
+  future Artifacts without Runtime/tools/workspace mutation; Counterfactual
+  Resampling runs a model-only safe mode with unknown outcome; Execution Fork is
+  the only mode that continues a real future in an isolated Git worktree. The
+  [Replay record](../evidence/iteration-5-checkpoint-replay-local-2026-08-26.json)
+  exercises all four, while the [Execution Fork record](../evidence/iteration-5-execution-fork-local-2026-08-26.json)
+  is the real-workspace continuation proof.
+- **Iteration 6 — adaptive Handoff.** After a deliberately controlled Codex
+  provider interruption, deterministic filtering/ranking selects a fresh local
+  Profile, binds a Handoff Capsule, requires acknowledgement before the target's
+  first tool request, and closes with a verifier and Receipt. The record is not
+  a natural-failure, native-session-migration, cross-host, or production proof.
+- **Iteration 7 — failure intelligence.** The implementation and API project
+  observable runtime, context, tool, workspace, verification, checkpoint, and
+  diagnostic-candidate evidence. Local tests cover the projection; no real
+  fault run or diagnosis-accuracy claim is attached yet.
+- **Iteration 8 — Mission Plan runtime.** Versioned Plan revisions,
+  selective invalidation, node execution status, and a Workbench/API runtime
+  view are implemented and locally tested. This is not evidence of a
+  multi-Agent execution or planner-quality benchmark.
+- **Iteration 9 — Outcome Studio.** Agent Revision dimensions, evaluation and
+  incident projections, CI result views, and regression scenario save/export
+  APIs are implemented and locally tested. No external CI or regression-quality
+  claim is made.
+- **Iteration 10 — package contract.** An internal clean-install smoke checks
+  the tarball manifest, public exports, third-party Adapter conformance, and
+  installed CLI/Workbench startup. It has not been published to a registry or
+  independently reproduced outside this workspace.
+
 ## What is authoritative?
 
 Kernel events are the only authority for control-state transitions. Native
 Harnesses, Git, tools, and external systems remain evidence sources for their
 own real state; MissionBraid does not pretend its database can rewrite them.
 
-| Fact                                                          | Control record or evidence source                                               | Reason                                                                |
-| ------------------------------------------------------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| Objective, constraints, Contract revision, Branch and Attempt | Mission Kernel events                                                           | A Runtime cannot rewrite the standard or control state.               |
-| Accepted command                                              | Kernel intent event; the outbox only delivers it                                | Delivery state cannot create business authority.                      |
-| Provider-native behavior                                      | Sanitized native-format Adapter evidence                                        | Normalization must not erase unique semantics or persist credentials. |
-| Observable context and tool flow                              | Captured evidence; Context Graph and Event IR projections                       | Debugging requires sourced inputs, outputs, and transformations.      |
-| Repository state at a boundary                                | Git digest/delta evidence today; restorable snapshot in the target architecture | A transcript cannot prove what is on disk.                            |
-| External side effects                                         | External-system evidence plus Effect projection                                 | Rewinding Mission state cannot undo the outside world.                |
-| Whether the result passed                                     | Kernel `ReceiptIssued` event based on Branch-bound verifier evidence            | The executor and Verifier Runner cannot approve their own work.       |
+| Fact                                                          | Control record or evidence source                                                                     | Reason                                                                |
+| ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Objective, constraints, Contract revision, Branch and Attempt | Mission Kernel events                                                                                 | A Runtime cannot rewrite the standard or control state.               |
+| Accepted command                                              | Kernel intent event; the outbox only delivers it                                                      | Delivery state cannot create business authority.                      |
+| Provider-native behavior                                      | Sanitized native-format Adapter evidence                                                              | Normalization must not erase unique semantics or persist credentials. |
+| Observable context and tool flow                              | Captured evidence; Context Graph and Event IR projections                                             | Debugging requires sourced inputs, outputs, and transformations.      |
+| Repository state at a boundary                                | Git digest/delta evidence in older records; Git-backed restorable Composite Checkpoint in Iteration 5 | A transcript cannot prove what is on disk.                            |
+| External side effects                                         | External-system evidence plus Effect projection                                                       | Rewinding Mission state cannot undo the outside world.                |
+| Whether the result passed                                     | Kernel `ReceiptIssued` event based on Branch-bound verifier evidence                                  | The executor and Verifier Runner cannot approve their own work.       |
 
 ## Why the architecture uses these boundaries
 
@@ -313,57 +357,65 @@ interfaces. MissionBraid remains an independent project with its own Mission
 Kernel, Event IR, debugger, Handoff Capsule, Effect model, and Outcome Receipt.
 Direct local adapters remain supported.
 
-## Verified foundation
+## Verified foundation and boundaries
 
-The strongest current record is bound to clean revision `d14201b`:
+The strongest current records are the [Iteration 5 Checkpoint/Replay
+record](../evidence/iteration-5-checkpoint-replay-local-2026-08-26.json) and the
+[Iteration 6 adaptive Handoff
+record](../evidence/iteration-6-adaptive-handoff-local-2026-08-26.json). Together
+with the retained Iterations 2–4 records they show, on one host, that:
 
-- one Mission was submitted through the normal local Workbench API without a
-  hand-written Mission file or manual context transfer;
-- real Codex, Qoder, and Claude Code Profiles ran successful ordered Attempts
-  on one root Branch;
-- 1,066 Runtime events retained source order, Mission ingest order, causal
-  links, and sanitized native artifacts;
-- both cooperative Handoff acknowledgements precede the target's first observed
-  tool-request event in its native source stream;
-- the Receipt was verified with no unresolved item;
-- a new Workbench process restored the same Mission head, Receipt, source
-  sequences, and causal links.
+- real Codex, Qoder, and Claude Code Attempts can be observed through the local
+  Workbench with source-linked native artifacts and a verified Receipt;
+- a Git-backed Composite Checkpoint can seed an isolated Execution Fork, while
+  the three non-executing Replay modes preserve their distinct no-write or
+  no-tool semantics;
+- a controlled Codex interruption can trigger deterministic Profile selection,
+  Capsule acknowledgement before the target's first tool request, no-repeat
+  Effect inheritance, verification, and restart reconstruction.
 
-See the [Iteration 2 machine-readable
-record](../evidence/iteration-2-three-harness-local-2026-08-25.json) and
-[evidence index](../evidence/README.md).
-
-The earlier [Codex-to-Qoder
-record](../evidence/unified-workbench-codex-qoder-local-2026-08-24.json) retains
-a matching source-checkpoint/target-baseline workspace snapshot and distinct
-before/after workspace digests. Neither record proves an enforced pre-tool
-gate. Both are local same-host evidence, not automatic routing, executable
-Fork/Replay, cross-host reproduction, production isolation, or adoption.
+These are bounded same-host records. They do not prove native session
+migration/resume, natural Harness failure recovery, cross-host or independent
+external reproduction, production isolation, or adoption. The Iteration 7–9
+features are implementation/API/local-test slices, and Iteration 10 is an
+internal clean-install package smoke rather than a registry or external-clone
+result. See the [evidence index](../evidence/README.md) for each claim boundary.
 
 ## Code map for the current foundation
 
-| Responsibility                                                    | Primary implementation                                                                                                                                          | Focused tests                                                                                          |
-| ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| Workbench, bilingual copy, and background command supervisor      | [`src/app.ts`](../src/app.ts), [`src/app-page.ts`](../src/app-page.ts), [`src/app-copy.ts`](../src/app-copy.ts)                                                 | [`src/app.test.ts`](../src/app.test.ts), [`src/app-copy.test.ts`](../src/app-copy.test.ts)             |
-| Mission document construction                                     | [`src/mission-draft.ts`](../src/mission-draft.ts), [`src/spec.ts`](../src/spec.ts)                                                                              | [`src/mission-draft.test.ts`](../src/mission-draft.test.ts), [`src/spec.test.ts`](../src/spec.test.ts) |
-| Mission, Branch, Profile, Binding, and event domain               | [`src/domain.ts`](../src/domain.ts)                                                                                                                             | Engine and store tests below                                                                           |
-| Execution, recovery, and handoff                                  | [`src/engine.ts`](../src/engine.ts)                                                                                                                             | [`src/engine.test.ts`](../src/engine.test.ts)                                                          |
-| Events, projections, durable commands/outbox, leases, and fencing | [`src/store.ts`](../src/store.ts)                                                                                                                               | [`src/store.test.ts`](../src/store.test.ts)                                                            |
-| Runtime Event IR and sanitized native artifacts                   | [`src/runtime-events.ts`](../src/runtime-events.ts), [`src/artifact-store.ts`](../src/artifact-store.ts)                                                        | [`src/runtime-events.test.ts`](../src/runtime-events.test.ts) and engine tests                         |
-| Workspace boundary evidence                                       | [`src/workspace.ts`](../src/workspace.ts)                                                                                                                       | [`src/workspace.test.ts`](../src/workspace.test.ts)                                                    |
-| Capsule projection and acknowledgement                            | [`src/capsule.ts`](../src/capsule.ts)                                                                                                                           | [`src/capsule.test.ts`](../src/capsule.test.ts)                                                        |
-| Direct Runtime execution                                          | [`src/adapters/codex.ts`](../src/adapters/codex.ts), [`src/adapters/qoder.ts`](../src/adapters/qoder.ts), [`src/adapters/claude.ts`](../src/adapters/claude.ts) | Adapter tests beside each implementation                                                               |
-| Independent verification                                          | [`src/verifier.ts`](../src/verifier.ts)                                                                                                                         | [`src/verifier.test.ts`](../src/verifier.test.ts)                                                      |
-| Runtime inventory                                                 | [`src/runtime-catalog.ts`](../src/runtime-catalog.ts)                                                                                                           | [`src/runtime-catalog.test.ts`](../src/runtime-catalog.test.ts)                                        |
+| Responsibility                                                    | Primary implementation                                                                                                                                          | Focused tests                                                                                                                                        |
+| ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Workbench, bilingual copy, and background command supervisor      | [`src/app.ts`](../src/app.ts), [`src/app-page.ts`](../src/app-page.ts), [`src/app-copy.ts`](../src/app-copy.ts)                                                 | [`src/app.test.ts`](../src/app.test.ts), [`src/app-copy.test.ts`](../src/app-copy.test.ts)                                                           |
+| Mission document construction                                     | [`src/mission-draft.ts`](../src/mission-draft.ts), [`src/spec.ts`](../src/spec.ts)                                                                              | [`src/mission-draft.test.ts`](../src/mission-draft.test.ts), [`src/spec.test.ts`](../src/spec.test.ts)                                               |
+| Mission, Branch, Profile, Binding, and event domain               | [`src/domain.ts`](../src/domain.ts)                                                                                                                             | Engine and store tests below                                                                                                                         |
+| Execution, recovery, and handoff                                  | [`src/engine.ts`](../src/engine.ts)                                                                                                                             | [`src/engine.test.ts`](../src/engine.test.ts)                                                                                                        |
+| Events, projections, durable commands/outbox, leases, and fencing | [`src/store.ts`](../src/store.ts)                                                                                                                               | [`src/store.test.ts`](../src/store.test.ts)                                                                                                          |
+| Runtime Event IR and sanitized native artifacts                   | [`src/runtime-events.ts`](../src/runtime-events.ts), [`src/artifact-store.ts`](../src/artifact-store.ts)                                                        | [`src/runtime-events.test.ts`](../src/runtime-events.test.ts) and engine tests                                                                       |
+| Workspace boundary evidence                                       | [`src/workspace.ts`](../src/workspace.ts)                                                                                                                       | [`src/workspace.test.ts`](../src/workspace.test.ts)                                                                                                  |
+| Capsule projection and acknowledgement                            | [`src/capsule.ts`](../src/capsule.ts)                                                                                                                           | [`src/capsule.test.ts`](../src/capsule.test.ts)                                                                                                      |
+| Direct Runtime execution                                          | [`src/adapters/codex.ts`](../src/adapters/codex.ts), [`src/adapters/qoder.ts`](../src/adapters/qoder.ts), [`src/adapters/claude.ts`](../src/adapters/claude.ts) | Adapter tests beside each implementation                                                                                                             |
+| Independent verification                                          | [`src/verifier.ts`](../src/verifier.ts)                                                                                                                         | [`src/verifier.test.ts`](../src/verifier.test.ts)                                                                                                    |
+| Checkpoint Replay and Fork                                        | [`src/checkpoint-replay.ts`](../src/checkpoint-replay.ts), [`src/engine.ts`](../src/engine.ts)                                                                  | Replay and engine tests                                                                                                                              |
+| Adaptive planning and Handoff                                     | [`src/execution-planner.ts`](../src/execution-planner.ts), [`src/engine.ts`](../src/engine.ts)                                                                  | [`src/execution-planner.test.ts`](../src/execution-planner.test.ts) and engine tests                                                                 |
+| Failure intelligence                                              | [`src/mission-failure-intelligence.ts`](../src/mission-failure-intelligence.ts)                                                                                 | [`src/mission-failure-intelligence.test.ts`](../src/mission-failure-intelligence.test.ts)                                                            |
+| Mission Plan runtime projection                                   | [`src/mission-plan-runtime.ts`](../src/mission-plan-runtime.ts)                                                                                                 | [`src/mission-plan-runtime.test.ts`](../src/mission-plan-runtime.test.ts)                                                                            |
+| Outcome Studio and scenario export                                | [`src/mission-outcome-studio.ts`](../src/mission-outcome-studio.ts), [`src/engine.ts`](../src/engine.ts)                                                        | [`src/mission-outcome-studio.test.ts`](../src/mission-outcome-studio.test.ts), [`src/outcome-studio-app.test.ts`](../src/outcome-studio-app.test.ts) |
+| Runtime inventory                                                 | [`src/runtime-catalog.ts`](../src/runtime-catalog.ts)                                                                                                           | [`src/runtime-catalog.test.ts`](../src/runtime-catalog.test.ts)                                                                                      |
 
-## What happens next
+## How to read the roadmap
 
-MissionBraid has **ten major product iterations**. The foundation above is
-Iteration 1; Iteration 2 is now implemented and validated locally. Iterations
-3–10 next add live Agent observation and debugging, honest execution Branches,
-conditional adaptive Handoff, failure intelligence, multi-Agent Mission
-graphs, Agent Revision evaluation and CI export, and an open Adapter SDK.
+MissionBraid still has **ten major product iterations**, but “implemented” and
+“proven with a real Runtime” are deliberately separate labels. Iterations 1–5
+have same-host local evidence, Iteration 6 has a controlled-interruption
+adaptive-Handoff record, Iterations 7–9 currently have implementation/API/local
+test slices, and Iteration 10 has an internal clean-install package smoke.
+
+The remaining evidence upgrades are natural-failure handling, native-session or
+cross-host continuity where adapters can honestly support it, independent
+external reproduction, and production hardening. They are not silently implied
+by local tests or package startup.
 
 Continue with the [product requirements](product-requirements.md),
 [architecture](architecture.md), [roadmap](roadmap.md), and
-[key questions](key-questions.md).
+[key questions](key-questions.md). The machine-readable claim boundaries live
+in the [evidence index](../evidence/README.md).

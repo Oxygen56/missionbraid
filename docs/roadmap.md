@@ -1,8 +1,12 @@
 # MissionBraid Product Roadmap
 
-> **Plan:** ten major product iterations in total. Iteration 1 is the verified
-> local foundation. Iterations 2–4 are implemented and validated by retained
-> same-host real-Runtime Workbench records. Iterations 5–10 remain planned.
+> **Plan:** ten major product iterations in total. Iterations 1–5 have
+> same-host local evidence records; Iteration 5 covers all four Replay
+> semantics, while only its Execution Fork path continues a real workspace.
+> Iteration 6 has a controlled-interruption adaptive-Handoff record. Iterations
+> 7–9 have implemented Workbench/API slices with local tests, and Iteration 10
+> has an internal clean-install package record. Stronger real-runtime,
+> independent-external, cross-host, and production evidence remains open.
 > The number describes dependency-complete product releases, not calendar
 > sprints.
 
@@ -39,18 +43,18 @@ engineering outputs but cannot complete an iteration by themselves.
 
 ## Iteration overview
 
-| Iteration                                       | Product result                                                                            | Status                  |
-| ----------------------------------------------- | ----------------------------------------------------------------------------------------- | ----------------------- |
-| 1. Mission continuity foundation                | One Mission survives process and Harness changes and closes with a Receipt                | Implemented local slice |
-| 2. Runtime intelligence and Event IR            | Effective Profiles and native events share one typed Runtime model                        | Validated local slice   |
-| 3. Live flight recorder and Context Graph       | Developers see context, tools, files, tests, cost, and subagents while work runs          | Validated local slice   |
-| 4. Tool gateway and live debugger               | A real mutable tool can be stopped before dispatch and changed or rejected                | Validated local slice   |
-| 5. Composite checkpoints, Fork, and Replay      | A retained execution boundary becomes an isolated executable comparison Branch            | Planned                 |
-| 6. Adaptive planning and cross-Harness handoff  | Profiles are selected explainably and Handoff occurs only when a Runtime change is needed | Planned                 |
-| 7. Failure intelligence and diagnostic Branches | Evidence and single-variable probes distinguish likely failure layers                     | Planned                 |
-| 8. Multi-agent Mission Graph and live revisions | Parallel Agents stay attached to one changing Mission and stale work is invalidated       | Planned                 |
-| 9. Outcome, Eval, and Incident Studio           | Agent Revisions are compared, saved as regressions, and optionally exported to CI         | Planned                 |
-| 10. Open Runtime Workbench 1.0                  | External developers install, extend, and reproduce the complete workflow                  | Planned                 |
+| Iteration                                       | Product result                                                                            | Status                                                          |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| 1. Mission continuity foundation                | One Mission survives process and Harness changes and closes with a Receipt                | Implemented local slice                                         |
+| 2. Runtime intelligence and Event IR            | Effective Profiles and native events share one typed Runtime model                        | Validated local slice                                           |
+| 3. Live flight recorder and Context Graph       | Developers see context, tools, files, tests, cost, and subagents while work runs          | Validated local slice                                           |
+| 4. Tool gateway and live debugger               | A real mutable tool can be stopped before dispatch and changed or rejected                | Validated local slice                                           |
+| 5. Composite checkpoints, Fork, and Replay      | A retained execution boundary becomes an isolated executable comparison Branch            | Implemented locally; same-host proof                            |
+| 6. Adaptive planning and cross-Harness handoff  | Profiles are selected explainably and Handoff occurs only when a Runtime change is needed | Validated locally; controlled interruption                      |
+| 7. Failure intelligence and diagnostic Branches | Evidence and single-variable probes distinguish likely failure layers                     | Implemented local slice; real-runtime gate open                 |
+| 8. Multi-agent Mission Graph and live revisions | Parallel Agents stay attached to one changing Mission and stale work is invalidated       | Implemented plan/invalidation slice; multi-Agent E2E open       |
+| 9. Outcome, Eval, and Incident Studio           | Agent Revisions are compared, saved as regressions, and optionally exported to CI         | Implemented local slice; external CI E2E open                   |
+| 10. Open Runtime Workbench 1.0                  | External developers install, extend, and reproduce the complete workflow                  | Internal clean-install validated; independent reproduction open |
 
 ## Iteration 1 — Mission continuity foundation
 
@@ -279,6 +283,37 @@ The implementation copies trace rows, performs a Git reset without context and
 Effect state, replays an animation, or reruns the task from the beginning while
 calling it continuation.
 
+### Completion evidence
+
+The retained
+[Iteration 5 record](../evidence/iteration-5-execution-fork-local-2026-08-26.json)
+validates the same-host local Execution Fork slice through the real Workbench:
+
+- a real Codex parent Attempt produced a one-file delta and passed its
+  deterministic verifier;
+- because the Codex workspace sandbox could not write Git metadata, the local
+  proof controller inspected exactly that delta and then sealed it as the
+  parent Git commit;
+- the browser created a Git-backed Composite Checkpoint and submitted one
+  declared guidance Intervention;
+- a fresh real Codex process continued only in Branch B's isolated Git
+  worktree, while Branch A stayed unchanged; both parent and child Receipts are
+  retained;
+- one confirmed queryable external Effect was inherited as
+  `inherit-no-repeat`, with no added target call during Fork or restart;
+- the Workbench reconstructed the Branches, Checkpoint, Fork, Effect state, and
+  child Receipt after restart.
+
+The UI names all four operation modes honestly. Playback, cached replay, and
+counterfactual resampling are implemented with distinct side-effect contracts;
+only Execution Fork is a real workspace continuation in this record. Playback
+rebuilds a view without writing a Branch, cached replay consumes persisted future
+Artifacts without starting a Runtime, and counterfactual resampling starts a
+real model-only process with tools disabled and leaves the outcome unknown. The
+record is not a native Codex session fork or resume, does not claim Codex
+authored the parent commit, and is not cross-host, independent reproduction, or
+production evidence.
+
 ## Iteration 6 — Adaptive planning and cross-Harness handoff
 
 ### User-visible result
@@ -319,6 +354,17 @@ The route is a fixed Codex-to-Qoder script, health and quota are mocked, a model
 only recommends a Runtime in prose, or the target starts a fresh unrelated
 task.
 
+### Current implementation evidence
+
+The [controlled adaptive-Handoff record](../evidence/iteration-6-adaptive-handoff-local-2026-08-26.json)
+proves the deterministic filter/rank/bind path in the local Workbench: a Codex
+provider interruption is injected after a known delta, the planner selects a
+fresh eligible Profile, the target acknowledges the Capsule before its first
+tool request, and the same Mission reaches a Receipt after restart. It is not a
+natural model, quota, network, or Harness failure; it does not prove native
+session migration, a restorable target workspace, cross-host continuity, or
+production recovery.
+
 ## Iteration 7 — Failure intelligence and diagnostic Branches
 
 ### User-visible result
@@ -352,6 +398,15 @@ diagnostic Branch that changes one factor.
 
 The result is a model-written root-cause paragraph, keyword label, attractive
 causal graph, or fixture-only classifier with no real Runtime evidence.
+
+### Current implementation evidence
+
+The repository contains a persisted-event Failure Evidence Graph, explicit
+observed/inferred/confirmed/unknown conclusions, counter-evidence, and a
+single-variable diagnostic-Fork request exposed through the Workbench API and
+UI. Local tests cover chain and Branch scoping, missing evidence, and request
+persistence. A real multi-layer Runtime failure and a diagnostic Branch that
+changes the conclusion are still required for the full iteration gate.
 
 ## Iteration 8 — Multi-agent Mission Graph and live revisions
 
@@ -393,6 +448,16 @@ replans only the invalidated frontier.
 
 The product merely starts Agents in parallel, appends a new chat message, or
 restarts the complete Mission after every requirement change.
+
+### Current implementation evidence
+
+Mission Plan revisions, requirement-to-node invalidation, stale-frontier
+projection, join readiness, and a queryable node execution view are implemented
+and exposed through the local API and Workbench. Local tests cover ready,
+running, succeeded, stale, blocked, unknown, and waiting-join states. The
+repository has not yet recorded two independent native Agents executing
+distinct nodes through a live requirement change; that remains the real-runtime
+gate.
 
 ## Iteration 9 — Outcome, Eval, and Incident Studio
 
@@ -437,6 +502,16 @@ A model-as-judge alone selects the winner, public tests are the only verifier,
 one aggregate score hides criterion, Effect, and uncertainty differences, or
 the iteration expands into a generic release-governance platform.
 
+### Current implementation evidence
+
+Outcome Studio reconstructs content-addressed Agent Revisions, evaluation
+Suites, Branch comparisons, Incident Scenarios, Studio Receipts, and
+machine-readable CI results from persisted Mission facts. The Workbench can
+save, list, and export redacted scenarios idempotently. Local tests cover
+unknown dimensions, Contract revision binding, scenario persistence, and
+export. A real upgraded Runtime regression and an external CI runner have not
+yet been recorded.
+
 ## Iteration 10 — Open Runtime Workbench 1.0
 
 ### User-visible result
@@ -479,6 +554,15 @@ definition, compatibility probe, documentation page, or GitHub popularity
 signal exists. Internal cross-host evidence is useful but is not independent
 external reproduction.
 
+### Current implementation evidence
+
+The [package smoke record](../evidence/iteration-10-package-smoke-local-2026-08-26.json)
+shows a clean local tarball install, public exports (including Mission Plan
+runtime projection and Outcome Studio), third-party Adapter conformance, and
+an installed Workbench that starts and shuts down cleanly. Registry
+publication, an independently maintained Adapter, and independent external
+reproduction remain open.
+
 ## Why this order
 
 The dependency chain is intentional:
@@ -511,12 +595,16 @@ The original evidence names remain useful historical boundaries:
 
 - **E0:** one Mission survives a process interruption;
 - **E1:** one Mission survives a Codex-to-Qoder Runtime boundary;
-- **E2:** future evidence for safe replan, executable Fork/Replay, and visible
-  state semantics.
+- **E2:** evidence for safe replan, executable Fork/Replay, and visible state
+  semantics.
 
-E0 and E1 are locally satisfied by the retained evidence records. E2 is not.
-Later iterations add new product gates rather than retroactively upgrading the
-meaning of E0 or E1.
+E0 and E1 are locally satisfied by the retained evidence records. Iteration 5
+locally satisfies E2's visible-state, Replay-semantics, and executable
+Execution Fork slices; Iteration 6 adds a controlled adaptive-Handoff slice.
+E2 as an umbrella remains incomplete for natural failure recovery, native
+session/workspace migration, cross-host continuity, and independent or
+production proof. Later iterations add new product gates rather than
+retroactively upgrading the meaning of E0 or E1.
 
 ## Release and claim policy
 

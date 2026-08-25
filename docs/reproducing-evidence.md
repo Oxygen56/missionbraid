@@ -114,6 +114,46 @@ node dist/src/cli.js verify "$MISSIONBRAID_MISSION_ID" --state-dir "$MISSIONBRAI
 and no longer owns the workspace lease. The E1 fixture's normal SIGTERM path
 does not require it.
 
+## Iteration 5 same-host Execution Fork path
+
+The published result is the
+[Iteration 5 machine-readable record](../evidence/iteration-5-execution-fork-local-2026-08-26.json).
+This path requires an installed and authenticated `codex` CLI with access to
+the configured model, plus a local headless browser available to the Workbench
+proof runner.
+
+```sh
+command -v codex
+codex --version
+
+MISSIONBRAID_I5_RESULT_ROOT="$(mktemp -d)"
+node scripts/run-i5-execution-fork-proof.mjs \
+  "$MISSIONBRAID_I5_RESULT_ROOT/iteration-5-execution-fork.json"
+```
+
+The output path must not already exist. The proof runner creates its own
+disposable repository, Mission state, isolated fork worktree, browser session,
+and queryable local HTTP Effect target. It runs a real Codex parent Attempt,
+verifies the resulting one-file delta, creates a Composite Checkpoint through
+the browser, starts a fresh real Codex process in Branch B, runs the bound
+verifier, checks that Branch A stayed unchanged and the inherited external
+Effect was not repeated, then restarts the Workbench and checks restoration.
+
+The parent Runtime does **not** author the Git boundary commit. The local proof
+controller first inspects the exact Codex-produced delta and then commits it
+because the Codex workspace sandbox cannot write Git metadata. The child is a
+fresh native process in an isolated Git worktree, not a native Codex session
+fork or resume. The separate [Replay record](../evidence/iteration-5-checkpoint-replay-local-2026-08-26.json)
+proves that Playback is projection-only, cached replay consumes persisted future
+Artifacts without starting a Runtime, and Counterfactual Resampling runs a real
+model-only process with tools disabled and leaves the outcome unknown. Those
+three modes do not continue a real workspace.
+
+A successful rerun is still same-host local evidence and may inherit the
+operator's authenticated Runtime installation, instructions, Skills, MCP
+configuration, and other user-level state. It is not cross-host, independent
+external reproduction, or production evidence.
+
 ## Kandev v0.91.0 public-interface check
 
 MissionBraid includes a narrow development command for the separately installed

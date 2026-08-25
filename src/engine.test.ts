@@ -130,6 +130,71 @@ describe('MissionEngine', () => {
     }
   });
 
+  it('versions the Mission Plan when a Contract requirement changes', async () => {
+    const fixture = await createFixture('resume');
+    const engine = new MissionEngine({
+      stateDir: fixture.stateDir,
+      codexAdapter: new CodexAdapter({ command: fixture.codex }),
+      qoderAdapter: new QoderAdapter({ command: fixture.qoder }),
+    });
+    try {
+      const created = await engine.create(fixture.missionFile, { workspace: fixture.workspace });
+      const before = engine.missionPlan(created.missionId);
+      const contract = {
+        ...before.contractRevision.contract,
+        objective: 'Preserve a changed checkpoint and independently verify completion.',
+      };
+      const requirements = before.contractRevision.requirements.map((requirement) =>
+        requirement.requirementId === 'objective'
+          ? { ...requirement, statement: contract.objective }
+          : requirement,
+      );
+      const revised = await engine.reviseMissionContract(created.missionId, {
+        contract,
+        requirements,
+        reason: 'User changed the Mission objective before execution.',
+        evidenceRefs: ['test:contract-revision'],
+      });
+      const after = engine.missionPlan(created.missionId);
+      expect(revised.contractRevision.revisionNumber).toBe(2);
+      expect(after.contractRevision.contractRevisionId).toBe(
+        revised.contractRevision.contractRevisionId,
+      );
+      expect(after.planRevision.parentPlanRevisionId).toBe(before.planRevision.planRevisionId);
+      expect(after.planRevision.contractRevisionId).toBe(
+        revised.contractRevision.contractRevisionId,
+      );
+      expect(revised.invalidation.changedRequirementIds).toEqual(['objective']);
+    } finally {
+      engine.close();
+    }
+  });
+
+  it('projects Mission Plan node readiness from persisted Attempts and Checkpoints', async () => {
+    const fixture = await createFixture('handoff');
+    const engine = new MissionEngine({
+      stateDir: fixture.stateDir,
+      codexAdapter: new CodexAdapter({ command: fixture.codex }),
+      qoderAdapter: new QoderAdapter({ command: fixture.qoder }),
+    });
+    try {
+      const created = await engine.create(fixture.missionFile, { workspace: fixture.workspace });
+      expect(engine.missionPlanRuntime(created.missionId)).toMatchObject({
+        readyNodeIds: ['codex-source'],
+        runningNodeIds: [],
+        completedNodeIds: [],
+      });
+      const first = await engine.resume(created.missionId);
+      expect(first.status).toBe('succeeded');
+      const projection = engine.missionPlanRuntime(created.missionId);
+      expect(projection.completedNodeIds).toContain('codex-source');
+      expect(projection.completedNodeIds).toContain('qoder-target');
+      expect(projection.authority).toBe('derived-plan-evidence-only');
+    } finally {
+      engine.close();
+    }
+  });
+
   it('runs Claude Code through the same Branch, Binding, Event IR, and Receipt path', async () => {
     const fixture = await createFixture('claude');
     const missionSource = await readFile(fixture.missionFile, 'utf8');

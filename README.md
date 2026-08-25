@@ -18,16 +18,17 @@ The normal path keeps using the same Harness. Branching, Handoff, adaptive
 routing, and CI export are supporting capabilities used when the task actually
 needs them.
 
-> **Status:** pre-alpha, local-first, and run from source. The repository
-> already implements and locally validates a real Codex-to-Qoder-to-Claude Code
-> Mission; a root Branch; Runtime
-> Profile Definition, Catalog Observation, immutable Snapshot, and Attempt
-> Binding; source-scoped Event IR with sanitized native artifacts; and durable
-> command/outbox recovery. Iteration 2 is validated by a same-host real
-> Workbench Mission across all three Harnesses, including a verified Receipt
-> and stable restart restoration. Live Context Graph debugging, tool gates,
-> executable forks, adaptive planning, and the other Iteration 3+ capabilities
-> remain target architecture.
+> **Status:** pre-alpha, local-first, and run from source. Iterations 1–5 have
+> same-host local evidence records; Iteration 6 has a controlled-interruption
+> adaptive Handoff record. The current Workbench runs real Codex, Qoder, and
+> Claude Code Attempts; streams a live Context Graph; controls one real Claude
+> Code pre-tool boundary; reconciles one queryable external Effect after a
+> controller crash; creates a Git-backed Composite Checkpoint and isolated
+> child Branch; supports playback, cached replay, and model-only
+> counterfactual resampling with their distinct evidence semantics; and can
+> select a replacement Runtime through a deterministic planner. Iterations 7–10
+> are implemented as local product slices with stronger real-runtime and
+> independent-reproduction evidence still open.
 
 ![MissionBraid local Workbench overview](docs/assets/missionbraid-workbench-overview.png)
 
@@ -35,13 +36,13 @@ needs them.
 
 ## The product in one view
 
-|                   | MissionBraid                                                                                                                                                                                                                                                                                                        |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| User problem      | Changing a model, Prompt, Skill, tool, memory policy, permission, or Runtime can change Agent behavior, but source diffs and fragmented logs do not explain the effective Agent that actually ran.                                                                                                                  |
-| Product           | One Workbench to bind the effective Agent Revision, run a durable Mission, inspect context and tools live, revise supported inputs, re-run from a useful boundary, compare behavior, and verify the outcome.                                                                                                        |
-| Core abstraction  | A **Mission** owns intent, execution branches, evidence, effects, and completion. A Harness is a replaceable Runtime.                                                                                                                                                                                               |
-| Implemented today | Bilingual local Workbench, Mission Kernel, Codex/Qoder/Claude Code execution adapters, root Branch, resolved Runtime Profiles and bindings, source-scoped Event IR with sanitized native artifacts, durable command/outbox recovery, workspace checkpoint evidence, Handoff Capsule, verifier, and Outcome Receipt. |
-| Delivery plan     | **10 major product iterations in total. Iterations 1 and 2 are implemented and validated locally; Iterations 3–10 are planned.**                                                                                                                                                                                    |
+|                   | MissionBraid                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| User problem      | Changing a model, Prompt, Skill, tool, memory policy, permission, or Runtime can change Agent behavior, but source diffs and fragmented logs do not explain the effective Agent that actually ran.                                                                                                                                                                                                                   |
+| Product           | One Workbench to bind the effective Agent Revision, run a durable Mission, inspect context and tools live, revise supported inputs, re-run from a useful boundary, compare behavior, and verify the outcome.                                                                                                                                                                                                         |
+| Core abstraction  | A **Mission** owns intent, execution branches, evidence, effects, and completion. A Harness is a replaceable Runtime.                                                                                                                                                                                                                                                                                                |
+| Implemented today | Bilingual local Workbench, Mission Kernel, three native execution adapters, Runtime Profiles, live Event IR and Context Graph, tool/Effect controls, Git-backed Composite Checkpoints, four Replay semantics, isolated Execution Fork Branches, adaptive Handoff planning, Failure Intelligence, Mission Plan runtime projection, Outcome Studio scenario export, public Adapter SDK, verifier, and Outcome Receipt. |
+| Delivery plan     | **10 major product iterations in total. I1–I5 have same-host local evidence; I6 has a controlled adaptive-Handoff record; I7–I10 have implemented Workbench/API slices and local tests. Independent external reproduction and production claims remain open.**                                                                                                                                                       |
 
 ## Why this exists
 
@@ -221,21 +222,41 @@ The implemented foundation already provides:
   Runtime fields;
 - source-scoped normalized Runtime events linked to sanitized,
   content-addressed native-format artifacts;
+- live event transport, Context Graph projections, adjacent context diffs, and
+  source-linked model/tool/workspace/test evidence;
 - a durable command/outbox path whose accepted execution intent survives an
   application restart;
 - fixed discovery entries for additional target Harnesses;
-- pre-Attempt baselines and workspace checkpoint evidence (digest/delta, not a
-  restorable snapshot);
+- a real Claude Code native pre-tool gate for supported requests and guarded,
+  queryable external Effect reconciliation;
+- Git-backed Composite Checkpoints whose workspace component references an
+  exact restorable commit/tree, with other components explicitly classified;
+- immutable parent/child Branch lineage and an Execution Fork that starts a
+  fresh native process in an isolated Git worktree;
 - a budgeted, provenance-bound Handoff Capsule;
 - explicit mutable workspace Effect identities;
 - out-of-process verification and hash-bound Outcome Receipts;
+- playback, cached replay, counterfactual resampling, and real Execution Fork
+  operations with distinct side-effect guarantees;
+- deterministic Runtime Profile filtering/ranking with inspectable Handoff
+  decisions and a Mission Plan/Contract revision graph;
+- branch-scoped Failure Intelligence and diagnostic Fork entry points;
+- Outcome Studio projections plus redacted scenario/CI-result save and export
+  endpoints;
+- a versioned public Adapter SDK, Mission Plan projections, and local tarball
+  clean-install smoke path;
 - restart restoration and recovery of interrupted Missions.
 
-The strongest current public evidence proves one same-host Workbench Mission
-across Codex, Qoder, and Claude Code, with a verified Receipt and stable restart
-restoration. It does not prove automatic routing, live tool gating, executable
-Fork/Replay, cross-host reproduction, production isolation, or third-party
-adoption.
+The strongest current public evidence proves one same-host Workbench flow from
+a real Codex parent result through a browser-created Composite Checkpoint to a
+real Codex Execution Fork in an isolated Git worktree, with separate Branch
+lineage, deterministic verification, an inherited no-repeat external Effect, a
+child Receipt, and stable restart restoration. The replay record additionally
+proves playback, cached replay, and model-only counterfactual resampling, while
+the adaptive record proves deterministic Profile filtering/ranking and a
+controlled Codex→Claude Handoff. These records do not prove native session
+fork/resume, natural Runtime failure recovery, cross-host reproduction,
+production isolation, or third-party adoption.
 
 ## Runtime support today
 
@@ -251,18 +272,18 @@ adoption.
 
 ## Ten product iterations
 
-| Iteration | User-visible result                                                                           | Status              |
-| --------: | --------------------------------------------------------------------------------------------- | ------------------- |
-|         1 | A Mission survives interruption, crosses Codex → Qoder, and closes with a verified Receipt    | Implemented locally |
-|         2 | Runtime Profiles and native events become observable through a unified Event IR               | Validated locally   |
-|         3 | Developers inspect a live execution, context assembly, tool flow, and workspace changes       | Planned             |
-|         4 | Tool calls can stop at supported pre/post boundaries and be changed before continuation       | Planned             |
-|         5 | A retained boundary supports honest playback, replay, and executable comparison Branches      | Planned             |
-|         6 | A reproducible planner selects Profiles and hands off only when a Runtime change is justified | Planned             |
-|         7 | Failures are attributed to observable model/context/tool/Harness/environment evidence         | Planned             |
-|         8 | Multi-Agent work becomes a durable Mission graph with revision-aware coordination             | Planned             |
-|         9 | Agent Revision comparison, regression scenarios, evaluation, Receipts, and CI export          | Planned             |
-|        10 | External developers install, extend, and reproduce the complete Runtime Workbench             | Planned             |
+| Iteration | User-visible result                                                                           | Status                                      |
+| --------: | --------------------------------------------------------------------------------------------- | ------------------------------------------- |
+|         1 | A Mission survives interruption, crosses Codex → Qoder, and closes with a verified Receipt    | Implemented locally                         |
+|         2 | Runtime Profiles and native events become observable through a unified Event IR               | Validated locally                           |
+|         3 | Developers inspect a live execution, context assembly, tool flow, and workspace changes       | Validated locally                           |
+|         4 | A supported tool call can stop before dispatch and be changed before continuation             | Validated locally                           |
+|         5 | A retained boundary creates an isolated executable comparison Branch                          | Completed locally                           |
+|         6 | A reproducible planner selects Profiles and hands off only when a Runtime change is justified | Validated locally (controlled interruption) |
+|         7 | Failures are attributed to observable model/context/tool/Harness/environment evidence         | Implemented local slice                     |
+|         8 | Multi-Agent work becomes a durable Mission graph with revision-aware coordination             | Implemented local slice                     |
+|         9 | Agent Revision comparison, regression scenarios, evaluation, Receipts, and CI export          | Implemented local slice                     |
+|        10 | External developers install, extend, and reproduce the complete Runtime Workbench             | Internal clean-install validated            |
 
 Each iteration ends in one real Workbench workflow, not an isolated schema,
 adapter, or test suite. See the [detailed roadmap](docs/roadmap.md).
@@ -319,6 +340,52 @@ in [Reproducing Evidence](docs/reproducing-evidence.md).
 ## Evidence
 
 The
+[Iteration 5 machine-readable record](evidence/iteration-5-execution-fork-local-2026-08-26.json)
+binds one same-host product flow to:
+
+- a real Codex parent Mission whose one-file result passed the bound
+  deterministic verifier;
+- a parent Git commit created by the local proof controller only after it
+  inspected that Codex-produced delta, because the Codex workspace sandbox did
+  not write Git metadata;
+- a browser-created Git-backed Composite Checkpoint and one declared guidance
+  Intervention;
+- a fresh real Codex process running only in Branch B's isolated Git worktree,
+  while Branch A remained unchanged;
+- runtime, model, tool, workspace, and verification evidence, followed by a
+  child-Branch Receipt;
+- one confirmed queryable external Effect inherited as `inherit-no-repeat`,
+  with no second target call during Fork or restart;
+- the same Branches, Checkpoint, Fork, Effect state, and Receipt after a new
+  Workbench process restored the Mission.
+
+This is an **Execution Fork from an explicit Git-backed boundary**, not a
+native Codex session fork or resume. It is same-host evidence, not cross-host,
+independent reproduction, production evidence, or proof that Codex authored
+the parent Git commit.
+
+The [Iteration 5 replay record](evidence/iteration-5-checkpoint-replay-local-2026-08-26.json)
+also retains playback, cached replay, and counterfactual resampling. Playback
+does not write a Branch; cached replay creates evidence from persisted future
+Artifacts without launching a Runtime; counterfactual resampling launches a
+real model-only Claude process with tools disabled and leaves the outcome
+unknown. None of these operations claims native session migration or an
+undoable external side effect.
+
+The [Iteration 6 adaptive record](evidence/iteration-6-adaptive-handoff-local-2026-08-26.json)
+shows deterministic candidate filtering/ranking, Capsule acknowledgement, and
+Codex→Claude continuation after a controlled provider interruption without a
+user copying context. It is not evidence of a natural Runtime failure,
+restorable target workspace, native session migration, cross-host continuity,
+or production reliability.
+
+The [Iteration 10 package smoke record](evidence/iteration-10-package-smoke-local-2026-08-26.json)
+shows a locally packed tarball installing into a clean consumer, public exports
+loading, a third-party Adapter passing local conformance, and the installed
+Workbench starting and shutting down cleanly. Registry publication and
+independent external reproduction were not performed.
+
+The
 [Iteration 2 machine-readable record](evidence/iteration-2-three-harness-local-2026-08-25.json)
 binds a clean revision to:
 
@@ -340,10 +407,11 @@ retains a matching source-checkpoint/target-baseline workspace snapshot and
 distinct before/after workspace digests; it is not used to claim an enforced
 pre-mutation gate.
 
-All current records are local and same-host. The [evidence
-index](evidence/README.md) keeps demonstrated results separate from target
-architecture. These records do not prove live tool gating, automatic routing,
-executable Fork/Replay, cross-host reproduction, or production readiness.
+All current records are local and same-host unless explicitly labelled
+otherwise. The [evidence index](evidence/README.md) keeps implementation,
+real-runtime validation, clean-install validation, and target claims separate.
+The package smoke record proves a local tarball install, not registry
+publication or independent external reproduction.
 
 ## Documentation
 

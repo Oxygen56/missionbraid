@@ -3,15 +3,18 @@
 > **Status:** final target architecture with a working pre-alpha foundation.
 > The repository already implements the Mission Kernel, bilingual local
 > Workbench, append-only event state, direct Codex/Qoder/Claude Code execution,
-> a root Branch, the four-part Runtime Profile model, source-scoped Event IR
-> with sanitized native artifacts, durable command/outbox recovery, workspace
-> baseline/checkpoint evidence (digest and delta, not a restorable snapshot), a
-> bounded Handoff Capsule, independent verification, and an Outcome Receipt.
-> Iteration 2 is validated by an integrated same-host real Workbench Mission
-> across all three Harnesses, with a verified Receipt and stable restart
-> restoration. Live Context Graph debugging, tool gating, counterfactual
-> replay, adaptive planning, and the other Iteration 3+ capabilities remain
-> targets unless explicitly marked otherwise.
+> the four-part Runtime Profile model, source-scoped Event IR with sanitized
+> native artifacts, live Context Graph inspection, one validated Claude
+> pre-tool path, one queryable external Effect recovery path, Git-backed
+> Composite Checkpoints, immutable parent/child Branch lineage, isolated
+> Execution Fork worktrees, adaptive Profile planning, the four Replay
+> semantics, Failure Intelligence, Mission Plan runtime projections, Outcome
+> Studio scenario export, independent verification, and Outcome Receipts.
+> Iterations 2–5 have same-host local evidence records; Iteration 6 has a
+> controlled-interruption adaptive-Handoff record; Iterations 7–9 have local
+> implementation slices; and Iteration 10 has an internal clean-install
+> package record. Stronger real-runtime, cross-host, independent-external, and
+> production evidence remains open.
 
 ## Product definition
 
@@ -266,8 +269,10 @@ The UI is a projection of authoritative Kernel and evidence state. Refreshing or
 restarting it must not alter execution truth.
 
 The current Workbench can be switched between English and Chinese, with the
-choice persisted in the local browser. The seven-view surface above remains the
-target as later iterations add the live debugger and branch-oriented views.
+choice persisted in the local browser. Retained local records cover the live
+trace and Context Graph, one native tool intervention, and the Composite
+Checkpoint plus Execution Fork A/B slice. The complete seven-view surface,
+including the remaining replay and comparison operations, remains the target.
 
 ### Mission Control Plane
 
@@ -697,32 +702,42 @@ original revision and its branches remain inspectable.
 
 ## Current implementation and target boundary
 
-| Capability                   | Current repository                                                       | Final architecture                                   |
-| ---------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------- |
-| Mission and Outcome Contract | Implemented                                                              | Versioned Mission Plan and live revisions            |
-| Local Workbench              | Implemented, including persisted English/Chinese switching               | Full Runtime, trace, debug, branch and outcome views |
-| Branch                       | Default root Branch; no Fork semantics or UI                             | Isolated executable lineage and comparison           |
-| Runtime Profiles             | Definition, Catalog Observation, immutable Snapshot, and Attempt Binding | Effective environment and capability graph           |
-| Agent Revision               | Profile components exist; no unified Revision identity or diff           | Content-addressed effective behavior view            |
-| Execution                    | Direct Codex/Qoder/Claude Code Adapters                                  | Direct, ACP, and provider-backed adapters            |
-| Commands                     | Durable accepted command/outbox dispatch with restart recovery           | Durable path for every control operation             |
-| Events                       | Source-scoped Event IR plus sanitized content-addressed native artifacts | Live Agent Event IR with richer semantic coverage    |
-| Context                      | Profile/Capsule-oriented evidence; no Context Graph                      | Queryable Context Graph and diffs                    |
-| Tools/Effects                | Advisory workspace-stage Effects                                         | Tool-level gateway, permissions and Effect Ledger    |
-| Checkpoint                   | Git digest/delta boundary evidence                                       | Multi-layer restorable safe-point Checkpoint         |
-| Replay/Fork                  | Not implemented                                                          | Playback, cached replay, resample, execution fork    |
-| Handoff                      | Codex-to-Qoder Capsule                                                   | Debug-aware cross-Harness continuation               |
-| Failure attribution          | Bounded classifications                                                  | Evidence graph and discriminating probes             |
-| Planner                      | User-selected route                                                      | Capability, quota and outcome-aware planning         |
-| Verification                 | Command verifier and Receipt                                             | Revision/Branch comparison, regression and CI export |
+| Capability                   | Current repository                                                        | Final architecture                                   |
+| ---------------------------- | ------------------------------------------------------------------------- | ---------------------------------------------------- |
+| Mission and Outcome Contract | Implemented                                                               | Versioned Mission Plan and live revisions            |
+| Local Workbench              | Implemented, including persisted English/Chinese switching                | Full Runtime, trace, debug, branch and outcome views |
+| Branch                       | Root and immutable child lineage; isolated Execution Fork and A/B view    | Broader executable lineage and comparison modes      |
+| Runtime Profiles             | Definition, Catalog Observation, immutable Snapshot, and Attempt Binding  | Effective environment and capability graph           |
+| Agent Revision               | Content-addressed effective Revision projection and dimension comparison  | Broader native config capture and revision history   |
+| Execution                    | Direct Codex/Qoder/Claude Code Adapters                                   | Direct, ACP, and provider-backed adapters            |
+| Commands                     | Durable accepted command/outbox dispatch with restart recovery            | Durable path for every control operation             |
+| Events                       | Live source-scoped Event IR plus sanitized native artifacts               | Broader live Agent Event IR semantic coverage        |
+| Context                      | Live Context Graph and adjacent observable-context diffs                  | Richer query, revision, and comparison operations    |
+| Tools/Effects                | Supported Claude pre-tool gate and queryable external Effect recovery     | Broader gateway, permissions, and Effect adapters    |
+| Checkpoint                   | Git-backed Composite Checkpoint with explicit component dispositions      | Broader multi-layer restorable safe points           |
+| Replay/Fork                  | Playback, cached replay, model-only resample, and isolated Execution Fork | Broader native session/workspace restoration         |
+| Handoff                      | Deterministic adaptive Profile planner and Codex-to-Claude/Qoder Capsule  | Debug-aware cross-Harness continuation               |
+| Failure attribution          | Evidence graph, uncertainty, counter-evidence, diagnostic Fork request    | More real-layer probes and calibrated conclusions    |
+| Planner                      | Deterministic filter/rank/bind projection with inspectable decisions      | Broader quota/outcome learning and policy history    |
+| Mission Plan runtime         | DAG revision/invalidation and node execution projection                   | Real multi-Agent execution and consolidation         |
+| Verification                 | Command verifier, Receipt, Outcome Studio and scenario/CI export          | External CI runner and upgraded-Runtime regressions  |
 
 The strongest current evidence is the
-[same-host Codex/Qoder/Claude Workbench record](../evidence/iteration-2-three-harness-local-2026-08-25.json).
-It binds successful real Attempts, source-scoped Event IR and sanitized native
-artifacts, a verified Receipt, and stable restart restoration. Its cooperative
-Handoff ordering is not a live tool gate. The record does not establish the
-unimplemented Iteration 3+ capabilities above, cross-host reproduction, or
-production readiness.
+[same-host Iteration 5 Execution Fork record](../evidence/iteration-5-execution-fork-local-2026-08-26.json).
+It binds a real Codex-produced and verifier-checked parent delta to a
+browser-created Git-backed Composite Checkpoint, then starts a fresh real Codex
+process in Branch B's isolated worktree while Branch A remains unchanged. A
+local proof controller created the parent Git commit only after inspecting that
+delta because the Codex workspace sandbox could not write Git metadata. The
+record also retains a child Receipt, no-repeat inheritance of one confirmed
+queryable external Effect, and restart restoration. It does not establish a
+Codex-authored parent commit, native session fork/resume, cross-host or
+independent reproduction, or production readiness. The separate [Replay
+record](../evidence/iteration-5-checkpoint-replay-local-2026-08-26.json) proves
+the three non-workspace Replay semantics, and the [adaptive Handoff
+record](../evidence/iteration-6-adaptive-handoff-local-2026-08-26.json) proves a
+controlled interruption path; neither upgrades those boundaries to natural
+failure recovery or native session migration.
 
 ## Integration and claim boundaries
 

@@ -547,9 +547,9 @@ state.
 ### Responsiveness
 
 Live events must be visible quickly enough to intervene before the next
-supported boundary. Iteration 3 will establish an observed latency baseline and
-calibrate an explicit release target instead of inventing an unverified number
-now.
+supported boundary. Iteration 3 established an observed same-host latency
+baseline; a release target still requires broader measurement rather than an
+invented number.
 
 ### Isolation
 
@@ -613,32 +613,62 @@ The repository currently provides:
   English/Chinese selection;
 - durable Mission and Outcome Contract state;
 - direct Codex, Qoder, and Claude Code execution Adapters;
-- a default root Branch for each new Mission, without Fork behavior yet;
+- a default root Branch plus immutable child Branch lineage and an isolated
+  Execution Fork path;
 - separate Runtime Profile Definitions, timestamped Catalog Observations,
   immutable effective Snapshots, and Mission-specific Attempt Bindings;
 - explicit Adapter capability declarations and honest unknown/unsupported
   effective fields;
 - source-scoped Event IR records linked to sanitized, content-addressed native
   artifacts;
+- live event delivery, Context Graph projections, adjacent context diffs, and
+  source-linked model/tool/workspace/test evidence;
 - a durable command/outbox path that retains accepted execution intent across
   application restart;
 - local Runtime discovery for additional Harnesses;
-- Git workspace baseline/checkpoint evidence (digest and delta, not a
-  restorable snapshot);
+- one supported Claude Code native pre-tool gate and one queryable external
+  Effect crash-reconciliation path;
+- Git-backed Composite Checkpoints whose workspace component identifies an
+  exact restorable commit/tree and whose other components carry explicit
+  recovery dispositions;
+- a fresh real Runtime process in an isolated child worktree for the supported
+  Execution Fork path;
+- four explicit Replay semantics: projection-only Playback, cached replay from
+  persisted future Artifacts, model-only Counterfactual Resampling, and real
+  workspace Execution Fork;
 - a bounded Codex-to-Qoder Handoff Capsule and acknowledgement;
+- deterministic Runtime Profile filtering/ranking with an inspectable adaptive
+  Handoff decision and restart-stable Mission Plan/Contract revision graph;
+- Failure Intelligence projections with evidence-backed uncertainty and a
+  diagnostic-Fork request path;
+- Mission Plan node invalidation and runtime-status projection for stale,
+  blocked, running, succeeded, waiting-join, and unknown nodes;
+- Outcome Studio projections for Agent Revisions, evaluation suites, Branch
+  comparison, Incident Scenarios, Studio Receipts, and machine-readable CI
+  results, plus idempotent scenario save/list/export endpoints;
+- a versioned public Adapter SDK, Mission Plan runtime export, and local clean-
+  install package smoke path;
 - advisory workspace Effect identities;
 - independent command verification and Outcome Receipt;
 - application-restart restoration.
 
 The strongest current evidence is indexed in
-[evidence/README.md](../evidence/README.md). The Iteration 2 record is a
-same-host real Codex/Qoder/Claude Workbench result with successful Attempts,
-source-linked Event IR/native artifacts, a verified Receipt, and stable restart
-restoration. Its Handoff result is cooperative native-source ordering before
-the first observed tool request, not an enforced tool gate. It is not evidence
-for the target Context Graph debugger, automatic planner, executable
-Fork/Replay, broad Adapter matrix, cross-host or third-party reproduction, or
-production use.
+[evidence/README.md](../evidence/README.md). The Iteration 5 record is a
+same-host real Codex and browser result: Codex produced and the verifier checked
+the parent delta; a local proof controller then sealed that exact delta as a Git
+commit because the Codex workspace sandbox could not write Git metadata; and a
+fresh real Codex process continued Branch B in an isolated worktree from the
+browser-created Composite Checkpoint. Branch A stayed unchanged, the child
+reached its own Receipt, one confirmed queryable external Effect was inherited
+without a repeated target call, and restart restored the product state. A
+separate replay record proves the three non-workspace Replay semantics; a
+controlled adaptive-Handoff record proves deterministic Profile selection after
+a provider interruption; and the package smoke record proves the public tarball
+contract in a clean local consumer. These records do not prove a Codex-authored
+parent commit, native session fork/resume, natural Runtime failure recovery,
+automatic multi-Agent execution, upgraded-Runtime regression in external CI,
+broad Adapter coverage, cross-host or third-party reproduction, or production
+use.
 
 ## Scope and claim boundaries
 

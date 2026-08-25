@@ -238,6 +238,9 @@ async function exercisePublicImports(consumerDirectory) {
       `import * as conformance from 'missionbraid/adapter-conformance';\n` +
       `import * as conformanceV1 from 'missionbraid/adapter-conformance/v1';\n` +
       `import * as contract from 'missionbraid/package-contract';\n` +
+      `import * as studio from 'missionbraid/outcome-studio/v1';\n` +
+      `import * as plan from 'missionbraid/mission-plan/v1';\n` +
+      `import * as planRuntime from 'missionbraid/mission-plan-runtime/v1';\n` +
       `const report = {\n` +
       `  root: root.MISSIONBRAID_PUBLIC_API_VERSION,\n` +
       `  rootV1: rootV1.MISSIONBRAID_PUBLIC_API_VERSION,\n` +
@@ -246,6 +249,9 @@ async function exercisePublicImports(consumerDirectory) {
       `  conformance: conformance.ADAPTER_CONFORMANCE_SCHEMA_VERSION,\n` +
       `  conformanceV1: conformanceV1.ADAPTER_CONFORMANCE_SCHEMA_VERSION,\n` +
       `  packageContract: contract.PACKAGE_CONTRACT_SCHEMA_VERSION,\n` +
+      `  outcomeStudio: studio.OUTCOME_CI_RESULT_SCHEMA_VERSION,\n` +
+      `  missionPlan: plan.MISSION_PLAN_SCHEMA_VERSION,\n` +
+      `  missionPlanRuntime: planRuntime.MISSION_PLAN_RUNTIME_SCHEMA_VERSION,\n` +
       `};\n` +
       `process.stdout.write(JSON.stringify(report));\n`,
   );
@@ -254,6 +260,18 @@ async function exercisePublicImports(consumerDirectory) {
   for (const value of [report.root, report.rootV1, report.sdk, report.sdkV1]) {
     assert(value === PUBLIC_API_VERSION, 'Installed public export version mismatch');
   }
+  assert(
+    report.outcomeStudio === 'missionbraid.dev/outcome-ci-result/v1',
+    'Installed Outcome Studio export is missing',
+  );
+  assert(
+    report.missionPlan === 'missionbraid.dev/mission-plan/v1',
+    'Installed Mission Plan export is missing',
+  );
+  assert(
+    report.missionPlanRuntime === 'missionbraid.dev/mission-plan-runtime/v1',
+    'Installed Mission Plan runtime export is missing',
+  );
   return report;
 }
 

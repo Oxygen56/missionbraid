@@ -1,0 +1,48 @@
+{
+  "schemaVersion": "missionbraid.dev/package-smoke/v1",
+  "generatedAt": "2026-08-25T21:15:07.027Z",
+  "evidenceLevel": "internal-clean-install",
+  "package": {
+    "name": "missionbraid",
+    "version": "1.0.0",
+    "tarballSha256": "541d501626ba0e418bc8fdfb504da1fd6c892024fc9982764f60c262793f70ca",
+    "packedFileCount": 159,
+    "manifestContract": {
+      "schemaVersion": "missionbraid.dev/package-contract/v1",
+      "conforms": true,
+      "issues": [],
+      "independentExternalReproduction": "not-established"
+    }
+  },
+  "publicExports": {
+    "root": "1.0.0",
+    "rootV1": "1.0.0",
+    "sdk": "1.0.0",
+    "sdkV1": "1.0.0",
+    "conformance": "missionbraid.dev/adapter-conformance/v1",
+    "conformanceV1": "missionbraid.dev/adapter-conformance/v1",
+    "packageContract": "missionbraid.dev/package-contract/v1",
+    "outcomeStudio": "missionbraid.dev/outcome-ci-result/v1",
+    "missionPlan": "missionbraid.dev/mission-plan/v1",
+    "missionPlanRuntime": "missionbraid.dev/mission-plan-runtime/v1"
+  },
+  "adapterConformance": {
+    "passed": true,
+    "adapterId": "example.third-party-direct",
+    "adapterVersion": "1.0.0",
+    "evidenceLevel": "local-conformance",
+    "failedChecks": []
+  },
+  "installedProduct": {
+    "cliHelp": "passed",
+    "daemonStartedFromInstalledBin": true,
+    "workbenchHttpStatus": 200,
+    "missionApiHttpStatus": 200,
+    "cleanShutdown": true,
+    "suppliedStateDirectoryInitialized": true
+  },
+  "claims": {
+    "registryPublication": "not-performed",
+    "independentExternalReproduction": "not-established"
+  }
+}
