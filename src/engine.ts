@@ -64,6 +64,17 @@ import {
   type RuntimeSourcePosition,
 } from './runtime-events.js';
 import { extractRuntimeSemanticFacts } from './runtime-semantics.js';
+import {
+  ExternalEffectCoordinator,
+  type ExternalEffectEvent,
+  type ExternalEffectOutcome,
+  type ExternalEffectRequest,
+  type QueryableEffectTarget,
+} from './external-effect.js';
+import {
+  externalEffectEventToMissionEvents,
+  rebuildExternalEffectStateFromMissionEvents,
+} from './mission-external-effect.js';
 import { runCommandVerifier, type CommandVerificationResultV1 } from './verifier.js';
 import {
   ToolGateway,
@@ -88,6 +99,10 @@ export interface MissionEngineOptions {
   readonly claudeAdapter?: ClaudeAdapter;
   readonly now?: () => Date;
   readonly id?: () => string;
+  readonly externalEffectTargets?: readonly QueryableEffectTarget<JsonValue, JsonValue>[];
+  readonly beforeExternalEffectAppend?: (
+    event: ExternalEffectEvent<JsonValue>,
+  ) => void | Promise<void>;
 }
 
 export interface ExecuteMissionOptions {
@@ -129,6 +144,10 @@ export interface MissionStatusView {
 export interface MissionToolGateView extends ToolGateRequestV1 {
   readonly controlLevel: 'enforced';
   readonly scope: 'branch_local_workspace' | 'shared_resource' | 'mission_global_external';
+}
+
+export interface MissionExternalEffectRequestV1 extends ExternalEffectRequest<JsonValue> {
+  readonly attemptId: string;
 }
 
 export interface MissionTimelineEntry {
@@ -219,6 +238,10 @@ export class MissionEngine {
   readonly #qoder: QoderAdapter;
   readonly #claude: ClaudeAdapter;
   readonly #artifacts: NativeArtifactStore;
+  readonly #externalEffectTargets: ReadonlyMap<string, QueryableEffectTarget<JsonValue, JsonValue>>;
+  readonly #beforeExternalEffectAppend:
+    | ((event: ExternalEffectEvent<JsonValue>) => void | Promise<void>)
+    | undefined;
   readonly #now: () => Date;
   readonly #id: () => string;
 
@@ -230,6 +253,8 @@ export class MissionEngine {
     this.#qoder = options.qoderAdapter ?? new QoderAdapter();
     this.#claude = options.claudeAdapter ?? new ClaudeAdapter();
     this.#artifacts = new NativeArtifactStore(this.#stateDir);
+    this.#externalEffectTargets = indexExternalEffectTargets(options.externalEffectTargets ?? []);
+    this.#beforeExternalEffectAppend = options.beforeExternalEffectAppend;
     this.#store = new MissionStore(join(this.#stateDir, 'kernel.sqlite'), { now: this.#now });
   }
 
@@ -475,6 +500,66 @@ export class MissionEngine {
       );
     }
     return await this.#toolGateway(missionId, attemptId).writeDecisionIntent(draft);
+  }
+
+  async coordinateExternalEffect(
+    missionId: string,
+    input: MissionExternalEffectRequestV1,
+  ): Promise<ExternalEffectOutcome<JsonValue>> {
+    const mission = this.#requireMission(missionId);
+    const state = reconstructExecutionState(this.#store.listEvents(missionId));
+    if (!state.plans.has(input.attemptId)) {
+      throw new MissionExecutionError(
+        `Attempt ${input.attemptId} does not belong to Mission ${missionId}`,
+      );
+    }
+    const target = this.#externalEffectTargets.get(input.targetId);
+    if (target === undefined) {
+      throw new MissionExecutionError(`External Effect target ${input.targetId} is not registered`);
+    }
+    const request: ExternalEffectRequest<JsonValue> = {
+      effectId: input.effectId,
+      targetId: input.targetId,
+      kind: input.kind,
+      resourceKey: input.resourceKey,
+      authorityRef: input.authorityRef,
+      idempotencyKey: input.idempotencyKey,
+      payloadDigest: input.payloadDigest,
+      payload: input.payload,
+      ...(input.compensatesEffectId === undefined
+        ? {}
+        : { compensatesEffectId: input.compensatesEffectId }),
+    };
+    const ownerId = `external-effect-${this.#id()}`;
+    return await this.#withLease(mission.workspaceKey, ownerId, async (fence) => {
+      const existingEvents = this.#store.listEvents(missionId);
+      const persisted = rebuildExternalEffectStateFromMissionEvents(existingEvents, input.effectId);
+      if (
+        persisted === undefined &&
+        existingEvents.some(
+          (event) =>
+            event.type === 'effect.recorded' && event.payload.effect.effectId === input.effectId,
+        )
+      ) {
+        throw new MissionExecutionError(
+          `Effect ${input.effectId} already exists outside the external Effect coordinator`,
+        );
+      }
+      const coordinator = new ExternalEffectCoordinator(target, {
+        append: async (event) => {
+          await this.#beforeExternalEffectAppend?.(event);
+          this.#store.appendEvents(
+            externalEffectEventToMissionEvents(event, {
+              missionId,
+              attemptId: input.attemptId,
+              occurredAt: this.#now().toISOString(),
+            }),
+            fence,
+          );
+        },
+      });
+      return await coordinator.coordinate(request, persisted);
+    });
   }
 
   async executeCommand(commandId: string, signal?: AbortSignal): Promise<MissionExecutionResult> {
@@ -2145,6 +2230,22 @@ function observationLabel(kind: string): string {
 
 function isJsonObject(value: unknown): value is Record<string, JsonValue> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function indexExternalEffectTargets(
+  targets: readonly QueryableEffectTarget<JsonValue, JsonValue>[],
+): ReadonlyMap<string, QueryableEffectTarget<JsonValue, JsonValue>> {
+  const indexed = new Map<string, QueryableEffectTarget<JsonValue, JsonValue>>();
+  for (const target of targets) {
+    if (target.targetId.trim().length === 0) {
+      throw new TypeError('External Effect targetId must not be empty');
+    }
+    if (indexed.has(target.targetId)) {
+      throw new TypeError(`Duplicate external Effect target ${target.targetId}`);
+    }
+    indexed.set(target.targetId, target);
+  }
+  return indexed;
 }
 
 function profileDefinition(stage: AttemptStageSpecV1): RuntimeProfileDefinitionV1 {

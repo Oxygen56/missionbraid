@@ -15,10 +15,17 @@ import {
   type MissionStatusView,
   type MissionTimelineEntry,
   type MissionToolGateView,
+  type MissionExternalEffectRequestV1,
 } from './engine.js';
 import { createMissionDraft, MissionDraftError } from './mission-draft.js';
 import { discoverRuntimeCatalog, type RuntimeCatalogEntry } from './runtime-catalog.js';
-import type { MissionCommandActionV1, MissionCommandV1, MissionProjectionV1 } from './domain.js';
+import type {
+  JsonValue,
+  MissionCommandActionV1,
+  MissionCommandV1,
+  MissionProjectionV1,
+} from './domain.js';
+import type { ExternalEffectOutcome } from './external-effect.js';
 import type { ToolDecisionIntentDraft, ToolDecisionIntentV1 } from './tool-gateway.js';
 import { snapshotGitWorkspace } from './workspace.js';
 
@@ -57,6 +64,10 @@ export interface AppEngine {
     attemptId: string,
     draft: ToolDecisionIntentDraft,
   ): Promise<ToolDecisionIntentV1>;
+  coordinateExternalEffect?(
+    missionId: string,
+    input: MissionExternalEffectRequestV1,
+  ): Promise<ExternalEffectOutcome<JsonValue>>;
   status(missionId: string): MissionStatusView;
   timeline(missionId: string): MissionTimelineEntry[];
   list(): MissionProjectionV1[];
@@ -438,6 +449,38 @@ export async function startMissionBraidApp(
       }
       return;
     }
+    const externalEffectAction = matchExternalEffectAction(url.pathname);
+    if (externalEffectAction !== undefined && request.method === 'POST') {
+      const engine = engineFactory(stateDir);
+      try {
+        if (engine.coordinateExternalEffect === undefined) {
+          throw new AppHttpError(
+            501,
+            'EXTERNAL_EFFECT_UNAVAILABLE',
+            'External Effect coordination is unavailable.',
+          );
+        }
+        const body = requireExternalEffectBody(await readJson(request));
+        const outcome = await engine.coordinateExternalEffect(externalEffectAction.missionId, {
+          effectId: externalEffectAction.effectId,
+          attemptId: body.attemptId,
+          targetId: body.targetId,
+          kind: body.kind,
+          resourceKey: body.resourceKey,
+          authorityRef: body.authorityRef,
+          idempotencyKey: body.idempotencyKey,
+          payloadDigest: body.payloadDigest,
+          payload: body.payload,
+          ...(body.compensatesEffectId === undefined
+            ? {}
+            : { compensatesEffectId: body.compensatesEffectId }),
+        });
+        sendJson(response, 200, { outcome });
+      } finally {
+        engine.close();
+      }
+      return;
+    }
     const missionId = matchMissionId(url.pathname);
     if (missionId !== undefined && request.method === 'GET') {
       const engine = engineFactory(stateDir);
@@ -714,6 +757,79 @@ function matchToolGateDecision(
     attemptId: decodeURIComponent(match[2]),
     gateId: match[3],
   };
+}
+
+function matchExternalEffectAction(
+  pathname: string,
+): { readonly missionId: string; readonly effectId: string } | undefined {
+  const match = pathname.match(
+    /^\/api\/v1\/missions\/([^/]+)\/external-effects\/([^/]+)\/coordinate$/,
+  );
+  if (match?.[1] === undefined || match[2] === undefined) return undefined;
+  return { missionId: decodeURIComponent(match[1]), effectId: decodeURIComponent(match[2]) };
+}
+
+function requireExternalEffectBody(
+  value: unknown,
+): Omit<MissionExternalEffectRequestV1, 'effectId'> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new AppHttpError(
+      400,
+      'INVALID_EXTERNAL_EFFECT',
+      'External Effect body must be an object.',
+    );
+  }
+  const body = value as Record<string, unknown>;
+  const payload = requireJsonValue(body.payload, 'payload');
+  return {
+    attemptId: requireExternalEffectString(body.attemptId, 'attemptId'),
+    targetId: requireExternalEffectString(body.targetId, 'targetId'),
+    kind: requireExternalEffectString(body.kind, 'kind'),
+    resourceKey: requireExternalEffectString(body.resourceKey, 'resourceKey'),
+    authorityRef: requireExternalEffectString(body.authorityRef, 'authorityRef'),
+    idempotencyKey: requireExternalEffectString(body.idempotencyKey, 'idempotencyKey'),
+    payloadDigest: requireExternalEffectString(body.payloadDigest, 'payloadDigest'),
+    payload,
+    ...(body.compensatesEffectId === undefined
+      ? {}
+      : {
+          compensatesEffectId: requireExternalEffectString(
+            body.compensatesEffectId,
+            'compensatesEffectId',
+          ),
+        }),
+  };
+}
+
+function requireExternalEffectString(value: unknown, field: string): string {
+  if (typeof value !== 'string' || value.trim().length === 0 || value.length > 4_096) {
+    throw new AppHttpError(
+      400,
+      'INVALID_EXTERNAL_EFFECT',
+      `${field} must be a non-empty bounded string.`,
+    );
+  }
+  return value.trim();
+}
+
+function requireJsonValue(value: unknown, field: string, depth = 0): JsonValue {
+  if (depth > 50) {
+    throw new AppHttpError(400, 'INVALID_EXTERNAL_EFFECT', `${field} is too deeply nested.`);
+  }
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (Array.isArray(value)) {
+    return value.map((member) => requireJsonValue(member, field, depth + 1));
+  }
+  if (typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, member]) => [
+        key,
+        requireJsonValue(member, field, depth + 1),
+      ]),
+    );
+  }
+  throw new AppHttpError(400, 'INVALID_EXTERNAL_EFFECT', `${field} must be JSON-compatible.`);
 }
 
 function requireJsonRecord(value: unknown): Record<string, unknown> {

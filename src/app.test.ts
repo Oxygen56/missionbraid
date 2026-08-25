@@ -9,13 +9,16 @@ import { startMissionBraidApp, type AppEngine } from './app.js';
 import { deriveContextGraph } from './context-graph.js';
 import {
   DOMAIN_SCHEMA_VERSION,
+  type JsonValue,
   type MissionCommandActionV1,
   type MissionCommandV1,
   type MissionProjectionV1,
 } from './domain.js';
+import type { ExternalEffectOutcome } from './external-effect.js';
 import type {
   MissionCreationResult,
   MissionExecutionResult,
+  MissionExternalEffectRequestV1,
   MissionStatusView,
   MissionTimelineEntry,
 } from './engine.js';
@@ -341,6 +344,59 @@ describe('MissionBraid local app', () => {
     }
   });
 
+  it('coordinates a versioned external Effect through the local API', async () => {
+    const fixture = await createWorkspace();
+    const state = new FakeEngineState();
+    const missionId = 'mission-external-effect';
+    state.missions.set(missionId, projection(missionId, 'running'));
+    state.timelines.set(missionId, [timeline(missionId, 'mission.created', 'Mission created')]);
+    const app = await startMissionBraidApp({
+      stateDir: fixture.stateDir,
+      port: 0,
+      engineFactory: () => new FakeEngine(state),
+      discoverRuntimes: async () => readyCatalog(),
+    });
+    try {
+      const response = await fetch(
+        `${app.url}/api/v1/missions/${missionId}/external-effects/effect-create-record/coordinate`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            attemptId: 'attempt-external-effect',
+            targetId: 'target-fixture',
+            kind: 'record.create',
+            resourceKey: 'record:fixture',
+            authorityRef: 'grant:fixture',
+            idempotencyKey: 'create-record-once',
+            payloadDigest: 'payload-digest',
+            payload: { token: 'not-persisted-by-the-route', value: 1 },
+          }),
+        },
+      );
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({
+        outcome: {
+          status: 'confirmed',
+          source: 'dispatch',
+          receipt: { recordId: 'record-fixture' },
+          evidenceRefs: ['target:record-fixture'],
+        },
+      });
+      expect(state.externalEffects).toEqual([
+        expect.objectContaining({
+          missionId,
+          input: expect.objectContaining({
+            effectId: 'effect-create-record',
+            idempotencyKey: 'create-record-once',
+          }),
+        }),
+      ]);
+    } finally {
+      await app.close();
+    }
+  });
+
   it('keeps the app bound to loopback hosts', async () => {
     await expect(startMissionBraidApp({ host: '0.0.0.0', port: 0 })).rejects.toThrow('loopback');
   });
@@ -359,6 +415,10 @@ class FakeEngineState {
   executionGate?: Promise<void>;
   onExecuteStarted?: () => void;
   resumeCalls = 0;
+  readonly externalEffects: Array<{
+    readonly missionId: string;
+    readonly input: MissionExternalEffectRequestV1;
+  }> = [];
 }
 
 class FakeEngine implements AppEngine {
@@ -479,6 +539,20 @@ class FakeEngine implements AppEngine {
 
   async contextGraph(missionId: string) {
     return deriveContextGraph({ timeline: this.timeline(missionId) });
+  }
+
+  async coordinateExternalEffect(
+    missionId: string,
+    input: MissionExternalEffectRequestV1,
+  ): Promise<ExternalEffectOutcome<JsonValue>> {
+    this.#require(missionId);
+    this.#state.externalEffects.push({ missionId, input });
+    return {
+      status: 'confirmed',
+      source: 'dispatch',
+      receipt: { recordId: 'record-fixture' },
+      evidenceRefs: ['target:record-fixture'],
+    };
   }
 
   status(missionId: string): MissionStatusView {

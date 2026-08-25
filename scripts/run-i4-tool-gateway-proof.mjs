@@ -70,6 +70,7 @@ try {
         const click = await clickGate(browser, gate.gateId, 'modify', updatedInput);
         if (!click.clicked) throw new Error('Workbench could not apply the edited tool input.');
         modified = {
+          attemptId: gate.attemptId,
           gateId: gate.gateId,
           effectId: gate.effectId,
           requestSha256: gate.requestSha256,
