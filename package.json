@@ -2,7 +2,7 @@
   "name": "missionbraid",
   "version": "0.0.0",
   "private": true,
-  "description": "Mission-centric continuity across coding-agent runtimes.",
+  "description": "Local-first Agent Runtime Workbench for native coding agents.",
   "license": "Apache-2.0",
   "type": "module",
   "engines": {

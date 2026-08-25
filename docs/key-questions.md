@@ -1,147 +1,245 @@
-# Key Questions
+# Key Product and Technical Questions
 
-> **Status:** pre-alpha design and local product implementation. The unified
-> Workbench path is verified in a clean public clone of `c55dd54`: one web-form
-> Mission crossed real Codex and Qoder Attempts, both changed the workspace, the
-> original verifier passed, and the Receipt survived app restart. This does not
-> represent automatic routing, third-party or cross-host reproduction,
-> production readiness, or broad execution compatibility.
+> **Status:** these answers define the accepted target architecture. “Today”
+> refers only to the current pre-alpha Codex/Qoder vertical slice; “target”
+> describes capabilities still scheduled in the ten-iteration roadmap.
 
-MissionBraid is intentionally organized around questions that must be answered
-with code and reproducible evidence, not feature-count claims.
+## 1. Why build a Workbench instead of another Agent launcher?
 
-## 1. What remains when existing tools already launch many runtimes?
+Launching a CLI is already cheap. The unsolved developer loop is understanding
+and controlling a long Agent execution: effective configuration, context
+assembly, tool behavior, workspace mutations, failure location, retries,
+cross-Harness continuation, and final acceptance.
 
-**Current position:** MissionBraid should not compete on the number of agent
-CLIs it can start. Its proposed value is the portable Mission contract that owns
-planning, evidence handoff, mutable-effect state, and verified completion across
-runtime boundaries.
+MissionBraid therefore owns the Mission lifecycle and debugging workflow while
+native Harnesses keep their execution strengths.
 
-**Evidence status:** the [controlled local E1 run](../evidence/e1-local-2026-08-24.json)
-crossed from Codex to Qoder without manual context transfer and closed against
-its original Outcome Contract. A [same-host, task-context-isolated fresh-clone
-run](../evidence/e1-context-isolated-reproduction-local-2026-08-24.json)
-reproduced that path. The [unified Workbench run](../evidence/unified-workbench-codex-qoder-local-2026-08-24.json)
-then proved the same core value through the product entry rather than a
-user-authored Mission file; third-party or cross-host reproduction remains
-required.
+## 2. What is the scheduling unit?
 
-## 2. What exactly is portable across runtimes?
+Not “Codex”, “Qoder”, or a model name. Planning evaluates a timestamped Runtime
+Catalog Observation and binds an immutable **Runtime Profile Snapshot**:
 
-**Current position:** observable facts, decisions, constraints, artifacts,
-effect state, and verification evidence are portable. Hidden model state,
-identical internal reasoning, and perfect transcript equivalence are not.
+```text
+provider × Harness × model × reasoning mode × instructions
+× Skills × MCP/tools × permissions × capabilities
+```
 
-**Evidence required:** every handoff fact must have provenance; the target must
-acknowledge the critical identifiers; later behavior must still pass the
-original verifier.
+The selected snapshot becomes an Attempt Binding only after it is attached to
+the Mission revision, Branch, workspace, authority, budget, and native
+session/process. Availability, quota, and price are versioned planning inputs,
+not permanent Profile identity. Unknown or stale inputs cannot silently affect
+a reproducible decision.
 
-## 3. How can a Capsule fit different context windows without losing the task?
+## 3. How can different Harnesses share one event model without losing what makes them different?
 
-**Current position:** separate an immutable, non-compressible core from optional
-material. Compute the injection budget from a Runtime Profile snapshot. Degrade
-optional items deterministically from full content to summaries to immutable
-references. Never silently truncate the core.
+MissionBraid stores both:
 
-**Evidence required:** projection hashes must be reproducible; property tests
-must preserve the core under every valid budget; real adapters must measure or
-guarantee the injection limit they advertise.
+- immutable sanitized native-format artifacts, redaction metadata, and native
+  extension fields;
+- a versioned Agent Event IR for shared concepts such as turns, context,
+  tool calls, artifacts, effects, lifecycle, and outcomes.
 
-## 4. Can MissionBraid prevent an external action from happening twice?
+Normalization is additive, not destructive. An adapter may expose capabilities
+that have no common equivalent. The Workbench degrades explicitly instead of
+pretending every Harness supports the same controls.
 
-**Current position:** not universally. Every mutable action receives an Effect
-identity before dispatch, but the guarantee depends on control:
+## 4. Can the debugger pause an arbitrary Agent at any instruction?
 
-- enforced when credentials and tools pass through MissionBraid;
-- guarded when the upstream system provides idempotency or a queryable
+No. That would be a false capability. An adapter declares concrete safe points:
+pre-tool, post-tool, turn boundary, idle, process exit, or provider-native
+interrupt. MissionBraid distinguishes:
+
+- **observe:** events are visible but execution cannot be stopped;
+- **interrupt:** a process or turn can be stopped, possibly after the current
+  action;
+- **gate:** the next controlled action cannot happen until MissionBraid allows
+  it;
+- **steer:** supported state can be changed before continuation;
+- **reconstruct:** a new Attempt can be created from recorded state.
+
+The UI must show the actual control level for every breakpoint.
+An intervention may preserve or narrow authority. Expanding it requires an
+explicitly authorized Grant or Contract revision; an Agent or descendant Branch
+cannot inherit a larger permission set by default.
+
+## 5. What state must a checkpoint contain?
+
+A useful checkpoint is not just a Git commit or transcript offset. It binds:
+
+- Mission and Outcome Contract revision;
+- branch and Attempt identity;
+- persisted event prefix;
+- visible Context Graph and instruction sources;
+- workspace snapshot and untracked state;
+- Runtime Profile and native session/process locator when available;
+- tool and external Effect history;
+- environment fingerprints needed for reconstruction;
+- unresolved acceptance criteria.
+
+Missing components are recorded as reconstruction limits, not hidden behind a
+“resume” label.
+
+## 6. What does “time travel” mean?
+
+Projection rebuild is an internal deterministic recovery operation, not time
+travel and not a Branch. MissionBraid exposes four user operations:
+
+1. **Playback:** inspect recorded history without executing anything.
+2. **Cached replay:** create a child Branch that substitutes eligible recorded
+   controlled outputs as new branch evidence.
+3. **Counterfactual resample:** create a child Branch and call a model or tool
+   again with a changed input; the result is new evidence.
+4. **Execution fork:** create a new branch from a composite checkpoint and run
+   it.
+
+Playback creates no Branch. The other three create a child Branch whenever they
+produce new evidence; only execution fork necessarily performs real subsequent
+tool work. Ordinary resume or Handoff from the current head may add an Attempt
+to the same Branch. No operation claims deterministic reproduction of a
+stochastic model unless the underlying Runtime can prove it.
+
+## 7. What happens to external effects after rewind or fork?
+
+Time travel cannot unsend a message, undo a deployment, reverse a purchase, or
+erase an API mutation. Every mutable action MissionBraid controls or observes
+receives an Effect identity; an unobservable boundary remains `unknown`.
+Control levels are:
+
+- **enforced:** MissionBraid owns dispatch and can block duplicates;
+- **guarded:** the target system provides idempotency or a queryable
   postcondition;
-- advisory when the runtime can bypass both.
+- **advisory:** the action is observed or predeclared, but the Harness can
+  bypass MissionBraid;
+- **unknown:** available evidence cannot establish whether the action happened.
 
-**Evidence required:** crash injection around dispatch must show zero automatic
-repeats for controlled, confirmed Effects. Advisory paths must remain visible in
-the Receipt.
+Effects are scoped as branch-local workspace, shared-resource, or
+mission-global external. A new Branch owns new Effects and references the
+inherited external frontier; it must reconcile, compensate, or stop before
+repeating prior actions. Unknown state is never converted into “safe to
+repeat”.
 
-## 5. How is a model failure distinguished from a harness or tool failure?
+## 8. What exactly crosses a Harness boundary?
 
-**Current position:** collect hashed observations at each boundary, keep
-observations separate from hypotheses, rank candidates with a versioned policy,
-and use a bounded discriminating probe only when it changes one declared
-dimension. If evidence is not decisive, report `unknown`.
+A Handoff Capsule carries portable, provenance-bound evidence:
 
-**Evidence required:** injected failures must produce stable candidates;
-removing decisive evidence must downgrade a confirmation; duplicate logs must
-not inflate confidence.
+- Mission and Contract identity;
+- source branch, Attempt, and checkpoint;
+- achieved and unresolved criteria;
+- relevant context and artifact references;
+- workspace and Effect state;
+- decisions, failures, and constraints;
+- target-specific injection projection and acknowledgement requirements.
 
-## 6. Can a planner use live availability, price, and history and still be reproducible?
+Hidden chain-of-thought, KV cache, private model state, and identical internal
+understanding are not portable and are not claimed.
 
-**Current position:** yes only when every dynamic input is frozen into an
-immutable snapshot included in the planning hash. Otherwise that input is not
-allowed to affect the decision.
+## 9. How does failure attribution avoid becoming an LLM-written guess?
 
-**Evidence required:** equal inputs and policy must produce the same decision
-hash; modifying an input without updating its hash must fail closed.
+The system first records observable boundaries: model request/response metadata,
+context changes, tool inputs/outputs, Harness lifecycle, workspace changes, and
+environment state. Deterministic rules identify contradictions and missing
+preconditions. Models may summarize evidence and rank hypotheses, but cannot
+upgrade a hypothesis to fact.
 
-## 7. Who decides that a Mission is complete?
+Where useful, MissionBraid creates a diagnostic branch that changes one
+declared dimension. If evidence remains insufficient, the correct result is
+`unknown`.
 
-**Current position:** neither the model nor the harness. They may report
-completion, but the Mission Kernel runs the verifier declared in the Outcome
-Contract and issues a Receipt containing criterion and evidence results.
+## 10. How does the planner choose a Runtime Profile?
 
-**Evidence required:** a false agent success report must remain unverified; a
-third party must be able to replay or inspect the Receipt's evidence chain.
+The accepted flow is:
 
-## 8. How are permissions handled when execution moves?
+```text
+extract requirements → filter hard constraints → rank eligible Profiles
+→ bind immutable decision → observe → adapt or replan
+```
 
-**Current position:** permission can only narrow to the intersection of Mission,
-current-owner, source-Attempt, target-Profile, and execution-provider grants.
-Unknown permissions are denied. A broader target runtime does not create new
-Mission authority.
+Hard constraints include required tools, permissions, control points,
+environment, context budget, and policy. Ranking may use cost, latency, quota
+signals, historical outcomes, and user preferences only when their source,
+freshness, and fallback behavior are recorded.
 
-**Evidence required:** handoff must reject missing capabilities, permission
-expansion, stale grants, and profiles that cannot enforce a Mission's required
-control level.
+Models can extract soft requirements or explain a ranking. Deterministic policy
+owns eligibility, rank, binding, authority, and budget enforcement. The frozen
+requirements, Catalog observations, candidate set, rejection reasons, rank
+vector, policy version, and decision hash make equal inputs reproducible.
 
-## 9. What role does Kandev play?
+## 11. How does multi-Agent work avoid becoming an unstructured swarm?
 
-**Current position:** Kandev is a candidate external workspace and execution
-provider, not MissionBraid's state machine or source-code base. Integration is
-through a versioned public process boundary, without a fork or shared internal
-database. Direct local adapters remain a valid path.
+A Mission Plan is a versioned graph of goals, dependencies, ownership,
+acceptance criteria, and shared artifacts. Every worker produces an Attempt on
+a branch. A Mission revision can invalidate, supersede, or replan downstream
+work explicitly.
 
-**Evidence status:** a [clean-clone, two-run local check](../evidence/kandev-v0.91.0-provider-check-local-2026-08-24.json)
-against the official v0.91.0 container first created a fresh task, session, and
-worktree, then reconciled the same identities on rerun. Both runs started and
-retired distinct preconfigured custom processes. The versioned public API still
-lacks full Session or Agent stop. Kandev-backed
-Mission execution, a real provider-bound E1, and Outcome Receipt issuance
-therefore remain unproven and unsupported.
+The user can revise a living Mission, but the change creates a new revision; it
+does not silently rewrite the contract against which earlier work was judged.
+Agents on an obsolete revision are stopped or fenced. Branch histories never
+merge in place; a join creates a consolidation Attempt over provenance-bound
+artifacts, and workspace integration is a new Effect.
 
-## 10. How will MissionBraid prove value rather than merely add machinery?
+## 12. Who decides that the Mission is complete?
 
-**Current position:** the flagship result is not a schema, UI, adapter count, or
-test count. It is one repeatable Mission that survives a real process and then a
-real runtime boundary with no manual context movement, no duplicate disclosed
-Effect identity, and an independently verified outcome. Preventing repeated
-mutable Effects through guarded or enforced controls remains a separate
-evidence gate.
+Neither the model nor the Harness. They may report completion, but the Mission
+Kernel evaluates the exact immutable Contract revision bound to the selected
+Branch through controller-owned verifier evidence. The Verifier Runner cannot
+issue a Receipt. Any required failed/unknown criterion or blocking/ambiguous
+required Effect prevents `verified`; authorized acceptance remains a separate
+signal. Terminal failure or unknown still produces a rejected Receipt with its
+unresolved evidence.
 
-**Evidence status:** controlled local E0 and E1 runs satisfy the public gates in
-the [roadmap](roadmap.md). A same-host, task-context-isolated run from a clean
-public clone reproduced E1 and explicitly replayed its verifier. A second clean
-public-clone run submitted through the Workbench and restored its verified
-Receipt after restart. Third-party or cross-host reproduction and matched
-evaluation against manual transfer and relevant overlapping baselines remain.
+“The Agent said done” is evidence input, never the completion transition.
 
-## 11. Which claims are intentionally excluded?
+## 13. What role does Kandev play?
+
+Kandev is a candidate external execution provider for mature workspace,
+process, and session capabilities. MissionBraid integrates through a versioned
+public boundary and keeps its own Mission state, Event IR, debugger, branch
+semantics, and Outcome Contract.
+
+MissionBraid does not fork Kandev, depend on its internal database, or make it
+the only execution path. Direct local adapters remain valid.
+
+The current compatibility record only proves selected public Kandev v0.91.0
+task/worktree/process behavior. It does not prove a Kandev-backed Mission.
+
+## 14. What is implemented and what is still a design?
+
+Implemented today:
+
+- local Workbench and Mission Kernel;
+- Codex and Qoder execution;
+- durable events and restart restoration;
+- workspace baseline/checkpoint evidence (digest/delta, not a restorable
+  snapshot) and Handoff Capsule;
+- independent verifier and Outcome Receipt;
+- one same-host public-clone Codex-to-Qoder evidence path.
+
+Not implemented today:
+
+- complete live Event IR and Context Graph;
+- pre-tool gating and interactive debugger;
+- composite executable fork/replay;
+- adaptive Profile planning;
+- general failure attribution;
+- multi-Agent Mission graphs;
+- packaged Adapter SDK or broad Harness execution.
+
+The [product requirements](product-requirements.md), [final
+architecture](architecture.md), and [ten-iteration roadmap](roadmap.md) keep
+those boundaries explicit.
+
+## 15. What claims are intentionally excluded?
 
 MissionBraid does not currently claim:
 
 - lossless session migration;
-- universal exactly-once tool execution;
-- perfect or universal root-cause attribution;
-- globally optimal runtime selection;
-- production readiness;
-- cross-runtime continuity beyond the controlled local Codex-to-Qoder fixture.
+- access to hidden chain-of-thought;
+- deterministic replay of arbitrary stochastic Runtimes;
+- universal exactly-once external actions;
+- perfect root-cause attribution;
+- globally optimal Runtime selection;
+- arbitrary Harness compatibility;
+- production readiness or adoption.
 
-These are not marketing caveats. They define the boundary between accepted
-architecture and demonstrated capability.
+These are architectural boundaries, not footnotes. Any future claim must be
+earned by the corresponding real product workflow and published evidence.

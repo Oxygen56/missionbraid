@@ -1,365 +1,646 @@
 # MissionBraid Architecture
 
-> **Status:** accepted target architecture with a pre-alpha local product
-> slice. The unified Workbench, Mission Kernel, direct Codex/Qoder adapters,
-> Capsule handoff, verifier, and Receipt path are implemented at `c55dd54`. A
-> clean public-clone run submitted the Mission through the Workbench, exercised
-> both real Runtime Profiles, and restored the verified result after restart.
-> Deterministic automatic planning, additional execution adapters, and
-> Kandev-backed Mission execution remain target semantics rather than current
-> capabilities.
+> **Status:** final target architecture with a working pre-alpha foundation.
+> The repository already implements the Mission Kernel, local Workbench,
+> append-only event state, direct Codex and Qoder execution, workspace
+> baseline/checkpoint evidence (digest and delta, not a restorable snapshot), a
+> bounded Handoff Capsule, independent verification, and an Outcome Receipt.
+> Runtime intelligence, unified live debugging,
+> counterfactual replay, adaptive planning, and broader Harness support are
+> target capabilities unless explicitly marked otherwise.
 
-## Product contract
+## Product definition
 
-MissionBraid is a mission-centric control plane for coding-agent runtimes. Its
-central invariant is:
+MissionBraid is a local-first **Agent Runtime Workbench** for developers who
+build with native coding agents. It treats Codex, Qoder, Claude Code, OpenCode,
+Hermes, and future Harnesses as replaceable execution runtimes behind one
+Mission lifecycle:
 
-> **The mission outlives the runtime.**
-
-A Mission owns the objective, constraints, acceptance criteria, Attempt chain,
-mutable-effect history, and completion state. Codex, Qoder, Claude Code, or any
-other harness may execute an Attempt, but none of them owns the Mission.
-
-Three rules follow:
-
-- **Mission owns truth.** Runtime transcripts are evidence inputs, not the
-  authoritative state machine.
-- **Continuity transfers evidence, not chat.** MissionBraid does not claim to
-  move hidden model state, KV cache, or identical internal understanding.
-- **Done is a receipt, not a claim.** Completion returns to the original
-  acceptance criteria and a controller-run verifier.
-
-## Implemented product surface
-
-The local Workbench is a projection over the Mission Kernel, not a second state
-machine. It currently provides:
-
-- a fixed target catalog for Codex, Qoder, Claude Code, OpenCode, Hermes, and
-  DeepSeek Harness with explicit installed/supported/readiness states;
-- editable Runtime Profiles for the supported Codex and Qoder adapters;
-- one-form Mission creation with a Git workspace and direct verifier command;
-- ordered Codex, Qoder, or Codex-to-Qoder execution;
-- a durable Attempt, Checkpoint, Capsule, Effect, verification, and Receipt
-  timeline;
-- restart restoration and a visible recovery action for interrupted
-  `running`/`verifying` Missions.
-
-The Workbench does not yet choose an optimal Runtime, read quota balances,
-replan after failure, or execute the four visible unsupported Harnesses.
-
-## Current running architecture
-
-This diagram contains only the path implemented and exercised by the current
-public Workbench evidence:
-
-```mermaid
-flowchart LR
-  UI[Workbench / CLI] --> ENG[Mission Engine]
-  ENG <--> DB[(SQLite hash-linked events)]
-  ENG --> CA[Codex adapter]
-  ENG --> QA[Qoder adapter]
-  CA --> WS[Git workspace]
-  QA --> WS
-  WS --> SNAP[Baseline / Checkpoint snapshots]
-  SNAP --> CAP[Canonical Capsule + projection]
-  CAP --> QA
-  ENG --> VER[Out-of-process verifier]
-  VER --> REC[Outcome Receipt]
-  REC --> DB
-  DB --> UI
+```text
+configure → plan → run → observe → debug → fork → hand off → compare → verify
 ```
 
-| Implemented responsibility                                      | Source                                                                                                   |
-| --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| Local HTTP entry, background operations, and restart projection | [`src/app.ts`](../src/app.ts), [`src/app-page.ts`](../src/app-page.ts)                                   |
-| Versioned Mission creation and validation                       | [`src/mission-draft.ts`](../src/mission-draft.ts), [`src/spec.ts`](../src/spec.ts)                       |
-| Attempt execution, recovery, handoff, and Receipt orchestration | [`src/engine.ts`](../src/engine.ts)                                                                      |
-| Append-only events, projections, leases, and fencing            | [`src/store.ts`](../src/store.ts)                                                                        |
-| Workspace evidence                                              | [`src/workspace.ts`](../src/workspace.ts)                                                                |
-| Capsule projection and acknowledgement validation               | [`src/capsule.ts`](../src/capsule.ts)                                                                    |
-| Direct Runtime processes                                        | [`src/adapters/codex.ts`](../src/adapters/codex.ts), [`src/adapters/qoder.ts`](../src/adapters/qoder.ts) |
-| Independent acceptance command                                  | [`src/verifier.ts`](../src/verifier.ts)                                                                  |
+The product is deliberately broader than an agent launcher, trace viewer, or
+workflow engine. It combines runtime discovery, long-running Mission state,
+context and tool observability, live intervention, time travel, multi-Harness
+continuation, failure intelligence, and outcome verification in one coherent
+developer workflow.
 
-The [project tour](project-tour.md) connects these modules to the full user
-journey and focused tests.
+The central invariant remains:
 
-## Target architecture
+> **The Mission outlives every Runtime, session, and execution branch.**
+
+## Primary user loop
+
+1. The developer creates a Mission with an objective, constraints, workspace,
+   and Outcome Contract.
+2. MissionBraid snapshots the effective Runtime Profiles available on the
+   machine and either records the developer's choice or plans an execution.
+3. A native Harness executes an Attempt while MissionBraid persists sanitized
+   native-format and normalized model, context, tool, workspace, and lifecycle
+   events before projecting them live.
+4. The developer normally stays hands-off. A breakpoint or anomaly can pause
+   execution at an observable safe point.
+5. The developer inspects the exact visible context and state, changes one or
+   more execution conditions, and resumes or creates an isolated branch.
+6. A branch may continue in the same Harness or receive a Handoff Capsule and
+   continue in another Harness.
+7. MissionBraid compares branches, attributes failures within the available
+   evidence boundary, evaluates the immutable Contract revision bound to the
+   selected Branch, and issues an Outcome Receipt.
+
+```mermaid
+sequenceDiagram
+  actor D as Agent developer
+  participant W as Workbench
+  participant K as Mission Kernel
+  participant P as Runtime Registry / Planner
+  participant O as Durable Outbox
+  participant C as Run Coordinator
+  participant E as Execution Provider
+  participant A as Harness Adapter
+  participant H as Native Harness
+  participant G as Tool Gateway
+  participant T as Tool / MCP / External API
+  participant S as State and Evidence
+  participant V as Verifier Runner
+
+  D->>W: Create Mission and Outcome Contract
+  W->>K: Submit durable Mission command
+  K->>P: Resolve eligible Runtime Profiles
+  P-->>K: Frozen inputs and deterministic decision
+  K->>O: Commit intent event and outbox entry
+  O->>C: Dispatch accepted command
+  C->>E: Bind workspace, process and authority
+  E->>A: Start Attempt
+  A->>H: Start native execution
+  H-->>A: Native model, context and lifecycle events
+  A->>S: Persist sanitized native and semantic evidence
+  S-->>W: Rebuildable live projection
+  opt controlled tool request
+    H->>G: Propose mutable tool call
+    G->>S: Persist intent, Effect and breakpoint state
+    S-->>W: Show pending controlled action
+    D->>W: Inspect, edit, fork or switch Runtime
+    W->>K: Submit intervention command
+    K->>O: Commit command and expected Mission head
+    O->>C: Dispatch approved control
+    C->>G: Release, replace or cancel call
+    G->>T: Dispatch only when authorized
+    T-->>G: Tool result and external evidence
+    G->>S: Persist result before continuation
+  end
+  H-->>A: Native Attempt result
+  A->>S: Persist terminal evidence
+  K->>O: Commit verify command for bound Contract revision
+  O->>C: Dispatch verifier
+  C->>V: Run criterion checks
+  V-->>S: Persist criterion evidence
+  S-->>K: Rebuild outcome state
+  K->>S: Append ReceiptIssued with the terminal outcome
+  S-->>W: Branch comparison and Outcome Receipt
+```
+
+## Architectural principles
+
+1. **Mission state is above Harness state.** A vendor session is useful, but it
+   is never the sole owner of user intent or completion.
+2. **Preserve native fidelity before normalizing.** Every normalized event
+   retains its raw source reference and native extension fields. A common IR
+   must not erase provider-specific semantics.
+3. **Persist before projecting.** Runtime events are deduplicated and persisted
+   before they update the UI, breakpoint engine, or Mission state.
+4. **Debug at explicit safe points.** MissionBraid does not claim arbitrary
+   process snapshots. It pauses at boundaries an adapter can actually observe
+   or control, such as pre-tool, post-tool, turn, idle, or process exit.
+5. **New execution never rewrites history.** Playback and projection rebuild do
+   not create a Branch. Any replay, resample, or fork that produces new
+   evidence creates a child Branch from an immutable base checkpoint.
+6. **External effects survive time travel.** Rewind cannot unsend a message,
+   undo a deployment, or erase a network side effect. Those effects must be
+   inherited, reconciled, compensated, or block replay.
+7. **Capabilities are explicit.** Each Runtime binding declares whether it can
+   observe, interrupt, gate, steer, resume, fork, or reconstruct a state.
+8. **Models propose; deterministic code controls.** Models may propose
+   structured requirements or ranking features and explain traces. Once
+   accepted, versioned deterministic policy owns filter, rank, bind, authority,
+   state transitions, effect identity, budgets, and final acceptance.
+
+## Architecture overview
 
 ```mermaid
 flowchart TB
-  U[Local Workbench / CLI / API] --> MK[Mission Kernel + Outcome Contract]
-  MK --> RP[Runtime Profile Registry]
-  RP --> PL[Deterministic Planner]
-  PL --> AR[Attempt Runner]
+  subgraph XP[Experience Plane]
+    UI[Workbench]
+    CLI[CLI]
+    API[Local API / Adapter SDK]
+  end
 
-  AR --> EB{Execution Binding}
-  EB --> KP[External Execution Provider]
-  EB --> DA[Direct Runtime Adapter]
-  KP --> RH[Runtime / Harness]
-  DA --> RH
+  subgraph CP[Mission Control Plane]
+    MK[Mission Kernel + Outcome Contract]
+    MG[Mission Plan / Branch Graph]
+    RR[Runtime Registry + Profile Resolver]
+    PL[Execution Planner]
+    RC[Run Coordinator]
+    DO[Debug Orchestrator]
+    BH[Branch + Handoff Manager]
+    OC[Outcome Controller]
+  end
 
-  AR --> ES[Append-only Event Store]
-  AR --> EL[Effect Ledger]
-  ES --> FA[Failure Evidence + Attribution]
-  ES --> HC[Handoff Edge + Capsule Projection]
-  EL --> HC
-  HC --> PL
-  ES --> OV[Outcome Verifier]
-  EL --> OV
-  OV --> OR[Outcome Receipt]
+  subgraph SP[State and Evidence Plane]
+    DC[(Durable Commands + Outbox)]
+    ES[(Sanitized Native + Normalized Event Store)]
+    AS[(Artifact CAS)]
+    CG[(Context Graph)]
+    WS[(Workspace Snapshots)]
+    EL[(Tool / Effect Ledger)]
+    FG[(Failure Evidence Graph)]
+    OR[(Outcome Receipts)]
+  end
+
+  subgraph DP[Runtime Data Plane]
+    EP[Execution Providers]
+    WM[Workspace + Process Manager]
+    AD[Runtime Adapters]
+    TG[Tool Gateway / MCP Proxy / Hooks]
+    VR[Verifier Runner]
+  end
+
+  H[Native Harnesses: Codex / Qoder / Claude Code / OpenCode / others]
+  TL[Tools / MCP / External APIs]
+
+  UI --> MK
+  CLI --> MK
+  API --> MK
+  MK <--> MG
+  MK --> RR
+  RR --> PL
+  PL --> MK
+  MK --> DC
+  DC --> RC
+  RC --> EP
+  EP --> WM
+  EP --> AD
+  AD <--> H
+  H <--> TG
+  TG <--> TL
+  TG --> ES
+  TG --> AS
+  AD --> ES
+  AD --> AS
+  WM --> WS
+  ES --> CG
+  ES --> EL
+  ES --> FG
+  WS --> BH
+  CG --> BH
+  EL --> BH
+  BH --> MK
+  ES --> DO
+  DO --> MK
+  FG --> PL
+  RC --> VR
+  VR --> ES
+  ES --> OC
+  OC --> MK
+  MK --> ES
+  ES --> OR
+  ES --> UI
 ```
 
-The Mission Kernel is the sole authority for Mission, Attempt, Effect,
-verification, and Receipt state. Projection tables, timelines, consoles, and
-runtime transcripts must remain rebuildable views.
+## Plane responsibilities
 
-## Core objects
+### Experience Plane
+
+The Workbench, CLI, and local API expose one product rather than separate state
+machines. The Workbench contains seven connected views:
+
+- **Runtime Hub:** installed Harnesses and effective Runtime Profiles;
+- **Mission Canvas:** objective, Outcome Contract, plan graph, branches, and
+  assigned Runtimes;
+- **Live Trace:** model turns, context changes, tools, files, tests, subagents,
+  cost, and latency;
+- **Debug Console:** breakpoints, pending tool calls, context and state
+  inspection, interventions, pause, resume, and steer;
+- **Time Travel:** checkpoints, replay modes, forks, and portability reports;
+- **Branch Compare:** trajectory, workspace, cost, failure, and verifier diffs;
+- **Outcome View:** criterion results, unresolved Effects, and Receipt.
+
+The UI is a projection of authoritative Kernel and evidence state. Refreshing or
+restarting it must not alter execution truth.
+
+### Mission Control Plane
+
+The Mission Control Plane owns user intent and execution coordination:
+
+- **Mission Kernel:** versioned Mission state and Outcome Contract authority;
+- **Mission Plan:** dependency graph for stages, tasks, subagents, branches, and
+  joins;
+- **Runtime Registry:** effective Profile discovery and capability snapshots;
+- **Execution Planner:** manual or automatic Profile selection and replanning;
+- **Run Coordinator:** Attempt ownership, lifecycle, budgets, and process
+  fencing;
+- **Debug Orchestrator:** breakpoint evaluation and intervention commands;
+- **Branch and Handoff Manager:** checkpoint forks and cross-Harness
+  continuation;
+- **Outcome Controller:** requests independent criterion runs and asks the
+  Mission Kernel to issue a terminal Receipt whose outcome is determined by the
+  bound policy. The Runtime Data Plane's Verifier Runner returns evidence but
+  cannot issue a Receipt.
+
+### Runtime Data Plane
+
+The Runtime Data Plane attaches to native coding agents without pretending that
+all Harnesses expose the same controls:
+
+- direct CLI or SDK adapters;
+- ACP or another public protocol when fidelity is sufficient;
+- an external execution provider such as Kandev or Sandbox Agent;
+- model-traffic proxies for visible request and context capture;
+- Harness hooks for lifecycle and pre-tool events;
+- an MCP/tool gateway for enforceable interception;
+- workspace, worktree, sandbox, PTY, and process-group management.
+
+Kandev is a candidate mature execution provider behind this plane. MissionBraid
+remains an independent repository and does not fork Kandev or share its private
+state.
+
+### State and Evidence Plane
+
+Kernel events are the sole authority for Mission control transitions. That does
+not make the Kernel the owner of every fact in the outside world. Native
+Harnesses, Git, tools, and external systems remain authoritative sources for
+their own real state; MissionBraid captures evidence from those sources and
+records what it can establish.
+
+| Fact                                                        | Control record or evidence source                                                              |
+| ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Objective, constraints, plan, Branch, Attempt and authority | Mission Kernel events                                                                          |
+| Accepted execution intent                                   | Kernel intent event; transactional outbox is the delivery mechanism                            |
+| Runtime-native session state                                | Native Harness evidence referenced through an Adapter                                          |
+| Ordered observations                                        | Append-only Event Store with source sequence, ingest sequence, and causal links                |
+| Native-format prompts, payloads, logs and large state       | Sanitized content-addressed artifacts with a redaction manifest                                |
+| Observable model context                                    | Captured request/session evidence; Context Graph is a rebuildable projection                   |
+| Repository contents                                         | Git/worktree evidence and content hashes                                                       |
+| Tool or external side effects                               | External-system evidence plus the rebuildable Effect Ledger projection                         |
+| Failure analysis                                            | Evidence references; Failure Graph is a rebuildable projection                                 |
+| Completion                                                  | Kernel `ReceiptIssued` event based on verifier evidence for the Branch-bound Contract revision |
+
+The Context Graph, Failure Graph, Workbench views, and Receipt view can be
+rebuilt. The content-addressed store preserves sanitized evidence; the outbox
+ensures delivery; neither can independently change Mission truth.
+
+## Core domain model
 
 ### Mission and Outcome Contract
 
-An Outcome Contract freezes the objective before execution begins. It contains:
+A Mission is the durable unit of user intent. Its Outcome Contract contains the
+objective, constraints, non-goals, criterion definitions, allowed authority,
+and evidence requirements. The Contract is versioned rather than silently
+mutated. A later user change creates a new Mission revision and an explicit
+impact set over the plan and existing branches.
 
-- machine- or human-verifiable acceptance criteria;
-- constraints and explicit non-goals;
-- required evidence kinds;
-- a canonical content hash and revision.
+### Mission Plan
 
-A Mission references one contract revision, a permission grant, a cost
-envelope, and an ordered chain of Attempts. An executing model cannot edit the
-contract, grant itself authority, or mark the Mission verified.
+The Mission Plan is a graph rather than a fixed list of prompts. A node records
+required capabilities, dependencies, expected artifacts, acceptance criteria,
+and the Attempt or subagent that owns it. The graph supports sequential work,
+parallel branches, joins, diagnostic forks, and invalidation after a Mission
+revision.
 
-### Runtime Profile
+Branch histories never merge in place. A join creates a new consolidation
+Attempt that consumes provenance-bound artifacts or Checkpoints from its input
+Branches. Workspace integration is an explicit new Effect; conflicts, selected
+inputs, and verifier evidence remain recorded.
 
-The scheduling unit is not a bare harness. It is an immutable snapshot of the
-full execution environment:
+### Runtime inventory, Profile, and Attempt Binding
 
-```text
-Execution provider × Harness × Model × Reasoning configuration
-× Instructions × Skills × MCP tools × Permissions
-× Workspace × Availability
-```
+The product separates four objects that change at different rates:
 
-The snapshot records versions, capability identifiers, instruction and tool
-digests, context and injection limits, permission ceilings, availability, and
-observation freshness. Credentials never enter the snapshot.
+- **Runtime Catalog Observation:** a timestamped observation of installation,
+  health, version, authentication readiness, quota, price, and availability;
+- **Runtime Profile Definition:** a reusable user or project template that
+  selects a provider, Harness, model, reasoning configuration, instruction and
+  tool policy, and permission ceiling;
+- **Runtime Profile Snapshot:** the immutable effective environment resolved
+  for an Attempt, including actual versions, active instructions, Skills,
+  MCP/tools, context limits, capabilities, and unknown fields;
+- **Attempt Binding:** the Profile Snapshot bound to a Mission and Contract
+  revision, plan node, Branch, workspace, authority, budget, and native
+  session/process locator.
 
-Unknown limits stay unknown. A profile with an unknown guaranteed injection
-budget may run an initial Attempt, but it is not eligible for an automatic
-handoff that requires a provable context budget.
-
-### Deterministic Planner
-
-Planning follows `filter → rank → record`:
-
-1. Filter profiles by authentication, health, capability, workspace,
-   permission, availability, and handoff-budget requirements.
-2. Rank eligible profiles using a versioned lexicographic policy.
-3. Persist the complete input snapshot, rejection reasons, rank vectors, policy
-   version, and decision hash.
-
-Prices and historical outcomes may affect ranking only when captured in
-immutable snapshots included in the decision hash. The same input and policy
-must produce the same decision. An LLM may explain a decision, but it does not
-override hard constraints.
-
-Effective permissions can only narrow during handoff:
+Catalog observations inform planning but are not silently folded into Profile
+identity. Workspace ownership and session identity belong to the Attempt
+Binding. Credentials never enter a Profile Snapshot. The adapter capability
+snapshot declares fidelity for:
 
 ```text
-Next permissions = Mission grant
-                 ∩ current owner grant
-                 ∩ source Attempt permissions
-                 ∩ target Profile ceiling
-                 ∩ execution Provider ceiling
+observe | context_capture | steer | interrupt | pre_tool_gate
+resume | native_fork | workspace_restore | external_effect_control
 ```
 
-### Attempt and execution binding
+### Attempt and Branch
 
-An Attempt binds one Mission to one Runtime Profile and one execution provider.
-One runtime session cannot be controlled simultaneously by both an external
-provider and a direct adapter.
+An Attempt is one Runtime Profile executing one Mission Plan node on one
+Branch. A Branch has an immutable parent and base Checkpoint. Its history is
+append-only, while its head and status can advance through new Attempts and
+events. Branches may share content-addressed history while keeping their future
+workspace and events isolated.
 
-The initial implementation uses local execution. Kandev remains a candidate
-mature execution provider through versioned public boundaries; MissionBraid
-does not fork it or share its internal database. The checked v0.91.0 HTTP
-surface can prepare and reconcile a task worktree and control a preconfigured
-custom process. It does not expose versioned public Session or Agent stop, so
-that check is not sufficient to describe Kandev-backed Mission execution as
-supported.
+Ordinary resume or Handoff from the current head may append another Attempt to
+the same Branch. Starting from a historical point or changing an execution
+input creates a child Branch. The initial Mission receives a default root
+Branch even before Fork is available.
 
-### Append-only events and ownership
+### Agent Event IR
 
-The first storage target is local SQLite in WAL mode. Runtime events are
-persisted and deduplicated before acknowledgement or projection. Every state
-write is guarded by a workspace lease and a monotonic fencing token so a stale
-controller cannot continue writing after ownership changes.
-
-Database fencing cannot stop an already-running process from changing files.
-Before another Attempt receives the same worktree, the old process group must
-be confirmed stopped and the workspace state rechecked; otherwise the next
-Attempt receives an isolated worktree.
-
-All persisted contracts and events are versioned. Historical events are
-append-only and are migrated through upcasters rather than rewritten in place.
-
-## Handoff Capsule
-
-A Capsule belongs to the edge between two Attempts, not to either runtime.
-MissionBraid separates:
-
-- a **Canonical Capsule**, containing complete sourced facts; and
-- a target-specific **Projection**, rendered for one Runtime Profile under a
-  measured injection budget.
-
-The non-compressible core includes the objective, Outcome Contract, constraints,
-accepted and rejected decisions, remaining work, confirmed or ambiguous
-effects, blockers, permission boundaries, and workspace checkpoint hash.
-Workspace files, diffs, and full logs normally travel as content-addressed
-references when the target can deterministically read them.
-
-The projection budget is:
+The Agent Event IR provides a common envelope while retaining sanitized
+native-format evidence:
 
 ```text
-available = min(
-  context window
-    - system/project instructions
-    - tools and protocol overhead
-    - native history
-    - work reserve
-    - estimation guard,
-  adapter-guaranteed injection limit
-)
+event identity, source sequence and Mission ingest sequence
+mission / plan node / branch / attempt identity
+source Harness and native event type
+event kind and normalized payload reference
+causal parents and correlation identifiers
+context / workspace / tool-effect references
+observed time, native time, fidelity, and schema version
+raw source artifact reference and native extensions
 ```
 
-Optional items degrade deterministically from `full` to `summary` to
-`reference`. Core facts are never silently truncated. If the core does not fit,
-handoff fails with a structured error; recovery is limited to choosing a larger
-profile, explicitly partitioning the contract, or aborting the handoff.
+Core event families include runtime, session, turn, model, context, tool,
+workspace, subagent, breakpoint, checkpoint, branch, handoff, failure,
+verification, and Receipt events.
 
-The target returns a structured acknowledgement containing contract, remaining
-work, do-not-repeat effect, permission, and checkpoint identifiers. That proves
-the identifiers were read and matched; it does not prove identical internal
-understanding or future compliance.
+Different sources do not share a fictional global native order. The ingest
+sequence provides one durable controller order, while source sequences and
+causal parents preserve concurrency and provider ordering. An Adapter only
+claims semantic families it can prove; unsupported context, subagent, tool, or
+session fields remain unavailable or native extensions.
 
-## Effect Ledger
+“Raw” means **sanitized native-format evidence**, not unfiltered bytes.
+Credentials are removed before any persistence. Each artifact records its
+redaction and fidelity metadata. Other sensitive local content follows an
+explicit storage, encryption, retention, and export policy; public and incident
+exports are redacted by default.
 
-Every mutable action receives an Effect identity before dispatch. MissionBraid
-does not promise universal exactly-once execution. It exposes three control
-levels:
+### Context Graph
 
-- **enforced:** credentials and tools pass through a broker that can enforce
-  authority, identity, and fencing;
-- **guarded:** native idempotency, unique object identity, or a queryable
-  postcondition can prevent or detect repetition;
-- **advisory:** the runtime can bypass controls, so MissionBraid can only warn,
-  observe, reconcile, or stop.
+The Context Graph records what the model could observably receive and where it
+came from:
 
-Effects move through:
+- system, user, organization, and project instructions;
+- AGENTS.md, CLAUDE.md, Skills, MCP tool schemas, and adapter injections;
+- messages, visible reasoning summaries, tool results, files, memory, and
+  compaction summaries;
+- token and context-window observations;
+- activation, eviction, replacement, and provenance edges.
+
+MissionBraid does not claim access to hidden chain-of-thought, opaque KV cache,
+or encrypted provider state. Such data is recorded as unavailable or opaque,
+not reconstructed.
+
+### Tool Effect
+
+Every mutable action that MissionBraid controls or observes receives an Effect
+identity. An unobservable Runtime boundary remains `unknown` and reduces the
+recovery guarantee. When MissionBraid controls the boundary, the identity is
+created before dispatch. Control fidelity is explicit:
+
+- **enforced:** MissionBraid owns the tool boundary and can gate execution;
+- **guarded:** a Harness hook or upstream idempotency/postcondition provides a
+  bounded control;
+- **advisory:** the action is observed or predeclared, but the Runtime can
+  bypass MissionBraid's control;
+- **unknown:** the available Runtime surface cannot establish whether an action
+  happened.
+
+Each Effect also declares a scope: `branch_local_workspace`,
+`shared_resource`, or `mission_global_external`. A descendant Branch owns only
+its new Effects while referencing the inherited external Effect frontier.
+
+Effects progress through intended, authorized, started, executed, confirmed,
+failed, ambiguous, and compensated states. Replaying a Branch never silently
+repeats a confirmed or ambiguous external Effect.
+
+### Checkpoint and Intervention
+
+A Checkpoint is created only at a declared safe point. It can reference:
+
+- Mission and plan revision;
+- event prefix and pending action;
+- Runtime Profile and native session reference;
+- visible Context Graph snapshot;
+- Git/worktree snapshot and process status;
+- Tool Effect frontier;
+- permissions, budgets, and adapter capabilities.
+
+Every state component is classified as `portable`, `rebindable`,
+`reconstructable`, `runtime_native`, `external`, or `unavailable`. An
+Intervention records exactly what changes after the Checkpoint: context,
+visible assistant text, tool result, permission narrowing, model, Profile,
+workspace, or new user guidance. Expanding authority requires an explicitly
+authorized Grant or Contract revision; an Agent, resume, Handoff, or inherited
+Branch cannot expand it implicitly.
+
+### Handoff Capsule
+
+The Handoff Capsule is the target-specific projection of a Checkpoint and
+Mission state for another Runtime Profile. It contains a non-compressible core,
+content-addressed evidence references, the remaining plan frontier, Effect
+state, permissions, and an explicit compatibility report:
 
 ```text
-intended → dispatch_started → executed → confirmed
-                             ↘ failed / ambiguous / conflict
+exactly mapped | emulated | summarized | rebound | unavailable | blocks handoff
 ```
 
-Process success or an agent report establishes `executed`, not `confirmed`.
-Confirmation requires an independent postcondition query. After a crash,
-MissionBraid reconciles external state before retrying. An irreversible action
-with no native idempotency and no queryable postcondition remains `ambiguous`
-and is not automatically repeated.
+The target acknowledges critical identifiers before its mutation is accepted
+as a continuation. This is semantic continuation, not lossless migration of
+hidden model state.
 
-Timeline rewind cannot erase an external action. Forks inherit confirmed
-mission-global effects; compensation is always a new Effect.
+### Failure Case
 
-## Failure evidence and attribution
+A Failure Case is an evidence graph across six layers:
 
-Failure handling separates observation from inference. Evidence captures raw,
-hashed observations from the model boundary, harness protocol, tool, workspace,
-execution provider, MissionBraid, and external dependencies.
+```text
+model | context | tool | Harness | environment | MissionBraid
+```
 
-Attribution output uses four states:
+It separates observed symptoms, candidate mechanisms, discriminating probes,
+and conclusions. Conclusions are `observed`, `inferred`, `confirmed`, or
+`unknown`. An LLM may summarize evidence or propose a probe, but it cannot
+promote its own hypothesis to confirmed.
 
-- `observed`: the failure surface is directly visible;
-- `inferred`: evidence supports a leading mechanism but is not decisive;
-- `confirmed`: authoritative unique evidence or a discriminating probe isolates
-  the mechanism;
-- `unknown`: available evidence cannot justify a stronger conclusion.
+### Outcome Receipt
 
-Versioned signatures provide deterministic candidate ordering. Optional probes
-may change one declared dimension—for example harness, model, tool boundary, or
-workspace—while holding the remaining observable inputs fixed. Probes consume a
-separate diagnostic budget and stop when they are unsafe, non-discriminating,
-or too expensive.
+The Verifier Runner only returns criterion evidence. After verification reaches
+a terminal state, the Mission Kernel applies the versioned outcome policy and
+appends `ReceiptIssued` with a `verified` or `rejected` outcome and unresolved
+details. The Receipt binds the selected Branch's exact immutable Contract
+revision to criterion-level evidence, Attempts, Profiles, Capsules, Effects,
+unresolved state, and event hashes.
 
-An LLM may summarize evidence, but it cannot turn a hypothesis into a confirmed
-root cause.
+A Branch cannot be `verified` when any required criterion is `failed` or
+`unknown`, or when a required Effect is blocking or ambiguous. Completion
+signals remain independent:
 
-## Outcome Receipt
+- `agent_reported` — a Runtime claims completion; this is an observation;
+- `verified` — the Kernel's declared verification policy passed;
+- `accepted` — an authorized human or external authority accepted the result,
+  regardless of whether it was technically verified.
 
-An Outcome Receipt binds results to the exact Outcome Contract. For every
-criterion it records the verifier, evidence references, and one of `passed`,
-`failed`, or `unknown`. It also discloses Attempt and handoff identifiers,
-effect status and control level, unresolved items, and content hashes.
+## Runtime adapter contract
 
-Completion levels are deliberately separate:
+Adapters share a typed capability contract but may implement different
+subsets:
 
-- `agent_reported`: the runtime says the task is done;
-- `verified`: every required criterion passed its predeclared verifier;
-- `accepted`: an authorized human or external authority accepted the result.
+```text
+discover and inspect effective Profile
+start / resume / interrupt / terminate a session
+stream native events and export sanitized native-format artifacts
+capture visible model requests and context
+gate or observe tool calls
+steer or inject new user/context input
+export native session references
+create or restore native forks when supported
+bind a workspace and report process ownership
+```
 
-Verification runs as a separate controller process. The controlled fixtures keep
-the verifier outside the runtime-writable target workspace; the current slice
-does not claim hostile-runtime isolation. A receipt proves the recorded
-acceptance chain, not absolute correctness.
+Unsupported operations return explicit capability errors. MissionBraid does
+not simulate a strong debugger feature by relabeling transcript playback or
+process termination.
 
-## Integration boundaries
+## Durable execution command path
 
-MissionBraid remains an independent project:
+Long-running execution cannot depend on an in-memory UI operation. Every
+start, pause, intervention, resume, fork, handoff, verify, and terminate command
+uses the same durable path:
 
-- external providers run as separately installed processes behind versioned
-  public adapters;
-- runtime-specific credentials remain inside adapters;
-- third-party source, internal types, databases, private protocols, and UI are
-  not copied;
-- any intentional reuse must pin a source revision and preserve its license and
-  attribution.
+```text
+command accepted
+→ intent event and outbox entry committed together
+→ supervisor dispatches to the bound Runtime
+→ native response is deduplicated and persisted
+→ semantic and domain events update projections
+→ restart reconciles incomplete dispatch or observation
+```
 
-Kandev v0.91.0 has locally demonstrated the checked public task, worktree, and
-custom-process lifecycle endpoints. A complete Kandev-backed Attempt remains a
-target because its versioned public API does not control the full Session or
-Agent lifecycle. An agentctl-compatible bridge may inform native Claude/Codex
-session projection. Smithers may inform or provide timeline mechanics. Multica
-is a product-space reference, not a source-code baseline. None is a source-code
-base for MissionBraid.
+The idempotency key, expected Mission head, Branch, Attempt Binding, authority,
+and deadline are part of the command. A stale UI or supervisor cannot advance a
+newer Mission state.
 
-## Evidence boundary
+## Debugging model
 
-Architecture, local tests, real-runtime trials, published code, and production
-adoption are different evidence levels. A [single controlled E0 run](../evidence/e0-local-2026-08-24.json)
-closed against its original Contract and is bound to implementation commit
-`9d5b4d3`. A [single controlled E1 run](../evidence/e1-local-2026-08-24.json)
-then crossed from an interrupted Codex Attempt to a Qoder Attempt, received a
-Capsule acknowledgement while the controller still observed the workspace
-digest matching the recorded handoff baseline, and closed against its original
-Contract with a verified Receipt bound to commit `b16bd0b`. A [second E1
-run](../evidence/e1-context-isolated-reproduction-local-2026-08-24.json) used a
-clean public clone and fresh state/workspace in a separate task context on the
-same host, then explicitly replayed the verifier to issue another verified
-Receipt against `f73bc24`. Host-level Harness instructions, Skills, MCP, and
-other configuration may have been reused. These are local results, not
-third-party or cross-host reproduction, hostile-runtime isolation, production
-adoption, or broad runtime compatibility evidence.
+MissionBraid is exception-driven by default; developers should not have to
+watch every token. Breakpoints fall into three groups:
 
-A separate [Kandev v0.91.0 check](../evidence/kandev-v0.91.0-provider-check-local-2026-08-24.json)
-ran from a clean clone against one isolated official container. Its first run
-created a fresh Kandev task, session, and worktree; its rerun reconciled the same
-identities. Both started distinct preconfigured custom processes and observed
-accepted stop plus exact public-process retirement. It did not bind a Mission
-Attempt, control the full Kandev Session or Agent lifecycle, or issue an Outcome
-Receipt.
+- **structural:** tool name, file path, event kind, permission request, budget,
+  or process boundary;
+- **behavioral:** repeated failure, tool loop, excessive churn, stale context,
+  or scope drift detected from deterministic evidence;
+- **semantic:** a model-assisted judgement about a Mission constraint or likely
+  intent conflict, clearly marked as advisory unless an enforceable tool gate
+  applies.
 
-The [unified Workbench run](../evidence/unified-workbench-codex-qoder-local-2026-08-24.json)
-is bound to public commit `c55dd54`. It used a clean public clone and fresh
-state/workspace, submitted through the web form, let both Codex and Qoder make
-distinct changes, observed Capsule acknowledgement before Qoder mutation,
-issued a verified Receipt, and restored the same 26-event Mission in a new app
-process. It remains a same-host local result, not automatic routing, broad
-adapter support, third-party reproduction, or production adoption.
+At a breakpoint the developer can inspect sanitized native-format and normalized
+evidence, change execution conditions, resume, fork, terminate, or hand off.
+`SIGSTOP` alone is
+not a complete pause guarantee; adapter documentation must state what happens
+to child processes, in-flight network requests, and already-dispatched tools.
+
+## Replay model
+
+Projection rebuild is an internal deterministic recovery operation: it derives
+views from persisted events and does not create a Branch. The UI and API name
+four user operations explicitly:
+
+1. **Playback:** render recorded events without executing anything.
+2. **Cached replay:** create a child Branch and reuse eligible recorded model or
+   pure-tool results as explicitly marked new branch evidence.
+3. **Counterfactual resample:** change visible context, model configuration, or
+   a tool result, create a child Branch, and request a new model continuation.
+4. **Execution fork:** restore an isolated workspace at a safe point and run
+   real subsequent tools on a new Branch.
+
+This vocabulary prevents a visual replay or cached HTTP response from being
+presented as restoration of a complete native Runtime. Ordinary resume or
+Handoff from the current Branch head can add an Attempt to that Branch; replay
+from a historical point or with changed inputs cannot.
+
+## Planner and adaptive execution
+
+Planning follows `extract → filter → rank → bind → observe → adapt`:
+
+1. Structured Mission requirements are derived from the Contract and may be
+   proposed by a model, but the accepted stored requirements are explicit.
+2. Hard constraints filter Profiles by capabilities, permission, workspace,
+   context, control fidelity, and availability.
+3. A versioned deterministic policy ranks eligible Profiles using frozen user
+   preferences, cost, quota freshness, latency, and historical outcomes when
+   those observations exist.
+4. The accepted requirements, Catalog observations, candidate set, rejection
+   reasons, rank vector, selected Profile, policy version, and decision hash are
+   recorded. Equal frozen inputs and policy must produce the same decision
+   hash.
+5. Failures, budget changes, or Mission revisions can trigger replanning.
+6. Manual selection and override remain first-class and are recorded rather
+   than hidden.
+
+Quota and subscription data often have different fidelity. Every observation
+records whether it came from an official API, local CLI output, a derived
+estimate, or manual input.
+
+## Multi-agent and living Mission semantics
+
+Multiple Agents are useful when they own distinct plan nodes, diagnostic
+branches, or review roles. Agent count is not a product metric. Concurrent
+Attempts receive isolated workspaces or declared shared-resource coordination,
+and every subagent is attached to the Mission Plan and event graph.
+
+When the user changes the Mission, MissionBraid creates a new Contract revision,
+computes which plan nodes and artifacts are affected, stops work that is now
+stale, preserves unaffected results, and replans the invalidated frontier. The
+original revision and its branches remain inspectable.
+
+## Current implementation and target boundary
+
+| Capability                   | Current repository                 | Final architecture                                   |
+| ---------------------------- | ---------------------------------- | ---------------------------------------------------- |
+| Mission and Outcome Contract | Implemented                        | Versioned Mission Plan and live revisions            |
+| Local Workbench              | Implemented                        | Full Runtime, trace, debug, branch and outcome views |
+| Runtime Profiles             | Basic Codex/Qoder fields           | Effective environment and capability graph           |
+| Execution                    | Direct Codex/Qoder                 | Direct, ACP, and provider-backed adapters            |
+| Events                       | Durable Mission/runtime events     | Raw + normalized live Agent Event IR                 |
+| Context                      | Capsule-oriented evidence          | Queryable Context Graph and diffs                    |
+| Tools/Effects                | Advisory workspace-stage Effects   | Tool-level gateway, permissions and Effect Ledger    |
+| Checkpoint                   | Git digest/delta boundary evidence | Multi-layer restorable safe-point Checkpoint         |
+| Replay/Fork                  | Not implemented                    | Playback, cached replay, resample, execution fork    |
+| Handoff                      | Codex-to-Qoder Capsule             | Debug-aware cross-Harness continuation               |
+| Failure attribution          | Bounded classifications            | Evidence graph and discriminating probes             |
+| Planner                      | User-selected route                | Capability, quota and outcome-aware planning         |
+| Verification                 | Command verifier and Receipt       | Branch comparison, extensible evaluators and Receipt |
+
+The strongest current evidence remains the same-host Codex-to-Qoder Workbench
+run in the [evidence index](../evidence/README.md). It does not establish the
+unimplemented target capabilities above.
+
+## Integration and claim boundaries
+
+- MissionBraid remains an independent project. Third-party projects may be
+  dependencies, protocol providers, or design references only under their
+  public licenses and interfaces.
+- Kandev may supply mature workspace and execution capabilities without owning
+  Mission truth or requiring a fork.
+- Native Harness credentials remain behind adapters and are filtered before
+  any event or artifact persistence. “Raw” artifacts preserve sanitized native
+  format plus redaction metadata, never credentials.
+- Architecture, source code, fixture tests, real local Runtime execution,
+  third-party reproduction, and production adoption are separate evidence
+  levels.
+- MissionBraid does not claim hidden-state migration, arbitrary process
+  snapshotting, universal exactly-once external actions, perfect causal
+  attribution, or globally optimal scheduling.
+
+The [product requirements](product-requirements.md) define the complete user
+surface. The [roadmap](roadmap.md) turns this architecture into ten
+user-visible product iterations.
