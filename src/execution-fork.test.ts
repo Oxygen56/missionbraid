@@ -241,6 +241,34 @@ describe('executable execution Fork', () => {
     expect(existsSync(fixture.worktreePath)).toBe(false);
   });
 
+  it('records a failed Runtime terminal state without inventing tool execution or Receipt input', async () => {
+    const fixture = createGitFixture();
+    const service = new ExecutionForkService({
+      journal: new FileExecutionForkEvidenceJournal(join(fixture.root, 'failed-state')),
+      now: fixedClock(),
+    });
+    const record = await service.execute(fixture.request, {
+      continueFromCheckpoint: async () => ({
+        runtimeRunId: 'runtime-run-failed',
+        status: 'failed',
+        toolExecutionEvidenceRefs: [],
+        verificationEvidenceRefs: ['verification:child-file:failed'],
+        unresolvedItems: ['tool-completion-evidence:missing'],
+      }),
+    });
+
+    expect(record).toMatchObject({
+      phase: 'finished',
+      runtimeResult: {
+        status: 'failed',
+        toolExecutionEvidenceRefs: [],
+        unresolvedItems: ['tool-completion-evidence:missing'],
+      },
+    });
+    expect(record.receiptInput).toBeUndefined();
+    expect(record.events.map((event) => event.type)).not.toContain('receipt-input.ready');
+  });
+
   it('blocks ambiguous or incomplete external Effect frontiers before creating a worktree', async () => {
     const ambiguous = createGitFixture('ambiguous');
     const ambiguousService = new ExecutionForkService({

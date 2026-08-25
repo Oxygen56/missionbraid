@@ -113,6 +113,26 @@ describe('Workbench copy', () => {
     expect(APP_COPY['zh-CN']['artifact.view']).toBe('查看原生证据');
   });
 
+  it('shows the honest Checkpoint and A/B execution Fork workflow in both languages', () => {
+    expect(APP_COPY.en['continuity.heading']).toContain('evidence');
+    expect(APP_COPY['zh-CN']['continuity.heading']).toContain('证据');
+    expect(APP_COPY.en['continuity.mode.playback']).toBe('Playback');
+    expect(APP_COPY['zh-CN']['continuity.mode.playback']).toBe('历史回看');
+    expect(APP_COPY.en['continuity.mode.cachedReplay']).toBe('Cached replay');
+    expect(APP_COPY.en['continuity.mode.counterfactual']).toBe('Counterfactual resample');
+    expect(APP_COPY.en['continuity.mode.executionFork']).toBe('Execution Fork');
+    expect(APP_COPY['zh-CN']['continuity.mode.executionFork']).toBe('真实执行分叉');
+    expect(APP_COPY.en['continuity.receiptInputOnly']).toContain('has not issued');
+    expect(APP_COPY['zh-CN']['continuity.receiptInputOnly']).toContain('尚未签发');
+    expect(APP_JAVASCRIPT).toContain('data-continuity-workbench');
+    expect(APP_JAVASCRIPT).toContain('dataset.forkMode = mode.id');
+    expect(APP_JAVASCRIPT).toContain("mode.id === 'execution-fork' && executable");
+    expect(APP_JAVASCRIPT).toContain('dataset.executionForkAction = checkpointId');
+    expect(APP_JAVASCRIPT).toContain("'/checkpoints/' +");
+    expect(APP_JAVASCRIPT).toContain("'/forks'");
+    expect(APP_JAVASCRIPT).toContain('receiptBranchId(receipt) === lineage.childBranchId');
+  });
+
   it('translates stable API error codes before falling back to legacy messages', () => {
     for (const code of [
       'APP_STOPPING',
@@ -124,6 +144,9 @@ describe('Workbench copy', () => {
       'REQUEST_TOO_LARGE',
       'INVALID_JSON',
       'ARTIFACT_NOT_FOUND',
+      'COMPOSITE_CHECKPOINT_UNAVAILABLE',
+      'EXECUTION_FORK_UNAVAILABLE',
+      'INVALID_EXECUTION_FORK',
     ]) {
       expect(APP_JAVASCRIPT).toContain(`code === '${code}'`);
     }

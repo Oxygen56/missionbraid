@@ -10,15 +10,20 @@ import type { CompositeCheckpointManifestV1 } from './composite-checkpoint.js';
 import { deriveContextGraph } from './context-graph.js';
 import {
   DOMAIN_SCHEMA_VERSION,
+  type BranchV1,
   type JsonValue,
   type MissionCommandActionV1,
   type MissionCommandV1,
   type MissionProjectionV1,
+  type ReceiptV1,
 } from './domain.js';
 import type { ExternalEffectOutcome } from './external-effect.js';
+import type { ExecutionForkRecordV1 } from './execution-fork.js';
 import type {
   MissionCreationResult,
   MissionExecutionResult,
+  MissionExecutionForkRequestV1,
+  MissionExecutionForkResultV1,
   MissionExternalEffectRequestV1,
   MissionStatusView,
   MissionTimelineEntry,
@@ -429,6 +434,113 @@ describe('MissionBraid local app', () => {
     }
   });
 
+  it('creates a real execution Fork and exposes Branch, Checkpoint, Fork, and Receipt evidence', async () => {
+    const fixture = await createWorkspace();
+    const state = new FakeEngineState();
+    const missionId = 'mission-execution-fork';
+    const rootBranchId = `branch-root-${missionId}`;
+    const checkpoint = checkpointFixture(missionId, 'attempt-source');
+    state.missions.set(missionId, projection(missionId, 'succeeded'));
+    state.timelines.set(missionId, [timeline(missionId, 'mission.created', 'Mission created')]);
+    state.branches.set(missionId, [
+      {
+        schemaVersion: DOMAIN_SCHEMA_VERSION,
+        branchId: rootBranchId,
+        missionId,
+        status: 'active',
+        createdAt: '2026-08-24T03:00:00.000Z',
+      },
+    ]);
+    state.checkpoints.set(missionId, [checkpoint]);
+    const app = await startMissionBraidApp({
+      stateDir: fixture.stateDir,
+      port: 0,
+      engineFactory: () => new FakeEngine(state),
+      discoverRuntimes: async () => readyCatalog(),
+    });
+    try {
+      const response = await fetch(
+        `${app.url}/api/v1/missions/${missionId}/checkpoints/${checkpoint.checkpointId}/forks`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            childBranchId: 'branch-b',
+            intervention: {
+              interventionId: 'intervention-app-fixture',
+              kind: 'guidance',
+              targetRef: 'mission-guidance',
+              afterDigest: 'sha256:new-guidance',
+              description: 'Try the evidence-backed alternative.',
+              authorityChange: 'unchanged',
+            },
+          }),
+        },
+      );
+      expect(response.status).toBe(201);
+      expect(await response.json()).toMatchObject({
+        executionFork: {
+          phase: 'finished',
+          lineage: { parentBranchId: rootBranchId, childBranchId: 'branch-b' },
+        },
+        receipt: { branchId: 'branch-b', outcome: 'verified' },
+      });
+      expect(state.forkRequests).toEqual([
+        {
+          missionId,
+          input: expect.objectContaining({
+            checkpointId: checkpoint.checkpointId,
+            childBranchId: 'branch-b',
+            intervention: expect.objectContaining({ interventionId: 'intervention-app-fixture' }),
+          }),
+        },
+      ]);
+
+      const detailResponse = await fetch(`${app.url}/api/v1/missions/${missionId}`);
+      expect(detailResponse.status).toBe(200);
+      expect(await detailResponse.json()).toMatchObject({
+        branches: [
+          { branchId: rootBranchId },
+          { branchId: 'branch-b', parentBranchId: rootBranchId },
+        ],
+        compositeCheckpoints: [{ checkpointId: checkpoint.checkpointId }],
+        executionForks: [{ lineage: { childBranchId: 'branch-b' } }],
+        capabilities: { createCompositeCheckpoint: true, executeFork: true },
+      });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('rejects malformed execution Fork requests before reaching the Engine', async () => {
+    const fixture = await createWorkspace();
+    const state = new FakeEngineState();
+    const missionId = 'mission-invalid-fork';
+    state.missions.set(missionId, projection(missionId, 'succeeded'));
+    state.timelines.set(missionId, []);
+    const app = await startMissionBraidApp({
+      stateDir: fixture.stateDir,
+      port: 0,
+      engineFactory: () => new FakeEngine(state),
+      discoverRuntimes: async () => readyCatalog(),
+    });
+    try {
+      const response = await fetch(
+        `${app.url}/api/v1/missions/${missionId}/checkpoints/checkpoint-invalid/forks`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ intervention: { kind: 'not-a-mode' } }),
+        },
+      );
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({ code: 'INVALID_EXECUTION_FORK' });
+      expect(state.forkRequests).toEqual([]);
+    } finally {
+      await app.close();
+    }
+  });
+
   it('keeps the app bound to loopback hosts', async () => {
     await expect(startMissionBraidApp({ host: '0.0.0.0', port: 0 })).rejects.toThrow('loopback');
   });
@@ -454,6 +566,13 @@ class FakeEngineState {
   readonly checkpointRequests: Array<{
     readonly missionId: string;
     readonly attemptId?: string;
+  }> = [];
+  readonly branches = new Map<string, BranchV1[]>();
+  readonly checkpoints = new Map<string, CompositeCheckpointManifestV1[]>();
+  readonly executionForkRecords = new Map<string, ExecutionForkRecordV1[]>();
+  readonly forkRequests: Array<{
+    readonly missionId: string;
+    readonly input: MissionExecutionForkRequestV1;
   }> = [];
 }
 
@@ -577,6 +696,21 @@ class FakeEngine implements AppEngine {
     return deriveContextGraph({ timeline: this.timeline(missionId) });
   }
 
+  branches(missionId: string): readonly BranchV1[] {
+    this.#require(missionId);
+    return this.#state.branches.get(missionId) ?? [];
+  }
+
+  compositeCheckpoints(missionId: string): readonly CompositeCheckpointManifestV1[] {
+    this.#require(missionId);
+    return this.#state.checkpoints.get(missionId) ?? [];
+  }
+
+  async executionForks(missionId: string): Promise<readonly ExecutionForkRecordV1[]> {
+    this.#require(missionId);
+    return this.#state.executionForkRecords.get(missionId) ?? [];
+  }
+
   async coordinateExternalEffect(
     missionId: string,
     input: MissionExternalEffectRequestV1,
@@ -600,32 +734,55 @@ class FakeEngine implements AppEngine {
       missionId,
       ...(requestedAttemptId === undefined ? {} : { attemptId: requestedAttemptId }),
     });
-    return {
-      schemaVersion: 'missionbraid.dev/composite-checkpoint/v1',
-      checkpointId: 'checkpoint-app-fixture',
-      manifestHash: 'sha256:checkpoint-app-fixture',
-      source: {
-        missionId,
-        branchId: `branch-root-${missionId}`,
-        attemptId: requestedAttemptId ?? 'attempt-latest',
-        contractId: 'contract-app-fixture',
-        profileId: 'profile-app-fixture',
-        workspaceKey: 'workspace-app-fixture',
-      },
-      eventPrefix: { throughSeq: 1, headHash: 'head-hash' },
-      workspace: {
-        workspaceKey: 'workspace-app-fixture',
-        state: 'restorable-artifact',
-        workspaceDigest: 'workspace-digest',
-        artifactRef: `git-commit:${'a'.repeat(40)}`,
-        artifactDigest: `git-tree:${'b'.repeat(40)}`,
-      },
-      process: { status: 'stopped', stoppedAt: '2026-08-24T03:00:00.000Z' },
-      nativeSession: { status: 'unavailable', harness: 'codex', reason: 'not exposed' },
-      externalEffectFrontier: [],
-      components: [],
-      capturedAt: '2026-08-24T03:00:00.000Z',
+    const checkpoint = checkpointFixture(missionId, requestedAttemptId ?? 'attempt-latest');
+    this.#state.checkpoints.set(missionId, [
+      ...(this.#state.checkpoints.get(missionId) ?? []),
+      checkpoint,
+    ]);
+    return checkpoint;
+  }
+
+  async executeFork(
+    missionId: string,
+    input: MissionExecutionForkRequestV1,
+  ): Promise<MissionExecutionForkResultV1> {
+    const mission = this.#require(missionId);
+    this.#state.forkRequests.push({ missionId, input });
+    const checkpoint = this.#state.checkpoints
+      .get(missionId)
+      ?.find((candidate) => candidate.checkpointId === input.checkpointId);
+    if (checkpoint === undefined) throw new Error(`Unknown Checkpoint ${input.checkpointId}`);
+    const childBranchId = input.childBranchId ?? 'branch-b';
+    const child: BranchV1 = {
+      schemaVersion: DOMAIN_SCHEMA_VERSION,
+      branchId: childBranchId,
+      missionId,
+      parentBranchId: checkpoint.source.branchId,
+      baseCheckpointId: checkpoint.checkpointId,
+      status: 'active',
+      createdAt: '2026-08-24T03:01:00.000Z',
     };
+    this.#state.branches.set(missionId, [...(this.#state.branches.get(missionId) ?? []), child]);
+    const record = executionForkFixture(checkpoint, input, childBranchId);
+    this.#state.executionForkRecords.set(missionId, [
+      ...(this.#state.executionForkRecords.get(missionId) ?? []),
+      record,
+    ]);
+    const receipt: ReceiptV1 = {
+      schemaVersion: DOMAIN_SCHEMA_VERSION,
+      receiptId: 'receipt-execution-fork-fixture',
+      missionId,
+      contractId: mission.contract.contractId,
+      branchId: childBranchId,
+      outcome: 'verified',
+      verifications: [],
+      verifiedHeadHash: mission.headHash,
+      verifiedThroughSeq: mission.lastSeq,
+      effects: [],
+      unresolvedItems: [],
+      issuedAt: '2026-08-24T03:02:00.000Z',
+    };
+    return { record, receipt };
   }
 
   status(missionId: string): MissionStatusView {
@@ -653,6 +810,130 @@ class FakeEngine implements AppEngine {
     if (mission === undefined) throw new Error(`Unknown Mission ${missionId}`);
     return mission;
   }
+}
+
+function checkpointFixture(missionId: string, attemptId: string): CompositeCheckpointManifestV1 {
+  const componentNames = [
+    'mission',
+    'branch',
+    'attempt',
+    'contract',
+    'profile',
+    'event-prefix',
+    'visible-context',
+    'workspace',
+    'permissions',
+    'effect-frontier',
+    'process',
+    'native-session',
+  ] as const;
+  return {
+    schemaVersion: 'missionbraid.dev/composite-checkpoint/v1',
+    checkpointId: 'checkpoint-app-fixture',
+    manifestHash: 'sha256:checkpoint-app-fixture',
+    source: {
+      missionId,
+      branchId: `branch-root-${missionId}`,
+      attemptId,
+      contractId: 'contract-app-fixture',
+      profileId: 'profile-app-fixture',
+      workspaceKey: 'workspace-app-fixture',
+    },
+    eventPrefix: { throughSeq: 1, headHash: 'head-hash' },
+    workspace: {
+      workspaceKey: 'workspace-app-fixture',
+      state: 'restorable-artifact',
+      workspaceDigest: 'workspace-digest',
+      artifactRef: `git-commit:${'a'.repeat(40)}`,
+      artifactDigest: `git-tree:${'b'.repeat(40)}`,
+    },
+    process: { status: 'stopped', stoppedAt: '2026-08-24T03:00:00.000Z' },
+    nativeSession: { status: 'unavailable', harness: 'codex', reason: 'not exposed' },
+    externalEffectFrontier: [],
+    components: componentNames.map((component) => ({
+      component,
+      disposition:
+        component === 'workspace'
+          ? ('recoverable' as const)
+          : component === 'native-session'
+            ? ('unavailable' as const)
+            : component === 'effect-frontier' || component === 'process'
+              ? ('inspect-only' as const)
+              : ('portable' as const),
+      contentDigest: `sha256:${component}`,
+      evidenceRefs: [`fixture:${component}`],
+    })),
+    capturedAt: '2026-08-24T03:00:00.000Z',
+  };
+}
+
+function executionForkFixture(
+  checkpoint: CompositeCheckpointManifestV1,
+  input: MissionExecutionForkRequestV1,
+  childBranchId: string,
+): ExecutionForkRecordV1 {
+  const forkId = 'execution-fork-app-fixture';
+  const isolatedWorktreePath = '/tmp/missionbraid-app-fork';
+  const childWorkspaceKey = 'workspace-app-fork';
+  const lineage = {
+    schemaVersion: 'missionbraid.dev/execution-fork/v1' as const,
+    lineageId: 'execution-fork-lineage-app-fixture',
+    forkId,
+    mode: 'execution-fork' as const,
+    missionId: checkpoint.source.missionId,
+    contractId: checkpoint.source.contractId,
+    profileId: checkpoint.source.profileId,
+    parentAttemptId: checkpoint.source.attemptId,
+    parentBranchId: checkpoint.source.branchId,
+    childBranchId,
+    parentCheckpointId: checkpoint.checkpointId,
+    parentEventPrefix: { ...checkpoint.eventPrefix },
+    intervention: input.intervention,
+    repositoryRoot: '/tmp/missionbraid-app-source',
+    isolatedWorktreePath,
+    gitBranchName: 'missionbraid/fork-app-fixture',
+    baseCommit: 'a'.repeat(40),
+    baseTree: 'b'.repeat(40),
+    childWorkspaceKey,
+    inheritedExternalEffectFrontier: checkpoint.externalEffectFrontier,
+    externalEffectDecisions: [],
+    createdAt: '2026-08-24T03:01:00.000Z',
+  };
+  return {
+    forkId,
+    phase: 'finished',
+    lineage,
+    plan: {
+      schemaVersion: 'missionbraid.dev/checkpoint-operation/v1',
+      mode: 'execution-fork',
+      planId: 'checkpoint-plan-app-fixture',
+      parentCheckpointId: checkpoint.checkpointId,
+      parentBranchId: checkpoint.source.branchId,
+      inheritedExternalEffectFrontier: checkpoint.externalEffectFrontier,
+      semantics: {
+        createsBranch: true,
+        producesNewEvidence: true,
+        modelExecution: 'live',
+        toolExecution: 'live',
+        workspaceUse: 'isolated-writable',
+        sourceHistory: 'immutable',
+      },
+      childBranchId,
+      intervention: input.intervention,
+      isolatedWorktree: {
+        worktreeId: 'worktree-app-fixture',
+        workspaceKey: childWorkspaceKey,
+        absolutePath: isolatedWorktreePath,
+        isolationMechanism: 'git-worktree',
+        baselineWorkspaceDigest: checkpoint.workspace.workspaceDigest ?? 'workspace-digest',
+        evidenceRefs: ['worktree-plan:worktree-app-fixture'],
+      },
+      externalEffectDecisions: [],
+    },
+    events: [],
+    runtimeEvidence: [],
+    cleaned: false,
+  };
 }
 
 function projection(missionId: string, status: MissionProjectionV1['status']): MissionProjectionV1 {

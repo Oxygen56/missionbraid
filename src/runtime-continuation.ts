@@ -17,7 +17,7 @@ import type {
   RuntimeRunResult,
 } from './adapters/types.js';
 import type { CheckpointInterventionV1 } from './composite-checkpoint.js';
-import type { ContractV1 } from './domain.js';
+import type { ContractV1, ProfileV1 } from './domain.js';
 import type {
   RuntimeContinuationInputV1,
   RuntimeContinuationPortV1,
@@ -40,10 +40,19 @@ import { createStageWorkspaceDelta, snapshotGitWorkspace } from './workspace.js'
 const DEFAULT_MAX_PROMPT_BYTES = 32 * 1024;
 const MAX_PROMPT_BYTES = 64 * 1024;
 
+type NativeRuntimeProtocol = 'codex-jsonl' | 'qoder-stream-json' | 'claude-stream-json';
+
 export interface RuntimeContinuationAdaptersV1 {
   readonly codex: RuntimeAdapter<CodexRunRequest>;
   readonly qoder: RuntimeAdapter<QoderRunRequest>;
   readonly claude: RuntimeAdapter<ClaudeRunRequest>;
+}
+
+export interface RuntimeContinuationCheckpointBindingV1 {
+  readonly checkpointId: string;
+  readonly missionId: string;
+  readonly contractId: string;
+  readonly profileId: string;
 }
 
 export interface NativeAdapterRuntimeContinuationOptionsV1 {
@@ -51,6 +60,8 @@ export interface NativeAdapterRuntimeContinuationOptionsV1 {
   readonly acceptedContract: ContractV1;
   readonly acceptedMissionSpec: ResolvedMissionSpecV1;
   readonly acceptedStage: AttemptStageSpecV1;
+  readonly acceptedCheckpoint: RuntimeContinuationCheckpointBindingV1;
+  readonly acceptedProfile: ProfileV1;
   readonly acceptedIntervention: CheckpointInterventionV1;
   /** Root for sanitized native artifacts and verifier provenance. */
   readonly controllerStateDir: string;
@@ -81,6 +92,8 @@ export class NativeAdapterRuntimeContinuationPort implements RuntimeContinuation
   readonly #contract: ContractV1;
   readonly #missionSpec: ResolvedMissionSpecV1;
   readonly #stage: AttemptStageSpecV1;
+  readonly #checkpoint: RuntimeContinuationCheckpointBindingV1;
+  readonly #profile: ProfileV1;
   readonly #intervention: CheckpointInterventionV1;
   readonly #controllerStateDir: string;
   readonly #provenanceFile: string;
@@ -108,15 +121,20 @@ export class NativeAdapterRuntimeContinuationPort implements RuntimeContinuation
     }
 
     validateAcceptedBinding(
+      options.missionId,
       options.acceptedContract,
       options.acceptedMissionSpec,
       options.acceptedStage,
+      options.acceptedCheckpoint,
+      options.acceptedProfile,
       options.acceptedIntervention,
     );
     this.#missionId = options.missionId;
     this.#contract = clone(options.acceptedContract);
     this.#missionSpec = clone(options.acceptedMissionSpec);
     this.#stage = clone(options.acceptedStage);
+    this.#checkpoint = clone(options.acceptedCheckpoint);
+    this.#profile = clone(options.acceptedProfile);
     this.#intervention = clone(options.acceptedIntervention);
     this.#controllerStateDir = resolve(options.controllerStateDir);
     this.#provenanceFile = resolve(
@@ -155,8 +173,11 @@ export class NativeAdapterRuntimeContinuationPort implements RuntimeContinuation
         missionId: input.missionId,
         contractId: input.contractId,
         childBranchId: input.childBranchId,
+        parentCheckpointId: input.parentCheckpointId,
         intervention: input.intervention,
-        profile: this.#stage.profile,
+        profileId: this.#profile.profileId,
+        profileDigest: sha256(stableJson(this.#profile)),
+        stageProfile: this.#stage.profile,
         promptDigest: sha256(prompt),
       }),
     ).slice(0, 32)}`;
@@ -192,7 +213,10 @@ export class NativeAdapterRuntimeContinuationPort implements RuntimeContinuation
             contentDigest: digestRef({
               runtimeRunId,
               harness: this.#stage.profile.harness,
-              profileDigest: sha256(stableJson(this.#stage.profile)),
+              checkpointId: this.#checkpoint.checkpointId,
+              profileId: this.#profile.profileId,
+              profileDigest: sha256(stableJson(this.#profile)),
+              stageProfileDigest: sha256(stableJson(this.#stage.profile)),
               promptDigest: sha256(prompt),
             }),
             evidenceRefs: [
@@ -261,7 +285,20 @@ export class NativeAdapterRuntimeContinuationPort implements RuntimeContinuation
     verificationEvidenceRefs.push(...verification.evidenceRefs);
     unresolvedItems.push(...verification.unresolvedItems);
     if (toolExecutionEvidenceRefs.length === 0) {
-      unresolvedItems.push('tool-request-evidence:missing');
+      await input.appendEvidence({
+        evidenceId: evidenceId(runtimeRunId, 'tool-completion-missing'),
+        kind: 'runtime',
+        observedAt: this.#now().toISOString(),
+        contentDigest: digestRef({ runtimeRunId, protocol, observedToolCompletion: false }),
+        evidenceRefs: [
+          `runtime:${runtimeRunId}`,
+          `protocol:${protocol}`,
+          'tool-completion-evidence:missing',
+        ],
+        summary:
+          'The native transcript exposed no terminal tool-result event, so no real tool execution can be claimed.',
+      });
+      unresolvedItems.push('tool-completion-evidence:missing');
     }
 
     const status =
@@ -289,6 +326,11 @@ export class NativeAdapterRuntimeContinuationPort implements RuntimeContinuation
     if (input.contractId !== this.#contract.contractId) {
       throw new RuntimeContinuationConfigurationError(
         `Runtime continuation Contract ${input.contractId} is not accepted`,
+      );
+    }
+    if (input.parentCheckpointId !== this.#checkpoint.checkpointId) {
+      throw new RuntimeContinuationConfigurationError(
+        `Runtime continuation Checkpoint ${input.parentCheckpointId} is not accepted`,
       );
     }
     if (stableJson(input.intervention) !== stableJson(this.#intervention)) {
@@ -361,7 +403,7 @@ export class NativeAdapterRuntimeContinuationPort implements RuntimeContinuation
   async #recordNativeOutput(
     input: RuntimeContinuationInputV1,
     runtimeRunId: string,
-    protocol: string,
+    protocol: NativeRuntimeProtocol,
     artifactStore: NativeArtifactStore,
     line: RuntimeOutputLine,
     toolExecutionEvidenceRefs: string[],
@@ -425,7 +467,7 @@ export class NativeAdapterRuntimeContinuationPort implements RuntimeContinuation
         summary: semanticSummary(fact),
       };
       await input.appendEvidence(evidence);
-      if (fact.kind === 'tool_request' && fact.evidence === 'explicit') {
+      if (isTerminalNativeToolExecution(fact, protocol)) {
         toolExecutionEvidenceRefs.push(`evidence:${factEvidenceId}`);
       }
     }
@@ -456,7 +498,9 @@ export class NativeAdapterRuntimeContinuationPort implements RuntimeContinuation
         );
         const result = await runCommandVerifier(verifier, {
           workspace: workspacePath,
-          missionSourceDir: this.#missionSpec.missionSourceDir,
+          // A Fork verifier must not retain the source workspace as a second
+          // allowed execution root. Its mapped cwd and target workspace are B.
+          missionSourceDir: workspacePath,
           controllerStateDir: this.#controllerStateDir,
           provenanceFile: this.#provenanceFile,
           now: this.#now,
@@ -581,11 +625,33 @@ function buildBoundedPrompt(
 }
 
 function validateAcceptedBinding(
+  missionId: string,
   contract: ContractV1,
   missionSpec: ResolvedMissionSpecV1,
   stage: AttemptStageSpecV1,
+  checkpoint: RuntimeContinuationCheckpointBindingV1,
+  profile: ProfileV1,
   intervention: CheckpointInterventionV1,
 ): void {
+  for (const [name, value] of [
+    ['checkpoint.checkpointId', checkpoint.checkpointId],
+    ['checkpoint.missionId', checkpoint.missionId],
+    ['checkpoint.contractId', checkpoint.contractId],
+    ['checkpoint.profileId', checkpoint.profileId],
+    ['profile.profileId', profile.profileId],
+    ['profile.configurationDigest', profile.configurationDigest],
+  ] as const) {
+    requireNonEmpty(value, name);
+  }
+  if (
+    checkpoint.missionId !== missionId ||
+    checkpoint.contractId !== contract.contractId ||
+    checkpoint.profileId !== profile.profileId
+  ) {
+    throw new RuntimeContinuationConfigurationError(
+      'Accepted Checkpoint is not bound to the accepted Mission, Contract, and Profile',
+    );
+  }
   if (
     contract.objective !== missionSpec.objective ||
     stableJson(contract.constraints ?? []) !== stableJson(missionSpec.constraints)
@@ -594,9 +660,26 @@ function validateAcceptedBinding(
       'Accepted Contract does not match the accepted Mission specification',
     );
   }
-  if (contract.acceptanceCriteria.length !== missionSpec.acceptanceCriteria.length) {
+  if (
+    contract.acceptanceCriteria.length === 0 ||
+    contract.acceptanceCriteria.length !== missionSpec.acceptanceCriteria.length
+  ) {
     throw new RuntimeContinuationConfigurationError(
-      'Accepted Contract verifier count does not match the Mission specification',
+      'Accepted Contract verifier count is empty or does not match the Mission specification',
+    );
+  }
+  const contractCriterionIds = contract.acceptanceCriteria.map(
+    (criterion) => criterion.criterionId,
+  );
+  const specificationCriterionIds = missionSpec.acceptanceCriteria.map((criterion) => criterion.id);
+  if (
+    new Set(contractCriterionIds).size !== contractCriterionIds.length ||
+    new Set(specificationCriterionIds).size !== specificationCriterionIds.length ||
+    stableJson([...contractCriterionIds].sort()) !==
+      stableJson([...specificationCriterionIds].sort())
+  ) {
+    throw new RuntimeContinuationConfigurationError(
+      'Accepted Contract criteria must be the complete unique Mission criterion set',
     );
   }
   const specifications = new Map(
@@ -631,6 +714,32 @@ function validateAcceptedBinding(
     );
   }
   validateProfile(stage.profile);
+  const expectedPermissionMode =
+    stage.profile.permissionMode ?? defaultPermissionMode(stage.profile.harness);
+  if (
+    profile.harness !== stage.profile.harness ||
+    profile.model !== stage.profile.model ||
+    (profile.reasoningEffort ?? null) !== (stage.profile.reasoningEffort ?? null) ||
+    profile.permissionMode !== expectedPermissionMode ||
+    (profile.injectionBudgetTokens ?? null) !== stage.profile.injectionBudgetTokens
+  ) {
+    throw new RuntimeContinuationConfigurationError(
+      `Accepted Profile ${profile.profileId} does not match stage ${stage.stageId}`,
+    );
+  }
+  if (
+    profile.definition !== undefined &&
+    (profile.definition.harness !== stage.profile.harness ||
+      profile.definition.requestedModel !== stage.profile.model ||
+      (profile.definition.requestedReasoningEffort ?? null) !==
+        (stage.profile.reasoningEffort ?? null) ||
+      (profile.definition.permissionCeiling ?? null) !== (stage.profile.permissionMode ?? null) ||
+      profile.definition.injectionBudgetTokens !== stage.profile.injectionBudgetTokens)
+  ) {
+    throw new RuntimeContinuationConfigurationError(
+      `Accepted Profile definition does not match stage ${stage.stageId}`,
+    );
+  }
   for (const [name, value] of [
     ['interventionId', intervention.interventionId],
     ['targetRef', intervention.targetRef],
@@ -678,6 +787,10 @@ async function mapVerifierToWorktree(
   worktree: string,
 ): Promise<CommandVerifierSpecV1> {
   const sourceRoot = await realpath(acceptedWorkspace);
+  const targetRoot = await realpath(worktree);
+  const sourceAliases = [...new Set([resolve(acceptedWorkspace), sourceRoot])].sort(
+    (left, right) => right.length - left.length,
+  );
   const sourceCwd = await realpath(verifier.cwd);
   const relativeCwd = relative(sourceRoot, sourceCwd);
   if (relativeCwd === '..' || relativeCwd.startsWith(`..${sep}`) || isAbsolute(relativeCwd)) {
@@ -685,9 +798,85 @@ async function mapVerifierToWorktree(
       'Continuation verifier cwd must be inside the accepted source workspace',
     );
   }
-  const mapped = resolve(worktree, relativeCwd);
-  assertInside(worktree, mapped, 'mapped verifier cwd');
-  return { ...verifier, cwd: await realpath(mapped), env: {} };
+  const mapped = resolve(targetRoot, relativeCwd);
+  assertInside(targetRoot, mapped, 'mapped verifier cwd');
+  const mappedVerifier = {
+    ...verifier,
+    executable: mapSourcePathReferences(verifier.executable, sourceAliases, targetRoot),
+    args: verifier.args.map((argument) =>
+      mapSourcePathReferences(argument, sourceAliases, targetRoot),
+    ),
+    cwd: await realpath(mapped),
+    env: {},
+  };
+  for (const [label, value] of [
+    ['verifier executable', mappedVerifier.executable],
+    ...mappedVerifier.args.map(
+      (argument, index) => [`verifier args[${String(index)}]`, argument] as const,
+    ),
+    ['verifier cwd', mappedVerifier.cwd],
+  ] as const) {
+    if (sourceAliases.some((sourceAlias) => containsPathReference(value, sourceAlias))) {
+      throw new RuntimeContinuationConfigurationError(
+        `${label} retains a reference to the source workspace`,
+      );
+    }
+  }
+  return mappedVerifier;
+}
+
+function mapSourcePathReferences(
+  value: string,
+  sourceRoots: readonly string[],
+  targetRoot: string,
+): string {
+  if (sourceRoots.includes(targetRoot)) {
+    throw new RuntimeContinuationConfigurationError(
+      'Execution Fork verifier target must differ from the source workspace',
+    );
+  }
+  let mapped = value;
+  for (const sourceRoot of sourceRoots) {
+    mapped = mapOneSourcePathReference(mapped, sourceRoot, targetRoot);
+  }
+  return mapped;
+}
+
+function mapOneSourcePathReference(value: string, sourceRoot: string, targetRoot: string): string {
+  let cursor = 0;
+  let mapped = '';
+  while (cursor < value.length) {
+    const match = value.indexOf(sourceRoot, cursor);
+    if (match === -1) {
+      mapped += value.slice(cursor);
+      break;
+    }
+    const suffix = value[match + sourceRoot.length];
+    mapped += value.slice(cursor, match);
+    if (isSourcePathBoundary(suffix)) {
+      mapped += targetRoot;
+    } else {
+      mapped += sourceRoot;
+    }
+    cursor = match + sourceRoot.length;
+  }
+  return mapped;
+}
+
+function containsPathReference(value: string, sourceRoot: string): boolean {
+  let cursor = 0;
+  while (cursor < value.length) {
+    const match = value.indexOf(sourceRoot, cursor);
+    if (match === -1) return false;
+    const suffix = value[match + sourceRoot.length];
+    if (isSourcePathBoundary(suffix)) return true;
+    cursor = match + sourceRoot.length;
+  }
+  return false;
+}
+
+function isSourcePathBoundary(value: string | undefined): boolean {
+  return value === undefined || /[\\/\s'"`),;:\]}=?#]/.test(value);
 }
 
 function evidenceKind(fact: RuntimeSemanticFactV1): RuntimeForkEvidenceKindV1 {
@@ -747,9 +936,7 @@ function isSuccessfulProcess(result: RuntimeRunResult): boolean {
   );
 }
 
-function protocolFor(
-  harness: SupportedHarnessV1,
-): 'codex-jsonl' | 'qoder-stream-json' | 'claude-stream-json' {
+function protocolFor(harness: SupportedHarnessV1): NativeRuntimeProtocol {
   switch (harness) {
     case 'codex':
       return 'codex-jsonl';
@@ -760,11 +947,35 @@ function protocolFor(
   }
 }
 
+/**
+ * A request only proves model intent. Execution evidence starts at the native
+ * protocol's terminal tool-result boundary.
+ */
+function isTerminalNativeToolExecution(
+  fact: RuntimeSemanticFactV1,
+  protocol: NativeRuntimeProtocol,
+): boolean {
+  if (fact.kind !== 'tool_result' || fact.evidence !== 'explicit') return false;
+  if (protocol === 'codex-jsonl') {
+    return fact.phase === 'completed' || fact.phase === 'failed';
+  }
+  // Claude and Qoder stream-json expose a `tool_result` content item only after
+  // the tool boundary returns. The result may omit a status, so phase=unknown
+  // is still terminal for these two native protocols.
+  return true;
+}
+
 function codexSandbox(value: string): CodexSandbox {
   if (['read-only', 'workspace-write', 'danger-full-access'].includes(value)) {
     return value as CodexSandbox;
   }
   throw new RuntimeContinuationConfigurationError(`Unsupported Codex sandbox ${value}`);
+}
+
+function defaultPermissionMode(harness: SupportedHarnessV1): string {
+  if (harness === 'codex') return 'workspace-write';
+  if (harness === 'qoder') return 'dont_ask';
+  return 'dontAsk';
 }
 
 function qoderPermissionMode(value: string): QoderPermissionMode {

@@ -289,6 +289,128 @@ describe('MissionEngine', () => {
     }
   });
 
+  it('executes a live native Harness only in child Branch B and issues a Branch-bound Receipt', async () => {
+    const fixture = await createFixture('claude');
+    await writeFile(
+      join(fixture.workspace, 'verify.mjs'),
+      await readFile(join(fixture.root, 'mission-source', 'verify.mjs'), 'utf8'),
+      'utf8',
+    );
+    const missionSource = await readFile(fixture.missionFile, 'utf8');
+    await writeFile(
+      fixture.missionFile,
+      missionSource.replace(/cwd:.*MISSION_FILE_DIR.*$/m, "cwd: '$" + "{WORKSPACE}'"),
+      'utf8',
+    );
+    execFileSync('git', ['add', 'verify.mjs'], { cwd: fixture.workspace });
+    execFileSync(
+      'git',
+      [
+        '-c',
+        'user.name=MissionBraid',
+        '-c',
+        'user.email=fixture@example.invalid',
+        'commit',
+        '-qm',
+        'add branch-local verifier',
+      ],
+      { cwd: fixture.workspace },
+    );
+    const adapters = () => ({
+      claudeAdapter: new ClaudeAdapter({ command: fixture.claude }),
+    });
+    const engine = new MissionEngine({ stateDir: fixture.stateDir, ...adapters() });
+    const parent = await engine.run(fixture.missionFile, { workspace: fixture.workspace });
+    expect(parent.status).toBe('succeeded');
+    execFileSync('git', ['add', 'claude.txt'], { cwd: fixture.workspace });
+    execFileSync(
+      'git',
+      [
+        '-c',
+        'user.name=MissionBraid',
+        '-c',
+        'user.email=fixture@example.invalid',
+        'commit',
+        '-qm',
+        'parent checkpoint boundary',
+      ],
+      { cwd: fixture.workspace },
+    );
+    const parentAttemptId = parent.receipt?.attemptIds?.[0];
+    expect(parentAttemptId).toBeDefined();
+    const checkpoint = await engine.createCompositeCheckpoint(parent.missionId, parentAttemptId);
+    const sourceBeforeFork = snapshotGitWorkspace(fixture.workspace);
+
+    await executable(
+      fixture.claude,
+      `#!/usr/bin/env node
+import { writeFileSync } from 'node:fs';
+if (process.argv[2] === '--version') { console.log('2.1.245 (Claude Code)'); process.exit(0); }
+process.stdin.resume();
+process.stdin.on('end', () => {
+  writeFileSync('fork-result.txt', 'branch-b-only\\n');
+  console.log(JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'fork-tool-1', name: 'write_file', input: { path: 'fork-result.txt' } }] } }));
+  console.log(JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'fork-tool-1', content: 'write completed', is_error: false }] } }));
+  console.log(JSON.stringify({ type: 'result', subtype: 'success', session_id: 'fork-session' }));
+});
+`,
+    );
+    const forked = await engine.executeFork(parent.missionId, {
+      checkpointId: checkpoint.checkpointId,
+      childBranchId: 'branch-b',
+      intervention: {
+        interventionId: 'intervention-guidance-b',
+        kind: 'guidance',
+        targetRef: 'stage:claude-primary',
+        beforeDigest: 'sha256:parent-guidance',
+        afterDigest: 'sha256:branch-b-guidance',
+        description: 'Create one Branch-B-only evidence file while preserving the Contract.',
+        authorityChange: 'unchanged',
+      },
+    });
+
+    expect(forked.receipt).toMatchObject({
+      branchId: 'branch-b',
+      outcome: 'verified',
+      unresolvedItems: [],
+    });
+    expect(forked.record.runtimeResult).toMatchObject({ status: 'completed' });
+    expect(engine.branches(parent.missionId).map((branch) => branch.branchId)).toEqual(
+      expect.arrayContaining([parent.receipt?.branchId, 'branch-b']),
+    );
+    expect(snapshotGitWorkspace(fixture.workspace)).toMatchObject({
+      head: sourceBeforeFork.head,
+      statusDigest: sourceBeforeFork.statusDigest,
+      workspaceDigest: sourceBeforeFork.workspaceDigest,
+    });
+    await expect(
+      readFile(join(fixture.workspace, 'fork-result.txt'), 'utf8'),
+    ).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+    expect(
+      await readFile(join(forked.record.lineage.isolatedWorktreePath, 'fork-result.txt'), 'utf8'),
+    ).toBe('branch-b-only\n');
+    engine.close();
+
+    const reopened = new MissionEngine({ stateDir: fixture.stateDir, ...adapters() });
+    try {
+      const recovered = await reopened.executionForks(parent.missionId);
+      expect(recovered).toHaveLength(1);
+      expect(recovered[0]).toMatchObject({
+        forkId: forked.record.forkId,
+        phase: 'finished',
+        lineage: { parentCheckpointId: checkpoint.checkpointId, childBranchId: 'branch-b' },
+      });
+      expect(reopened.status(parent.missionId)).toMatchObject({
+        chainValid: true,
+        mission: { receipt: { branchId: 'branch-b', outcome: 'verified' } },
+      });
+    } finally {
+      reopened.close();
+    }
+  });
+
   it('reopens an accepted command and reaches a Receipt without another user submission', async () => {
     const fixture = await createFixture('claude');
     const adapters = () => ({

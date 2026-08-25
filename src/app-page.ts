@@ -1152,6 +1152,242 @@ h3 {
   color: var(--cobalt);
 }
 
+.continuity-workbench {
+  padding: 22px clamp(17px, 3vw, 31px) 24px;
+  border-bottom: 1px solid var(--line);
+  background:
+    linear-gradient(135deg, rgba(49, 91, 214, 0.07), transparent 48%),
+    #fbfcff;
+}
+
+.continuity-heading,
+.continuity-card-heading,
+.continuity-subheading {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.continuity-heading h3,
+.continuity-subheading h4 {
+  margin: 0;
+  font-family: var(--display);
+}
+
+.continuity-heading h3 {
+  font-size: 1.15rem;
+}
+
+.continuity-description {
+  max-width: 670px;
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.55;
+}
+
+.continuity-group {
+  margin-top: 20px;
+}
+
+.continuity-subheading {
+  margin-bottom: 9px;
+}
+
+.continuity-subheading h4 {
+  font-size: 0.92rem;
+}
+
+.continuity-grid,
+.checkpoint-list,
+.fork-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.continuity-card,
+.checkpoint-card,
+.fork-card {
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--white);
+}
+
+.checkpoint-card {
+  grid-column: 1 / -1;
+}
+
+.continuity-card-heading strong,
+.checkpoint-identity,
+.fork-identity {
+  overflow-wrap: anywhere;
+  font-family: var(--mono);
+  font-size: 0.62rem;
+}
+
+.continuity-card-heading strong {
+  color: var(--ink);
+}
+
+.continuity-card p,
+.checkpoint-card p,
+.fork-card p {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 0.65rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.continuity-label {
+  flex: 0 0 auto;
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: var(--wash-blue);
+  color: var(--cobalt);
+  font-size: 0.55rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.continuity-label.is-blocked {
+  background: #f1f3f6;
+  color: var(--muted);
+}
+
+.mode-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.mode-card {
+  min-height: 92px;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #f8fafc;
+  color: var(--ink);
+  text-align: left;
+}
+
+.mode-card:not(:disabled) {
+  border-color: rgba(49, 91, 214, 0.45);
+  background: var(--wash-blue);
+  cursor: pointer;
+}
+
+.mode-card strong,
+.mode-card span,
+.mode-card small {
+  display: block;
+}
+
+.mode-card strong {
+  font-size: 0.64rem;
+}
+
+.mode-card span {
+  margin-top: 4px;
+  color: var(--cobalt);
+  font-size: 0.52rem;
+  font-weight: 800;
+}
+
+.mode-card:disabled span {
+  color: var(--muted);
+}
+
+.mode-card small {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.55rem;
+  line-height: 1.4;
+}
+
+.fork-intervention {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  margin-top: 13px;
+  padding-top: 13px;
+  border-top: 1px solid var(--line);
+}
+
+.fork-intervention h5,
+.fork-intervention .intervention-description,
+.fork-intervention .fork-action-row {
+  grid-column: 1 / -1;
+}
+
+.fork-intervention h5 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 0.82rem;
+}
+
+.continuity-field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.58rem;
+  font-weight: 700;
+}
+
+.continuity-field input,
+.continuity-field select,
+.continuity-field textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: var(--white);
+  color: var(--ink);
+  font: 0.65rem/1.4 var(--sans);
+}
+
+.fork-action-row {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.continuity-action {
+  padding: 8px 11px;
+  border: 1px solid var(--cobalt);
+  border-radius: 7px;
+  background: var(--cobalt);
+  color: var(--white);
+  font-size: 0.64rem;
+  font-weight: 800;
+}
+
+.continuity-action:disabled {
+  border-color: var(--line-strong);
+  background: #eef1f5;
+  color: var(--muted);
+}
+
+.continuity-action.is-secondary:not(:disabled) {
+  background: var(--white);
+  color: var(--cobalt);
+}
+
+.continuity-status {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.6rem;
+}
+
 .timeline-section {
   padding: 22px clamp(17px, 3vw, 31px) 27px;
 }
@@ -2106,6 +2342,21 @@ h3 {
     grid-template-columns: 1fr;
   }
 
+  .continuity-grid,
+  .checkpoint-list,
+  .fork-list,
+  .fork-intervention,
+  .mode-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .checkpoint-card,
+  .fork-intervention h5,
+  .fork-intervention .intervention-description,
+  .fork-intervention .fork-action-row {
+    grid-column: auto;
+  }
+
   .intelligence-card.is-wide {
     grid-column: auto;
   }
@@ -2428,6 +2679,15 @@ function responseError(payload, status) {
   if (code === 'INVALID_CONTENT_TYPE') return localizedError('error.invalidContentType');
   if (code === 'REQUEST_TOO_LARGE') return localizedError('error.requestTooLarge');
   if (code === 'INVALID_JSON') return localizedError('error.invalidJson');
+  if (code === 'COMPOSITE_CHECKPOINT_UNAVAILABLE') {
+    return localizedError('error.checkpointUnavailable');
+  }
+  if (code === 'EXECUTION_FORK_UNAVAILABLE') {
+    return localizedError('error.executionForkUnavailable');
+  }
+  if (code === 'INVALID_EXECUTION_FORK') {
+    return localizedError('error.invalidExecutionFork');
+  }
   if (code === 'ARTIFACT_NOT_FOUND') {
     return localizedError('artifact.notFound', {
       artifactId: params.artifactId || t('intelligence.unknown'),
@@ -3692,6 +3952,535 @@ function renderToolGates(value, missionId) {
   return section;
 }
 
+const COMPLETE_CHECKPOINT_COMPONENTS = [
+  'mission',
+  'branch',
+  'attempt',
+  'contract',
+  'profile',
+  'event-prefix',
+  'visible-context',
+  'workspace',
+  'permissions',
+  'effect-frontier',
+  'process',
+  'native-session',
+];
+
+const REQUIRED_FORK_COMPONENTS = COMPLETE_CHECKPOINT_COMPONENTS.filter(function (component) {
+  return component !== 'native-session';
+});
+
+const UNRESOLVED_FORK_EFFECT_STATUSES = [
+  'intended',
+  'dispatch_started',
+  'executed',
+  'ambiguous',
+  'conflict',
+];
+
+function checkpointIsExecutionForkReady(checkpoint) {
+  const record = recordValue(checkpoint);
+  if (!record || !Array.isArray(record.components)) return false;
+  const names = record.components.map(function (component) {
+    const value = recordValue(component);
+    return value && typeof value.component === 'string' ? value.component : null;
+  });
+  const uniqueNames = new Set(names);
+  if (
+    names.length !== COMPLETE_CHECKPOINT_COMPONENTS.length ||
+    uniqueNames.size !== names.length ||
+    COMPLETE_CHECKPOINT_COMPONENTS.some(function (name) { return !uniqueNames.has(name); })
+  ) {
+    return false;
+  }
+  if (
+    REQUIRED_FORK_COMPONENTS.some(function (name) {
+      const component = record.components.find(function (candidate) {
+        const value = recordValue(candidate);
+        return value && value.component === name;
+      });
+      const value = recordValue(component);
+      return !value || value.disposition === 'unavailable';
+    })
+  ) {
+    return false;
+  }
+  const workspace = recordValue(record.workspace);
+  const process = recordValue(record.process);
+  const workspaceComponent = record.components.find(function (component) {
+    const value = recordValue(component);
+    return value && value.component === 'workspace';
+  });
+  if (
+    !workspace ||
+    workspace.state !== 'restorable-artifact' ||
+    !recordValue(workspaceComponent) ||
+    recordValue(workspaceComponent).disposition !== 'recoverable' ||
+    !process ||
+    process.status !== 'stopped'
+  ) {
+    return false;
+  }
+  const frontier = Array.isArray(record.externalEffectFrontier)
+    ? record.externalEffectFrontier
+    : [];
+  return frontier.every(function (candidate) {
+    const effect = recordValue(candidate);
+    if (!effect || UNRESOLVED_FORK_EFFECT_STATUSES.includes(effect.status)) return false;
+    if (
+      effect.scope === 'unknown' ||
+      effect.controlLevel === 'unknown' ||
+      !Array.isArray(effect.evidenceRefs) ||
+      effect.evidenceRefs.length === 0
+    ) {
+      return false;
+    }
+    return !(
+      effect.status === 'confirmed' &&
+      (typeof effect.authorityRef !== 'string' || typeof effect.idempotencyKey !== 'string')
+    );
+  });
+}
+
+function continuityField(labelKey, control, className) {
+  const label = createElement('label', 'continuity-field' + (className ? ' ' + className : ''));
+  label.append(createElement('span', '', t(labelKey)), control);
+  return label;
+}
+
+function continuityGroup(titleKey, body) {
+  const group = createElement('section', 'continuity-group');
+  const heading = createElement('div', 'continuity-subheading');
+  heading.append(createElement('h4', '', t(titleKey)));
+  group.append(heading, body);
+  return group;
+}
+
+function receiptBranchId(receipt) {
+  const value = recordValue(receipt);
+  if (!value) return null;
+  if (typeof value.branchId === 'string') return value.branchId;
+  return typeof value.rootBranchId === 'string' ? value.rootBranchId : null;
+}
+
+function branchReceiptText(branchId, receipt) {
+  const value = recordValue(receipt);
+  if (value && receiptBranchId(value) === branchId) {
+    return t('continuity.receiptBound', {
+      receiptId: value.receiptId || t('receipt.idFallback'),
+    });
+  }
+  return t('continuity.receiptPending');
+}
+
+function renderContinuityBranch(branch, receipt) {
+  const record = recordValue(branch) || {};
+  const isChild = typeof record.parentBranchId === 'string';
+  const card = createElement('article', 'continuity-card');
+  card.dataset.branchId = String(record.branchId || '');
+  const heading = createElement('div', 'continuity-card-heading');
+  heading.append(
+    createElement('strong', '', record.branchId || t('intelligence.unknown')),
+    createElement(
+      'span',
+      'continuity-label',
+      t(isChild ? 'continuity.branchB' : 'continuity.branchA'),
+    ),
+  );
+  card.append(
+    heading,
+    createElement(
+      'p',
+      '',
+      t(isChild ? 'continuity.childBranch' : 'continuity.rootBranch') +
+        ' · ' +
+        displayValue(record.status),
+    ),
+  );
+  if (isChild) {
+    card.append(
+      createElement('p', '', t('continuity.parentBranch', { branchId: record.parentBranchId })),
+    );
+  }
+  if (typeof record.baseCheckpointId === 'string') {
+    card.append(
+      createElement(
+        'p',
+        '',
+        t('continuity.baseCheckpoint', { checkpointId: record.baseCheckpointId }),
+      ),
+    );
+  }
+  card.append(createElement('p', '', branchReceiptText(record.branchId, receipt)));
+  return card;
+}
+
+function renderCheckpointMode(mode, enabled, focusTarget) {
+  const button = createElement('button', 'mode-card');
+  button.type = 'button';
+  button.dataset.forkMode = mode.id;
+  button.disabled = !enabled;
+  button.append(
+    createElement('strong', '', t(mode.titleKey)),
+    createElement(
+      'span',
+      '',
+      t(enabled ? 'continuity.mode.ready' : 'continuity.mode.unavailable'),
+    ),
+    createElement('small', '', t(mode.descriptionKey)),
+  );
+  if (enabled && focusTarget) {
+    button.addEventListener('click', function () {
+      focusTarget.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      const first = focusTarget.querySelector('input, select, textarea, button');
+      if (first) first.focus();
+    });
+  }
+  return button;
+}
+
+function newInterventionId() {
+  if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+    return 'intervention-ui-' + window.crypto.randomUUID();
+  }
+  return 'intervention-ui-' + Date.now().toString(36) + '-' + Math.random().toString(16).slice(2);
+}
+
+function renderForkIntervention(missionId, checkpoint, enabled) {
+  const checkpointId = String(checkpoint.checkpointId || '');
+  const form = createElement('div', 'fork-intervention');
+  form.dataset.executionForkAction = checkpointId;
+  form.append(createElement('h5', '', t('continuity.interventionHeading')));
+
+  const kind = document.createElement('select');
+  [
+    ['guidance', 'continuity.kind.guidance'],
+    ['context', 'continuity.kind.context'],
+    ['tool-result', 'continuity.kind.toolResult'],
+    ['permission-narrowing', 'continuity.kind.permissionNarrowing'],
+    ['profile', 'continuity.kind.profile'],
+    ['workspace', 'continuity.kind.workspace'],
+  ].forEach(function (entry) {
+    const option = document.createElement('option');
+    option.value = entry[0];
+    option.textContent = t(entry[1]);
+    kind.append(option);
+  });
+
+  const target = document.createElement('input');
+  target.type = 'text';
+  target.placeholder = t('continuity.targetPlaceholder');
+  target.autocomplete = 'off';
+  const digest = document.createElement('input');
+  digest.type = 'text';
+  digest.placeholder = t('continuity.digestPlaceholder');
+  digest.autocomplete = 'off';
+  digest.spellcheck = false;
+  const authority = document.createElement('select');
+  [
+    ['unchanged', 'continuity.authorityUnchanged'],
+    ['narrowed', 'continuity.authorityNarrowed'],
+  ].forEach(function (entry) {
+    const option = document.createElement('option');
+    option.value = entry[0];
+    option.textContent = t(entry[1]);
+    authority.append(option);
+  });
+  const description = document.createElement('textarea');
+  description.rows = 2;
+  description.placeholder = t('continuity.descriptionPlaceholder');
+
+  form.append(
+    continuityField('continuity.interventionKind', kind),
+    continuityField('continuity.interventionTarget', target),
+    continuityField('continuity.interventionAfterDigest', digest),
+    continuityField('continuity.authorityChange', authority),
+    continuityField(
+      'continuity.interventionDescription',
+      description,
+      'intervention-description',
+    ),
+  );
+
+  const actionRow = createElement('div', 'fork-action-row');
+  const submit = createElement('button', 'continuity-action', t('continuity.createFork'));
+  submit.type = 'button';
+  submit.disabled = !enabled;
+  const status = createElement(
+    'p',
+    'continuity-status',
+    enabled ? '' : t('continuity.completeCheckpointRequired'),
+  );
+  status.setAttribute('aria-live', 'polite');
+  let interventionId = null;
+  submit.addEventListener('click', async function () {
+    const targetRef = target.value.trim();
+    const afterDigest = digest.value.trim();
+    const detail = description.value.trim();
+    if (!targetRef || !afterDigest || !detail) {
+      status.textContent = t('continuity.interventionRequired');
+      return;
+    }
+    interventionId = interventionId || newInterventionId();
+    submit.disabled = true;
+    status.textContent = t('continuity.creatingFork');
+    try {
+      await requestJson(
+        '/api/v1/missions/' +
+          encodeURIComponent(missionId) +
+          '/checkpoints/' +
+          encodeURIComponent(checkpointId) +
+          '/forks',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            intervention: {
+              interventionId: interventionId,
+              kind: kind.value,
+              targetRef: targetRef,
+              afterDigest: afterDigest,
+              description: detail,
+              authorityChange: authority.value,
+            },
+          }),
+        },
+      );
+      interventionId = null;
+      showPageAlert(translated('continuity.forkCreated'));
+      await loadMissions({ quiet: true });
+      await loadDetail(missionId, { quiet: true });
+    } catch (error) {
+      status.textContent = messageText(errorMessage(error, 'continuity.forkFailed'));
+      showPageAlert(errorMessage(error, 'continuity.forkFailed'));
+    } finally {
+      if (submit.isConnected) submit.disabled = !enabled;
+    }
+  });
+  actionRow.append(submit, status);
+  form.append(actionRow);
+  return form;
+}
+
+function renderContinuityCheckpoint(missionId, checkpoint, canExecuteFork) {
+  const record = recordValue(checkpoint) || {};
+  const source = recordValue(record.source) || {};
+  const ready = checkpointIsExecutionForkReady(record);
+  const executable = ready && canExecuteFork;
+  const card = createElement('article', 'checkpoint-card');
+  card.dataset.checkpointId = String(record.checkpointId || '');
+  const heading = createElement('div', 'continuity-card-heading');
+  heading.append(
+    createElement(
+      'strong',
+      'checkpoint-identity',
+      record.checkpointId || t('intelligence.unknown'),
+    ),
+    createElement(
+      'span',
+      'continuity-label' + (ready ? '' : ' is-blocked'),
+      t(ready ? 'continuity.checkpointComplete' : 'continuity.checkpointIncomplete'),
+    ),
+  );
+  card.append(
+    heading,
+    createElement(
+      'p',
+      '',
+      t('continuity.checkpointSource', {
+        branchId: source.branchId || t('intelligence.unknown'),
+        attemptId: source.attemptId || t('intelligence.unknown'),
+      }),
+    ),
+  );
+
+  const form = renderForkIntervention(missionId, record, executable);
+  const modes = createElement('div', 'mode-grid');
+  [
+    {
+      id: 'playback',
+      titleKey: 'continuity.mode.playback',
+      descriptionKey: 'continuity.mode.playbackDescription',
+    },
+    {
+      id: 'cached-replay',
+      titleKey: 'continuity.mode.cachedReplay',
+      descriptionKey: 'continuity.mode.cachedReplayDescription',
+    },
+    {
+      id: 'counterfactual-resample',
+      titleKey: 'continuity.mode.counterfactual',
+      descriptionKey: 'continuity.mode.counterfactualDescription',
+    },
+    {
+      id: 'execution-fork',
+      titleKey: 'continuity.mode.executionFork',
+      descriptionKey: 'continuity.mode.executionForkDescription',
+    },
+  ].forEach(function (mode) {
+    modes.append(renderCheckpointMode(mode, mode.id === 'execution-fork' && executable, form));
+  });
+  card.append(createElement('h5', '', t('continuity.modes')), modes, form);
+  return card;
+}
+
+function renderContinuityFork(executionFork, receipt) {
+  const record = recordValue(executionFork) || {};
+  const lineage = recordValue(record.lineage) || {};
+  const inherited = Array.isArray(lineage.inheritedExternalEffectFrontier)
+    ? lineage.inheritedExternalEffectFrontier
+    : [];
+  const decisions = Array.isArray(lineage.externalEffectDecisions)
+    ? lineage.externalEffectDecisions
+    : [];
+  const decided = new Set(
+    decisions.map(function (decision) {
+      const value = recordValue(decision);
+      return value ? value.effectId : null;
+    }),
+  );
+  const unresolved = inherited.filter(function (effect) {
+    const value = recordValue(effect);
+    return !value || !decided.has(value.effectId);
+  });
+  const card = createElement('article', 'fork-card');
+  card.dataset.executionForkId = String(record.forkId || '');
+  const heading = createElement('div', 'continuity-card-heading');
+  heading.append(
+    createElement('strong', 'fork-identity', record.forkId || t('intelligence.unknown')),
+    createElement('span', 'continuity-label', t('continuity.branchB')),
+  );
+  card.append(
+    heading,
+    createElement(
+      'p',
+      '',
+      t('continuity.phase') + ' · ' + displayValue(record.phase),
+    ),
+    createElement(
+      'p',
+      '',
+      displayValue(lineage.parentBranchId) + ' → ' + displayValue(lineage.childBranchId),
+    ),
+    createElement(
+      'p',
+      '',
+      t('continuity.isolatedWorkspace') + ' · ' + displayValue(lineage.isolatedWorktreePath),
+    ),
+  );
+  const effectText =
+    inherited.length === 0
+      ? t('continuity.effectNone')
+      : unresolved.length === 0
+        ? t('continuity.effectInherited', { count: inherited.length })
+        : t('continuity.effectUnresolved', { count: unresolved.length });
+  card.append(
+    createElement('p', '', t('continuity.effectInheritance') + ' · ' + effectText),
+  );
+  const boundReceipt =
+    receiptBranchId(receipt) === lineage.childBranchId ? recordValue(receipt) : null;
+  const receiptText = boundReceipt
+    ? t('continuity.receiptBound', {
+        receiptId: boundReceipt.receiptId || t('receipt.idFallback'),
+      })
+    : recordValue(record.receiptInput)
+      ? t('continuity.receiptInputOnly')
+      : t('continuity.receiptPending');
+  card.append(createElement('p', '', t('continuity.receipt') + ' · ' + receiptText));
+  if (recordValue(record.failure) && record.failure.detail) {
+    card.append(createElement('p', 'operation-note', displayValue(record.failure.detail)));
+  }
+  return card;
+}
+
+function renderContinuityWorkbench(detail, missionId, receipt) {
+  const capabilities = recordValue(detail.capabilities) || {};
+  const canCreateCheckpoint = capabilities.createCompositeCheckpoint === true;
+  const canExecuteFork = capabilities.executeFork === true;
+  const branches = Array.isArray(detail.branches) ? detail.branches : [];
+  const checkpoints = Array.isArray(detail.compositeCheckpoints)
+    ? detail.compositeCheckpoints
+    : [];
+  const executionForks = Array.isArray(detail.executionForks) ? detail.executionForks : [];
+  const section = createElement('section', 'continuity-workbench');
+  section.setAttribute('data-continuity-workbench', missionId);
+  const heading = createElement('div', 'continuity-heading');
+  const headingText = createElement('div');
+  headingText.append(
+    createElement('p', 'eyebrow', t('continuity.eyebrow')),
+    createElement('h3', '', t('continuity.heading')),
+    createElement('p', 'continuity-description', t('continuity.description')),
+  );
+  const action = createElement('div', 'fork-action-row');
+  const createCheckpoint = createElement(
+    'button',
+    'continuity-action is-secondary',
+    t('continuity.createCheckpoint'),
+  );
+  createCheckpoint.type = 'button';
+  createCheckpoint.dataset.createCheckpoint = missionId;
+  createCheckpoint.disabled = !canCreateCheckpoint;
+  const checkpointStatus = createElement(
+    'p',
+    'continuity-status',
+    canCreateCheckpoint ? '' : t('continuity.checkpointUnavailable'),
+  );
+  checkpointStatus.setAttribute('aria-live', 'polite');
+  createCheckpoint.addEventListener('click', async function () {
+    createCheckpoint.disabled = true;
+    checkpointStatus.textContent = t('continuity.creatingCheckpoint');
+    try {
+      await requestJson(
+        '/api/v1/missions/' + encodeURIComponent(missionId) + '/checkpoints',
+        { method: 'POST', body: JSON.stringify({}) },
+      );
+      showPageAlert(translated('continuity.checkpointCreated'));
+      await loadDetail(missionId, { quiet: true });
+    } catch (error) {
+      checkpointStatus.textContent = messageText(
+        errorMessage(error, 'continuity.checkpointFailed'),
+      );
+      showPageAlert(errorMessage(error, 'continuity.checkpointFailed'));
+    } finally {
+      if (createCheckpoint.isConnected) createCheckpoint.disabled = !canCreateCheckpoint;
+    }
+  });
+  action.append(createCheckpoint, checkpointStatus);
+  heading.append(headingText, action);
+  section.append(heading);
+
+  const branchGrid = createElement('div', 'continuity-grid');
+  if (branches.length === 0) {
+    branchGrid.append(createElement('p', 'empty-note', t('continuity.noBranches')));
+  } else {
+    branches.forEach(function (branch) {
+      branchGrid.append(renderContinuityBranch(branch, receipt));
+    });
+  }
+  section.append(continuityGroup('continuity.branches', branchGrid));
+
+  const checkpointList = createElement('div', 'checkpoint-list');
+  if (checkpoints.length === 0) {
+    checkpointList.append(createElement('p', 'empty-note', t('continuity.noCheckpoints')));
+  } else {
+    checkpoints.forEach(function (checkpoint) {
+      checkpointList.append(renderContinuityCheckpoint(missionId, checkpoint, canExecuteFork));
+    });
+  }
+  section.append(continuityGroup('continuity.checkpoints', checkpointList));
+
+  const forkList = createElement('div', 'fork-list');
+  if (executionForks.length === 0) {
+    forkList.append(createElement('p', 'empty-note', t('continuity.noExecutionForks')));
+  } else {
+    executionForks.forEach(function (executionFork) {
+      forkList.append(renderContinuityFork(executionFork, receipt));
+    });
+  }
+  section.append(continuityGroup('continuity.executionForks', forkList));
+  return section;
+}
+
 function renderDetail() {
   if (!state.detail) {
     replaceWithMessage(elements.missionDetail, 'empty-note', t('mission.detailLoading'));
@@ -3834,6 +4623,7 @@ function renderDetail() {
   content.append(hero);
   const toolGates = renderToolGates(detail.toolGates, missionId);
   if (toolGates) content.append(toolGates);
+  content.append(renderContinuityWorkbench(detail, missionId, receipt));
   content.append(
     renderRuntimeIntelligence(mission, timeline),
     renderContextGraph(detail.contextGraph),

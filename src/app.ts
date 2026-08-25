@@ -17,6 +17,8 @@ import {
   type MissionTimelineEntry,
   type MissionToolGateView,
   type MissionExternalEffectRequestV1,
+  type MissionExecutionForkRequestV1,
+  type MissionExecutionForkResultV1,
 } from './engine.js';
 import { createMissionDraft, MissionDraftError } from './mission-draft.js';
 import { discoverRuntimeCatalog, type RuntimeCatalogEntry } from './runtime-catalog.js';
@@ -28,6 +30,7 @@ import type {
   MissionProjectionV1,
 } from './domain.js';
 import type { ExternalEffectOutcome } from './external-effect.js';
+import type { ExecutionForkRecordV1 } from './execution-fork.js';
 import type { ToolDecisionIntentDraft, ToolDecisionIntentV1 } from './tool-gateway.js';
 import { snapshotGitWorkspace } from './workspace.js';
 
@@ -62,10 +65,15 @@ export interface AppEngine {
   contextGraph(missionId: string): Promise<ContextGraphV1>;
   branches?(missionId: string): readonly BranchV1[];
   compositeCheckpoints?(missionId: string): readonly CompositeCheckpointManifestV1[];
+  executionForks?(missionId: string): Promise<readonly ExecutionForkRecordV1[]>;
   createCompositeCheckpoint?(
     missionId: string,
     requestedAttemptId?: string,
   ): Promise<CompositeCheckpointManifestV1>;
+  executeFork?(
+    missionId: string,
+    input: MissionExecutionForkRequestV1,
+  ): Promise<MissionExecutionForkResultV1>;
   pendingToolGates?(missionId: string): Promise<readonly MissionToolGateView[]>;
   decideToolGate?(
     missionId: string,
@@ -510,6 +518,30 @@ export async function startMissionBraidApp(
       }
       return;
     }
+    const checkpointFork = matchCheckpointForkCollection(url.pathname);
+    if (checkpointFork !== undefined && request.method === 'POST') {
+      const engine = engineFactory(stateDir);
+      try {
+        if (engine.executeFork === undefined) {
+          throw new AppHttpError(
+            501,
+            'EXECUTION_FORK_UNAVAILABLE',
+            'Execution Fork is unavailable.',
+          );
+        }
+        const body = requireExecutionForkBody(await readJson(request));
+        const result = await engine.executeFork(checkpointFork.missionId, {
+          checkpointId: checkpointFork.checkpointId,
+          intervention: body.intervention,
+          ...(body.stageId === undefined ? {} : { stageId: body.stageId }),
+          ...(body.childBranchId === undefined ? {} : { childBranchId: body.childBranchId }),
+        });
+        sendJson(response, 201, { executionFork: result.record, receipt: result.receipt });
+      } finally {
+        engine.close();
+      }
+      return;
+    }
     const missionId = matchMissionId(url.pathname);
     if (missionId !== undefined && request.method === 'GET') {
       const engine = engineFactory(stateDir);
@@ -524,6 +556,12 @@ export async function startMissionBraidApp(
           toolGates,
           branches: engine.branches?.(missionId) ?? [],
           compositeCheckpoints: engine.compositeCheckpoints?.(missionId) ?? [],
+          executionForks:
+            engine.executionForks === undefined ? [] : await engine.executionForks(missionId),
+          capabilities: {
+            createCompositeCheckpoint: engine.createCompositeCheckpoint !== undefined,
+            executeFork: engine.executeFork !== undefined,
+          },
           operation: operationView(
             status.mission,
             operations.get(missionId),
@@ -803,6 +841,109 @@ function matchExternalEffectAction(
 function matchCheckpointCollection(pathname: string): string | undefined {
   const match = pathname.match(/^\/api\/v1\/missions\/([^/]+)\/checkpoints$/);
   return match?.[1] === undefined ? undefined : decodeURIComponent(match[1]);
+}
+
+function matchCheckpointForkCollection(
+  pathname: string,
+): { readonly missionId: string; readonly checkpointId: string } | undefined {
+  const match = pathname.match(/^\/api\/v1\/missions\/([^/]+)\/checkpoints\/([^/]+)\/forks$/);
+  if (match?.[1] === undefined || match[2] === undefined) return undefined;
+  return {
+    missionId: decodeURIComponent(match[1]),
+    checkpointId: decodeURIComponent(match[2]),
+  };
+}
+
+function requireExecutionForkBody(value: unknown): {
+  readonly intervention: MissionExecutionForkRequestV1['intervention'];
+  readonly stageId?: string;
+  readonly childBranchId?: string;
+} {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new AppHttpError(400, 'INVALID_EXECUTION_FORK', 'Execution Fork body must be an object.');
+  }
+  const body = value as Record<string, unknown>;
+  if (
+    body.intervention === null ||
+    typeof body.intervention !== 'object' ||
+    Array.isArray(body.intervention)
+  ) {
+    throw new AppHttpError(400, 'INVALID_EXECUTION_FORK', 'intervention must be an object.');
+  }
+  const intervention = body.intervention as Record<string, unknown>;
+  const kind = requireExecutionForkKind(intervention.kind);
+  const authorityChange = requireExecutionForkAuthorityChange(intervention.authorityChange);
+  return {
+    intervention: {
+      interventionId: requireExecutionForkString(
+        intervention.interventionId,
+        'intervention.interventionId',
+      ),
+      kind,
+      targetRef: requireExecutionForkString(intervention.targetRef, 'intervention.targetRef'),
+      ...(intervention.beforeDigest === undefined
+        ? {}
+        : {
+            beforeDigest: requireExecutionForkString(
+              intervention.beforeDigest,
+              'intervention.beforeDigest',
+            ),
+          }),
+      afterDigest: requireExecutionForkString(intervention.afterDigest, 'intervention.afterDigest'),
+      description: requireExecutionForkString(
+        intervention.description,
+        'intervention.description',
+        4_096,
+      ),
+      authorityChange,
+    },
+    ...(body.stageId === undefined
+      ? {}
+      : { stageId: requireExecutionForkString(body.stageId, 'stageId') }),
+    ...(body.childBranchId === undefined
+      ? {}
+      : { childBranchId: requireExecutionForkString(body.childBranchId, 'childBranchId') }),
+  };
+}
+
+function requireExecutionForkKind(
+  value: unknown,
+): MissionExecutionForkRequestV1['intervention']['kind'] {
+  if (
+    value !== 'context' &&
+    value !== 'tool-result' &&
+    value !== 'permission-narrowing' &&
+    value !== 'profile' &&
+    value !== 'workspace' &&
+    value !== 'guidance'
+  ) {
+    throw new AppHttpError(400, 'INVALID_EXECUTION_FORK', 'intervention.kind is not supported.');
+  }
+  return value;
+}
+
+function requireExecutionForkAuthorityChange(
+  value: unknown,
+): MissionExecutionForkRequestV1['intervention']['authorityChange'] {
+  if (value !== 'unchanged' && value !== 'narrowed') {
+    throw new AppHttpError(
+      400,
+      'INVALID_EXECUTION_FORK',
+      'intervention.authorityChange must be unchanged or narrowed.',
+    );
+  }
+  return value;
+}
+
+function requireExecutionForkString(value: unknown, field: string, limit = 512): string {
+  if (typeof value !== 'string' || value.trim().length === 0 || value.length > limit) {
+    throw new AppHttpError(
+      400,
+      'INVALID_EXECUTION_FORK',
+      `${field} must be a non-empty bounded string.`,
+    );
+  }
+  return value.trim();
 }
 
 function requireExternalEffectBody(

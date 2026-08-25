@@ -562,6 +562,10 @@ export class ExecutionForkService {
         sourceSnapshot: sourceAfterRuntime,
       });
 
+      if (result.status === 'failed') {
+        return projectExecutionFork(await this.#journal.load(forkId));
+      }
+
       const events = await this.#journal.load(forkId);
       const runtimeEvidenceEventRefs = events
         .filter((event) => event.type === 'runtime.evidence')
@@ -1017,10 +1021,10 @@ function normalizeRuntimeResult(result: RuntimeContinuationResultV1): RuntimeCon
   const toolExecutionEvidenceRefs = uniqueSorted(
     result.toolExecutionEvidenceRefs.map((ref) => requireNonEmpty(ref, 'toolEvidenceRef')),
   );
-  if (toolExecutionEvidenceRefs.length === 0) {
+  if (result.status === 'completed' && toolExecutionEvidenceRefs.length === 0) {
     throw new ExecutionForkError(
       'RUNTIME_CONTINUATION_FAILED',
-      'Runtime continuation must provide evidence of at least one real tool execution',
+      'A completed Runtime continuation must provide terminal evidence of at least one real tool execution',
     );
   }
   return {

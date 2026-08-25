@@ -18,6 +18,7 @@ import {
 import { deriveContextGraph, type ContextGraphV1 } from './context-graph.js';
 import {
   createCompositeCheckpoint,
+  type CheckpointInterventionV1,
   type CompositeCheckpointManifestV1,
 } from './composite-checkpoint.js';
 import { createClaudeToolGateBinding, type ClaudeToolGateBindingV1 } from './claude-tool-gate.js';
@@ -83,6 +84,17 @@ import {
   externalEffectEventToMissionEvents,
   rebuildExternalEffectStateFromMissionEvents,
 } from './mission-external-effect.js';
+import {
+  ExecutionForkService,
+  FileExecutionForkEvidenceJournal,
+  projectExecutionFork,
+  type ExecutionForkEvidenceJournalV1,
+  type ExecutionForkEventDraftV1,
+  type ExecutionForkEventV1,
+  type ExecutionForkRecordV1,
+} from './execution-fork.js';
+import { executionForkEventToMissionEvents } from './mission-execution-fork.js';
+import { NativeAdapterRuntimeContinuationPort } from './runtime-continuation.js';
 import { runCommandVerifier, type CommandVerificationResultV1 } from './verifier.js';
 import {
   ToolGateway,
@@ -156,6 +168,19 @@ export interface MissionToolGateView extends ToolGateRequestV1 {
 
 export interface MissionExternalEffectRequestV1 extends ExternalEffectRequest<JsonValue> {
   readonly attemptId: string;
+}
+
+export interface MissionExecutionForkRequestV1 {
+  readonly checkpointId: string;
+  readonly intervention: CheckpointInterventionV1;
+  /** I5 keeps the source Runtime Profile; I6 may explicitly select another eligible stage. */
+  readonly stageId?: string;
+  readonly childBranchId?: string;
+}
+
+export interface MissionExecutionForkResultV1 {
+  readonly record: ExecutionForkRecordV1;
+  readonly receipt: ReceiptV1;
 }
 
 export interface MissionTimelineEntry {
@@ -670,6 +695,214 @@ export class MissionEngine {
         fence,
       );
       return checkpoint;
+    });
+  }
+
+  async executionForks(missionId: string): Promise<readonly ExecutionForkRecordV1[]> {
+    this.#requireMission(missionId);
+    const forkIds = uniqueStrings(
+      this.#store.listEvents(missionId).flatMap((event) => {
+        if (
+          event.type !== 'runtime.observation' ||
+          event.payload.kind !== 'execution-fork.transition' ||
+          !isJsonObject(event.payload.data) ||
+          typeof event.payload.data.forkId !== 'string'
+        ) {
+          return [];
+        }
+        return [event.payload.data.forkId];
+      }),
+    );
+    const journal = new FileExecutionForkEvidenceJournal(join(this.#stateDir, 'execution-forks'));
+    const records: ExecutionForkRecordV1[] = [];
+    for (const forkId of forkIds) {
+      const events = await journal.load(forkId);
+      if (events.length === 0) {
+        throw new MissionExecutionError(
+          `Execution Fork ${forkId} is authoritative in the Mission Kernel but its evidence journal is unavailable`,
+        );
+      }
+      records.push(projectExecutionFork(events));
+    }
+    return records;
+  }
+
+  async executeFork(
+    missionId: string,
+    request: MissionExecutionForkRequestV1,
+    signal?: AbortSignal,
+  ): Promise<MissionExecutionForkResultV1> {
+    const mission = this.#requireMission(missionId);
+    const spec = this.#requireSpecSnapshot(missionId);
+    assertControlStateIsolation(this.#stateDir, spec.workspace);
+    const events = this.#store.listEvents(missionId);
+    const checkpoint = this.compositeCheckpoints(missionId).find(
+      (candidate) => candidate.checkpointId === request.checkpointId,
+    );
+    if (checkpoint === undefined) {
+      throw new MissionExecutionError(
+        `Composite Checkpoint ${request.checkpointId} does not belong to Mission ${missionId}`,
+      );
+    }
+    if (
+      checkpoint.source.missionId !== missionId ||
+      checkpoint.source.contractId !== mission.contract.contractId
+    ) {
+      throw new MissionExecutionError(
+        'Execution Fork Checkpoint is bound to another Mission state',
+      );
+    }
+
+    const created = events.find(
+      (event): event is Extract<StoredEventV1, { type: 'mission.created' }> =>
+        event.type === 'mission.created',
+    );
+    const sourceAttemptEvent = events.find(
+      (event): event is Extract<StoredEventV1, { type: 'attempt.started' }> =>
+        event.type === 'attempt.started' &&
+        event.payload.attempt.attemptId === checkpoint.source.attemptId,
+    );
+    if (created === undefined || sourceAttemptEvent === undefined) {
+      throw new MissionExecutionError('Execution Fork source identities are not persisted');
+    }
+    const sourceAttempt = sourceAttemptEvent.payload.attempt;
+    const sourceProfile = profileForAttempt(events, sourceAttempt, created.payload.profile);
+    if (sourceProfile.profileId !== checkpoint.source.profileId) {
+      throw new MissionExecutionError(
+        'Execution Fork Checkpoint Profile no longer matches its source Attempt',
+      );
+    }
+    const sourceStageId = sourceAttempt.stageId;
+    const stageId = request.stageId ?? sourceStageId;
+    const stage = spec.attemptPlan.find((candidate) => candidate.stageId === stageId);
+    if (stage === undefined || !stageMatchesProfile(stage, sourceProfile)) {
+      throw new MissionExecutionError(
+        'This iteration executes a Fork with the immutable source Runtime Profile; a different Profile requires an eligible Planner decision',
+      );
+    }
+
+    const childBranchId = request.childBranchId ?? `branch-fork-${this.#id()}`;
+    if (this.#store.getBranch(missionId, childBranchId) !== undefined) {
+      throw new MissionExecutionError(`Branch ${childBranchId} already exists`);
+    }
+    const identityDigest = hashPayload({
+      missionId,
+      checkpointId: checkpoint.checkpointId,
+      childBranchId,
+      intervention: request.intervention,
+    });
+    const worktreeParent = join(this.#stateDir, 'worktrees', missionId);
+    await mkdir(worktreeParent, { recursive: true });
+    const worktreeId = `worktree-${identityDigest.slice(0, 32)}`;
+    const childWorkspaceKey = `workspace-fork-${identityDigest.slice(0, 32)}`;
+    const isolatedWorktreePath = join(worktreeParent, worktreeId);
+    const gitBranchName = `missionbraid/fork-${identityDigest.slice(0, 24)}`;
+    const externalEffectDecisions = checkpoint.externalEffectFrontier
+      .filter((effect) => effect.status === 'confirmed')
+      .map((effect) => ({ effectId: effect.effectId, action: 'inherit-no-repeat' as const }));
+    const bindingBoundAt = this.#now().toISOString();
+    const ownerId = `execution-fork-${this.#id()}`;
+
+    return await this.#withLease(mission.workspaceKey, ownerId, async (fence) => {
+      await this.#writeProvenanceProjection(missionId);
+      const fileJournal = new FileExecutionForkEvidenceJournal(
+        join(this.#stateDir, 'execution-forks'),
+      );
+      const mirroredJournal: ExecutionForkEvidenceJournalV1 = {
+        append: async (draft: ExecutionForkEventDraftV1): Promise<ExecutionForkEventV1> => {
+          const sourceEvent = await fileJournal.append(draft);
+          const childAttemptId = `fork-attempt-${sourceEvent.forkId}`;
+          const binding: AttemptBindingV1 = {
+            schemaVersion: DOMAIN_SCHEMA_VERSION,
+            bindingId: `fork-binding-${sourceEvent.forkId}`,
+            missionId,
+            attemptId: childAttemptId,
+            branchId: childBranchId,
+            contractId: mission.contract.contractId,
+            profileId: sourceProfile.profileId,
+            workspaceKey: childWorkspaceKey,
+            planNodeId: stage.stageId,
+            authority: 'workspace',
+            injectionBudgetTokens: stage.profile.injectionBudgetTokens,
+            boundAt: bindingBoundAt,
+          };
+          const kernelEvents = [
+            ...executionForkEventToMissionEvents(
+              sourceEvent,
+              { missionId, childAttemptId, binding, occurredAt: sourceEvent.occurredAt },
+              this.#store.listEvents(missionId),
+            ),
+          ];
+          if (sourceEvent.type === 'fork.planned') {
+            kernelEvents.push({
+              schemaVersion: DOMAIN_SCHEMA_VERSION,
+              eventId: `event-fork-plan-${hashPayload({ sourceEventId: sourceEvent.eventId, binding })}`,
+              missionId,
+              attemptId: childAttemptId,
+              occurredAt: sourceEvent.occurredAt,
+              type: 'runtime.observation',
+              payload: {
+                kind: 'attempt.plan',
+                data: {
+                  attemptId: childAttemptId,
+                  stageId: stage.stageId,
+                  harness: stage.profile.harness,
+                  profileId: sourceProfile.profileId,
+                  branchId: childBranchId,
+                  bindingId: binding.bindingId,
+                  checkpointId: checkpoint.checkpointId,
+                  operation: 'execution-fork',
+                },
+              },
+            });
+          }
+          this.#store.appendEvents(kernelEvents, fence);
+          return sourceEvent;
+        },
+        load: async (forkId: string) => await fileJournal.load(forkId),
+      };
+      const service = new ExecutionForkService({ journal: mirroredJournal, now: this.#now });
+      const runtime = new NativeAdapterRuntimeContinuationPort({
+        missionId,
+        acceptedContract: mission.contract,
+        acceptedMissionSpec: spec,
+        acceptedStage: stage,
+        acceptedCheckpoint: {
+          checkpointId: checkpoint.checkpointId,
+          missionId,
+          contractId: checkpoint.source.contractId,
+          profileId: checkpoint.source.profileId,
+        },
+        acceptedProfile: sourceProfile,
+        acceptedIntervention: request.intervention,
+        controllerStateDir: this.#stateDir,
+        provenanceFile: this.#provenanceFile(missionId),
+        adapters: { codex: this.#codex, qoder: this.#qoder, claude: this.#claude },
+        ...(signal === undefined ? {} : { signal }),
+      });
+      const record = await service.execute(
+        {
+          mode: 'execution-fork',
+          checkpoint,
+          repositoryRoot: spec.workspace,
+          childBranchId,
+          gitBranchName,
+          worktreeId,
+          childWorkspaceKey,
+          isolatedWorktreePath,
+          intervention: request.intervention,
+          externalEffectDecisions,
+        },
+        runtime,
+      );
+      const receipt = await this.#issueExecutionForkReceipt(
+        missionId,
+        childBranchId,
+        spec,
+        record,
+        fence,
+      );
+      return { record, receipt };
     });
   }
 
@@ -1664,6 +1897,114 @@ export class MissionEngine {
     };
   }
 
+  async #issueExecutionForkReceipt(
+    missionId: string,
+    childBranchId: string,
+    spec: MissionSpecV1,
+    record: ExecutionForkRecordV1,
+    fence: WorkspaceFenceV1,
+  ): Promise<ReceiptV1> {
+    if (
+      record.phase !== 'finished' ||
+      record.runtimeResult?.status !== 'completed' ||
+      record.receiptInput === undefined ||
+      record.runtimeResult.unresolvedItems.length > 0
+    ) {
+      throw new MissionExecutionError(
+        'Execution Fork ' + record.forkId + ' did not produce a completed, resolved Runtime result',
+      );
+    }
+    if (
+      record.lineage.missionId !== missionId ||
+      record.lineage.childBranchId !== childBranchId ||
+      record.receiptInput.childBranchId !== childBranchId
+    ) {
+      throw new MissionExecutionError('Execution Fork Receipt input conflicts with its Branch');
+    }
+
+    const verifications = spec.acceptanceCriteria.map((criterion) => {
+      const evidence = record.runtimeEvidence.find(
+        (candidate) =>
+          candidate.kind === 'verification' &&
+          candidate.evidenceRefs.includes('criterion:' + criterion.id) &&
+          candidate.evidenceRefs.includes('verification:passed'),
+      );
+      if (evidence === undefined) {
+        throw new MissionExecutionError(
+          'Execution Fork ' + record.forkId + ' lacks passing evidence for ' + criterion.id,
+        );
+      }
+      return {
+        criterionId: criterion.id,
+        status: 'passed' as const,
+        evidenceRefs: uniqueStrings(['evidence:' + evidence.evidenceId, ...evidence.evidenceRefs]),
+      };
+    });
+    const chain = this.#store.verifyEventChain(missionId);
+    if (!chain.valid) {
+      throw new MissionExecutionError(
+        'Mission ' +
+          missionId +
+          ' has an invalid event chain' +
+          (chain.error === undefined ? '' : ': ' + chain.error),
+      );
+    }
+    const projection = this.#requireMission(missionId);
+    const effects = reconstructExecutionState(this.#store.listEvents(missionId)).effects;
+    const unresolvedEffects = effects.filter((effect) =>
+      ['intended', 'dispatch_started', 'executed', 'ambiguous', 'conflict'].includes(effect.status),
+    );
+    if (unresolvedEffects.length > 0) {
+      throw new MissionExecutionError(
+        'Execution Fork ' +
+          record.forkId +
+          ' still has unresolved Effects: ' +
+          unresolvedEffects.map((effect) => effect.effectId).join(', '),
+      );
+    }
+    const childAttemptId = 'fork-attempt-' + record.forkId;
+    const receipt: ReceiptV1 = {
+      schemaVersion: DOMAIN_SCHEMA_VERSION,
+      receiptId: 'receipt-' + this.#id(),
+      missionId,
+      contractId: projection.contract.contractId,
+      branchId: childBranchId,
+      outcome: 'verified',
+      verifications,
+      verifiedHeadHash: projection.headHash,
+      verifiedThroughSeq: projection.lastSeq,
+      attemptIds: [childAttemptId],
+      handoffIds: [],
+      effectIds: effects.map((effect) => effect.effectId),
+      effects,
+      unresolvedItems: [],
+      issuedAt: this.#now().toISOString(),
+    };
+    this.#store.appendEvent(
+      {
+        schemaVersion: DOMAIN_SCHEMA_VERSION,
+        eventId: 'event-' + this.#id(),
+        missionId,
+        occurredAt: receipt.issuedAt,
+        type: 'receipt.issued',
+        payload: { receipt },
+      },
+      fence,
+    );
+    await Promise.all(
+      [this.#receiptFile(missionId), this.#branchReceiptFile(missionId, childBranchId)].map(
+        async (path) => {
+          await mkdir(dirname(path), { recursive: true });
+          await writeFile(path, JSON.stringify(receipt, null, 2) + '\n', {
+            encoding: 'utf8',
+            mode: 0o600,
+          });
+        },
+      ),
+    );
+    return receipt;
+  }
+
   async #runRuntime(
     stage: AttemptStageSpecV1,
     profile: ProfileV1,
@@ -2194,6 +2535,10 @@ export class MissionEngine {
   #receiptFile(missionId: string): string {
     return join(this.#stateDir, 'missions', missionId, 'receipt.json');
   }
+
+  #branchReceiptFile(missionId: string, branchId: string): string {
+    return join(this.#stateDir, 'missions', missionId, 'branches', branchId, 'receipt.json');
+  }
 }
 
 function createContract(spec: MissionSpecV1, now: Date): ContractV1 {
@@ -2685,6 +3030,22 @@ function createProfile(
     adapterCapabilities: adapterCapabilities(stage),
     resolvedAt: detection.checkedAt,
   };
+}
+
+function stageMatchesProfile(stage: AttemptStageSpecV1, profile: ProfileV1): boolean {
+  if (stage.profile.harness !== profile.harness || stage.profile.model !== profile.model) {
+    return false;
+  }
+  if (
+    (stage.profile.reasoningEffort ?? null) !== (profile.reasoningEffort ?? null) ||
+    stage.profile.injectionBudgetTokens !== profile.injectionBudgetTokens
+  ) {
+    return false;
+  }
+  const definition = profileDefinition(stage);
+  return (
+    profile.definition === undefined || profile.definition.definitionId === definition.definitionId
+  );
 }
 
 function discoverFiles(workspace: string, candidates: readonly string[]): JsonValue[] {
