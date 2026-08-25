@@ -7,10 +7,11 @@
 > with sanitized native artifacts, durable command/outbox recovery, workspace
 > baseline/checkpoint evidence (digest and delta, not a restorable snapshot), a
 > bounded Handoff Capsule, independent verification, and an Outcome Receipt.
-> The integrated real three-Harness Workbench proof is still pending, so
-> Iteration 2 is not yet claimed complete. Live Context Graph debugging, tool
-> gating, counterfactual replay, adaptive planning, and the other Iteration 3+
-> capabilities remain targets unless explicitly marked otherwise.
+> Iteration 2 is validated by an integrated same-host real Workbench Mission
+> across all three Harnesses, with a verified Receipt and stable restart
+> restoration. Live Context Graph debugging, tool gating, counterfactual
+> replay, adaptive planning, and the other Iteration 3+ capabilities remain
+> targets unless explicitly marked otherwise.
 
 ## Product definition
 
@@ -461,9 +462,11 @@ state, permissions, and an explicit compatibility report:
 exactly mapped | emulated | summarized | rebound | unavailable | blocks handoff
 ```
 
-The target acknowledges critical identifiers before its mutation is accepted
-as a continuation. This is semantic continuation, not lossless migration of
-hidden model state.
+The target cooperatively acknowledges critical identifiers. MissionBraid
+records the acknowledgement's native source order against the first observed
+tool request; only an Adapter with an enforced gate may claim that mutation was
+prevented before acknowledgement. This is semantic continuation, not lossless
+migration of hidden model state.
 
 ### Failure Case
 
@@ -629,11 +632,13 @@ original revision and its branches remain inspectable.
 | Planner                      | User-selected route                                                      | Capability, quota and outcome-aware planning         |
 | Verification                 | Command verifier and Receipt                                             | Branch comparison, extensible evaluators and Receipt |
 
-The strongest current evidence remains the same-host Codex-to-Qoder Workbench
-run in the [evidence index](../evidence/README.md). The Iteration 2 source is
-implemented, but the integrated Codex/Qoder/Claude Workbench record is still
-pending. Neither the existing record nor implementation alone establishes the
-unimplemented Iteration 3+ capabilities above.
+The strongest current evidence is the
+[same-host Codex/Qoder/Claude Workbench record](../evidence/iteration-2-three-harness-local-2026-08-25.json).
+It binds successful real Attempts, source-scoped Event IR and sanitized native
+artifacts, a verified Receipt, and stable restart restoration. Its cooperative
+Handoff ordering is not a live tool gate. The record does not establish the
+unimplemented Iteration 3+ capabilities above, cross-host reproduction, or
+production readiness.
 
 ## Integration and claim boundaries
 

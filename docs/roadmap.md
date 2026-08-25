@@ -1,10 +1,10 @@
 # MissionBraid Product Roadmap
 
 > **Plan:** ten major product iterations in total. Iteration 1 is the verified
-> local foundation. Iteration 2 is implemented in source but remains open until
-> its integrated real three-Harness Workbench proof is retained. Iterations
-> 3–10 remain planned. The number describes dependency-complete product
-> releases, not calendar sprints.
+> local foundation. Iteration 2 is implemented and validated by an integrated
+> same-host real three-Harness Workbench record. Iterations 3–10 remain planned.
+> The number describes dependency-complete product releases, not calendar
+> sprints.
 
 MissionBraid's final scope is the full Agent Runtime Workbench described in the
 [architecture](architecture.md) and [product requirements](product-requirements.md).
@@ -38,18 +38,18 @@ engineering outputs but cannot complete an iteration by themselves.
 
 ## Iteration overview
 
-| Iteration                                       | Product result                                                                           | Status                          |
-| ----------------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------- |
-| 1. Mission continuity foundation                | One Mission survives process and Harness changes and closes with a Receipt               | Implemented local slice         |
-| 2. Runtime intelligence and Event IR            | Effective Profiles and native events share one typed Runtime model                       | Implemented; real proof pending |
-| 3. Live flight recorder and Context Graph       | Developers see context, tools, files, tests, cost, and subagents while work runs         | Planned                         |
-| 4. Tool gateway and live debugger               | A real mutable tool can be stopped before dispatch and changed or rejected               | Planned                         |
-| 5. Composite checkpoints, Fork, and Replay      | A failure scene becomes an isolated executable alternative Branch                        | Planned                         |
-| 6. Adaptive planning and cross-Harness handoff  | A failed Runtime is replaced without manual Profile choice or context copying            | Planned                         |
-| 7. Failure intelligence and diagnostic Branches | Evidence and single-variable probes distinguish likely failure layers                    | Planned                         |
-| 8. Multi-agent Mission Graph and live revisions | Parallel Agents stay attached to one changing Mission and stale work is invalidated      | Planned                         |
-| 9. Outcome, Eval, and Incident Studio           | Branches and Runtime versions are compared against one Contract and saved as regressions | Planned                         |
-| 10. Open Runtime Workbench 1.0                  | External developers install, extend, and reproduce the complete workflow                 | Planned                         |
+| Iteration                                       | Product result                                                                           | Status                  |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------- | ----------------------- |
+| 1. Mission continuity foundation                | One Mission survives process and Harness changes and closes with a Receipt               | Implemented local slice |
+| 2. Runtime intelligence and Event IR            | Effective Profiles and native events share one typed Runtime model                       | Validated local slice   |
+| 3. Live flight recorder and Context Graph       | Developers see context, tools, files, tests, cost, and subagents while work runs         | Planned                 |
+| 4. Tool gateway and live debugger               | A real mutable tool can be stopped before dispatch and changed or rejected               | Planned                 |
+| 5. Composite checkpoints, Fork, and Replay      | A failure scene becomes an isolated executable alternative Branch                        | Planned                 |
+| 6. Adaptive planning and cross-Harness handoff  | A failed Runtime is replaced without manual Profile choice or context copying            | Planned                 |
+| 7. Failure intelligence and diagnostic Branches | Evidence and single-variable probes distinguish likely failure layers                    | Planned                 |
+| 8. Multi-agent Mission Graph and live revisions | Parallel Agents stay attached to one changing Mission and stale work is invalidated      | Planned                 |
+| 9. Outcome, Eval, and Incident Studio           | Branches and Runtime versions are compared against one Contract and saved as regressions | Planned                 |
+| 10. Open Runtime Workbench 1.0                  | External developers install, extend, and reproduce the complete workflow                 | Planned                 |
 
 ## Iteration 1 — Mission continuity foundation
 
@@ -105,7 +105,7 @@ event semantics as Codex and Qoder.
 - durable command/outbox path so restart does not lose accepted execution
   intent.
 
-### Current implementation state
+### Completion evidence
 
 The repository now contains the Iteration 2 implementation:
 
@@ -120,9 +120,18 @@ The repository now contains the Iteration 2 implementation:
   an application restart;
 - a bilingual Workbench with a browser-persisted English/Chinese selection.
 
-This is an implementation claim, not completion evidence. Iteration 2 remains
-open until the normal Workbench runs and restores a real Mission across Codex,
-Qoder, and Claude Code with the source-linked event and Receipt evidence below.
+The [retained same-host record](../evidence/iteration-2-three-harness-local-2026-08-25.json)
+binds a clean revision to successful real Codex, Qoder, and Claude Code
+Attempts, 1,066 source-scoped Runtime events and sanitized native artifacts, a
+verified Receipt, and stable restart restoration. Both Handoff acknowledgements
+precede their target's first observed tool-request event in the corresponding
+native source stream. This is cooperative ordering evidence, not a live tool
+gate.
+
+Iteration 2 is therefore complete at the same-host local evidence level. It
+does not establish automatic routing, executable Fork/Replay, live tool gating,
+cross-host reproduction, or production readiness; those boundaries remain in
+later iterations.
 
 ### Done when
 

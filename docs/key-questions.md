@@ -2,9 +2,8 @@
 
 > **Status:** these answers define the accepted target architecture. “Today”
 > includes the verified pre-alpha Codex/Qoder vertical slice and the Iteration 2
-> implementation now present in source. The integrated real
-> Codex/Qoder/Claude Workbench proof remains pending; “target” describes later
-> capabilities still scheduled in the ten-iteration roadmap.
+> same-host real Codex/Qoder/Claude Workbench validation. “Target” describes
+> later capabilities still scheduled in the ten-iteration roadmap.
 
 ## 1. Why build a Workbench instead of another Agent launcher?
 
@@ -135,6 +134,10 @@ A Handoff Capsule carries portable, provenance-bound evidence:
 Hidden chain-of-thought, KV cache, private model state, and identical internal
 understanding are not portable and are not claimed.
 
+The current Handoff acknowledgement is cooperative. Its native source event is
+ordered before the first observed tool-request event, but this does not prove a
+pre-tool gate or that no unobserved mutation occurred.
+
 ## 9. How does failure attribution avoid becoming an LLM-written guess?
 
 The system first records observable boundaries: model request/response metadata,
@@ -219,12 +222,14 @@ Implemented today:
 - workspace baseline/checkpoint evidence (digest/delta, not a restorable
   snapshot) and Handoff Capsule;
 - independent verifier and Outcome Receipt;
-- one same-host public-clone Codex-to-Qoder evidence path.
+- one clean-public-clone Codex-to-Qoder evidence path and one clean-revision,
+  same-host Codex/Qoder/Claude Code evidence path.
 
-The first six items above describe implementation. They do not yet prove the
-Iteration 2 user result: one real Mission executed through the normal Workbench
-across Codex, Qoder, and Claude Code, restored after restart, and retained with
-source-linked Event IR, native artifacts, and a Receipt.
+The [Iteration 2 record](../evidence/iteration-2-three-harness-local-2026-08-25.json)
+proves that user result at the same-host local level: all three real Attempts
+succeeded, 1,066 source-linked Runtime events and sanitized native artifacts
+were retained, the Receipt was verified, and Mission head, Receipt, source
+sequences, and causal links remained stable after restart.
 
 Not implemented today:
 

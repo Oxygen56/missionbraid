@@ -14,14 +14,15 @@ configure → plan → run → observe → debug → fork → hand off → compa
 ```
 
 > **Status:** pre-alpha, local-first, and run from source. The repository
-> already implements a real Codex-to-Qoder Mission and the Iteration 2 code
-> paths for Codex, Qoder, and Claude Code execution; a root Branch; Runtime
+> already implements and locally validates a real Codex-to-Qoder-to-Claude Code
+> Mission; a root Branch; Runtime
 > Profile Definition, Catalog Observation, immutable Snapshot, and Attempt
 > Binding; source-scoped Event IR with sanitized native artifacts; and durable
-> command/outbox recovery. The integrated real three-Harness Workbench proof is
-> still pending, so Iteration 2 is not yet claimed complete. Live Context Graph
-> debugging, tool gates, executable forks, adaptive planning, and the other
-> Iteration 3+ capabilities remain target architecture.
+> command/outbox recovery. Iteration 2 is validated by a same-host real
+> Workbench Mission across all three Harnesses, including a verified Receipt
+> and stable restart restoration. Live Context Graph debugging, tool gates,
+> executable forks, adaptive planning, and the other Iteration 3+ capabilities
+> remain target architecture.
 
 ![MissionBraid local Workbench overview](docs/assets/missionbraid-workbench-overview.png)
 
@@ -35,7 +36,7 @@ configure → plan → run → observe → debug → fork → hand off → compa
 | Product           | One Workbench to configure Runtime Profiles, run a durable Mission, inspect context and tools live, pause at supported boundaries, fork from a checkpoint, switch Harnesses, compare branches, and verify the outcome.                                                                                              |
 | Core abstraction  | A **Mission** owns intent, execution branches, evidence, effects, and completion. A Harness is a replaceable Runtime.                                                                                                                                                                                               |
 | Implemented today | Bilingual local Workbench, Mission Kernel, Codex/Qoder/Claude Code execution adapters, root Branch, resolved Runtime Profiles and bindings, source-scoped Event IR with sanitized native artifacts, durable command/outbox recovery, workspace checkpoint evidence, Handoff Capsule, verifier, and Outcome Receipt. |
-| Delivery plan     | **10 major product iterations in total. Iteration 1 is complete; Iteration 2 is implemented in source but remains open until its real three-Harness Workbench proof; Iterations 3–10 are planned.**                                                                                                                 |
+| Delivery plan     | **10 major product iterations in total. Iterations 1 and 2 are implemented and validated locally; Iterations 3–10 are planned.**                                                                                                                                                                                    |
 
 ## Why this exists
 
@@ -216,38 +217,38 @@ The implemented foundation already provides:
 - out-of-process verification and hash-bound Outcome Receipts;
 - restart restoration and recovery of interrupted Missions.
 
-The current public evidence proves one same-host Codex-to-Qoder path. The
-Iteration 2 implementation is present in source, but its integrated real
-Codex/Qoder/Claude Workbench record is still pending. Current evidence does not
-prove automatic optimal routing, universal tool interception, arbitrary
-Harness compatibility, production isolation, or third-party adoption.
+The strongest current public evidence proves one same-host Workbench Mission
+across Codex, Qoder, and Claude Code, with a verified Receipt and stable restart
+restoration. It does not prove automatic routing, live tool gating, executable
+Fork/Replay, cross-host reproduction, production isolation, or third-party
+adoption.
 
 ## Runtime support today
 
-| Runtime or provider | Discovery support           | Executes Attempts | Current evidence                                      |
-| ------------------- | --------------------------- | ----------------: | ----------------------------------------------------- |
-| Codex               | Probe/catalog implemented   |               Yes | Published recovery and Codex-to-Qoder Mission         |
-| Qoder               | Probe/catalog implemented   |               Yes | Published Capsule acknowledgement and continuation    |
-| Claude Code         | Probe/catalog implemented   |               Yes | Adapter implemented; integrated Mission proof pending |
-| OpenCode            | Probe/catalog implemented   |                No | Discovery support only                                |
-| Hermes              | Probe/catalog implemented   |                No | Discovery support only                                |
-| DeepSeek Harness    | Bootstrap/catalog signal    |                No | Discovery support only                                |
-| Kandev v0.91.0      | Separate compatibility path |                No | Public task/worktree/process interfaces only          |
+| Runtime or provider | Discovery support           | Executes Attempts | Current evidence                             |
+| ------------------- | --------------------------- | ----------------: | -------------------------------------------- |
+| Codex               | Probe/catalog implemented   |               Yes | Same-host three-Harness Mission              |
+| Qoder               | Probe/catalog implemented   |               Yes | Same-host three-Harness Mission              |
+| Claude Code         | Probe/catalog implemented   |               Yes | Same-host three-Harness Mission              |
+| OpenCode            | Probe/catalog implemented   |                No | Discovery support only                       |
+| Hermes              | Probe/catalog implemented   |                No | Discovery support only                       |
+| DeepSeek Harness    | Bootstrap/catalog signal    |                No | Discovery support only                       |
+| Kandev v0.91.0      | Separate compatibility path |                No | Public task/worktree/process interfaces only |
 
 ## Ten product iterations
 
-| Iteration | User-visible result                                                                           | Status                          |
-| --------: | --------------------------------------------------------------------------------------------- | ------------------------------- |
-|         1 | A Mission survives interruption, crosses Codex → Qoder, and closes with a verified Receipt    | Implemented locally             |
-|         2 | Runtime Profiles and native events become observable through a unified Event IR               | Implemented; real proof pending |
-|         3 | Developers inspect a live execution, context assembly, tool flow, and workspace changes       | Planned                         |
-|         4 | Tool calls can stop at supported pre/post boundaries and be changed before continuation       | Planned                         |
-|         5 | Composite checkpoints support honest playback, replay, and executable branches                | Planned                         |
-|         6 | A reproducible planner selects, replans, and hands a Mission across Harnesses                 | Planned                         |
-|         7 | Failures are attributed to observable model/context/tool/Harness/environment evidence         | Planned                         |
-|         8 | Multi-Agent work becomes a durable Mission graph with revision-aware coordination             | Planned                         |
-|         9 | Branch comparison, regression cases, evaluation, and Outcome Receipts form an Incident Studio | Planned                         |
-|        10 | External developers install, extend, and reproduce the complete Runtime Workbench             | Planned                         |
+| Iteration | User-visible result                                                                           | Status              |
+| --------: | --------------------------------------------------------------------------------------------- | ------------------- |
+|         1 | A Mission survives interruption, crosses Codex → Qoder, and closes with a verified Receipt    | Implemented locally |
+|         2 | Runtime Profiles and native events become observable through a unified Event IR               | Validated locally   |
+|         3 | Developers inspect a live execution, context assembly, tool flow, and workspace changes       | Planned             |
+|         4 | Tool calls can stop at supported pre/post boundaries and be changed before continuation       | Planned             |
+|         5 | Composite checkpoints support honest playback, replay, and executable branches                | Planned             |
+|         6 | A reproducible planner selects, replans, and hands a Mission across Harnesses                 | Planned             |
+|         7 | Failures are attributed to observable model/context/tool/Harness/environment evidence         | Planned             |
+|         8 | Multi-Agent work becomes a durable Mission graph with revision-aware coordination             | Planned             |
+|         9 | Branch comparison, regression cases, evaluation, and Outcome Receipts form an Incident Studio | Planned             |
+|        10 | External developers install, extend, and reproduce the complete Runtime Workbench             | Planned             |
 
 Each iteration ends in one real Workbench workflow, not an isolated schema,
 adapter, or test suite. See the [detailed roadmap](docs/roadmap.md).
@@ -301,20 +302,31 @@ in [Reproducing Evidence](docs/reproducing-evidence.md).
 ## Evidence
 
 The
-[flagship machine-readable record](evidence/unified-workbench-codex-qoder-local-2026-08-24.json)
-binds one clean public-clone run to:
+[Iteration 2 machine-readable record](evidence/iteration-2-three-harness-local-2026-08-25.json)
+binds a clean revision to:
 
-- one Mission submitted through the Workbench;
-- real Codex and Qoder Attempts with distinct workspace changes;
-- target acknowledgement before mutation;
-- 12 passing target tests;
-- a 26-event verified Receipt;
-- restoration of the same Mission and Receipt after restart.
+- one Mission submitted through the normal local Workbench API with no
+  user-authored Mission YAML or manual cross-Harness context transfer;
+- successful real Codex, Qoder, and Claude Code Attempts on one root Branch;
+- Profile Definitions, Catalog Observations, immutable Snapshots, and Attempt
+  Bindings for the three Runtimes;
+- 1,066 source-scoped Runtime events and 1,066 sanitized native artifacts;
+- two cooperative Handoff acknowledgements whose native source events precede
+  each target's first observed tool-request event; this is ordering evidence,
+  not a live tool gate;
+- a verified Receipt and stable Mission head, Receipt, source sequences, and
+  causal links after Workbench restart.
 
-All current records are local and same-host. The Iteration 2 same-host record
-will be added only after the normal Workbench completes and restores a real
-Codex/Qoder/Claude Mission. The [evidence index](evidence/README.md) keeps that
-pending proof separate from implemented source and target architecture.
+The earlier
+[Codex-to-Qoder record](evidence/unified-workbench-codex-qoder-local-2026-08-24.json)
+retains a matching source-checkpoint/target-baseline workspace snapshot and
+distinct before/after workspace digests; it is not used to claim an enforced
+pre-mutation gate.
+
+All current records are local and same-host. The [evidence
+index](evidence/README.md) keeps demonstrated results separate from target
+architecture. These records do not prove live tool gating, automatic routing,
+executable Fork/Replay, cross-host reproduction, or production readiness.
 
 ## Documentation
 

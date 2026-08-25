@@ -305,8 +305,9 @@ Acceptance:
   and provenance;
 - the target Profile receives a compatibility report for exact, emulated,
   summarized, rebound, unavailable, and blocking state;
-- the target acknowledges critical identifiers before its mutation counts as a
-  continuation;
+- the target cooperatively acknowledges critical identifiers, and the product
+  records its native source order relative to the first observed tool request;
+  only an enforced Adapter gate may claim that mutation was prevented;
 - the original Branch remains inspectable;
 - the product describes this as semantic continuation, not hidden-state or
   process migration.
@@ -511,12 +512,14 @@ The repository currently provides:
 - application-restart restoration.
 
 The strongest current evidence is indexed in
-[evidence/README.md](../evidence/README.md). It is a same-host Codex-to-Qoder
-result. The Iteration 2 implementation above still needs one integrated real
-Codex/Qoder/Claude Workbench run, source-linked Event IR/native artifacts, a
-Receipt, and restart restoration before Iteration 2 can be called complete. It
-is not evidence for the target Context Graph debugger, replay, planner, broad
-Adapter matrix, third-party installation, or production use.
+[evidence/README.md](../evidence/README.md). The Iteration 2 record is a
+same-host real Codex/Qoder/Claude Workbench result with successful Attempts,
+source-linked Event IR/native artifacts, a verified Receipt, and stable restart
+restoration. Its Handoff result is cooperative native-source ordering before
+the first observed tool request, not an enforced tool gate. It is not evidence
+for the target Context Graph debugger, automatic planner, executable
+Fork/Replay, broad Adapter matrix, cross-host or third-party reproduction, or
+production use.
 
 ## Scope and claim boundaries
 

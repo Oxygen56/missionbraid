@@ -13,13 +13,12 @@ Workbench（运行时工作台）**。它把 Codex、Qoder、Claude Code、OpenC
 ```
 
 > **状态：** pre-alpha、本地优先、从源码运行。仓库目前已经实现一条真实的
-> Codex-to-Qoder Mission，以及第 2 次迭代的源码实现：Codex、Qoder 和
-> Claude Code 执行 Adapter；Root Branch；Runtime Profile Definition、Catalog
+> Codex-to-Qoder-to-Claude Code Mission；Root Branch；Runtime Profile Definition、Catalog
 > Observation、不可变 Snapshot 和 Attempt Binding；按来源定序的 Event IR
 > 与脱敏 Native Artifact；以及可在重启后继续的持久 Command/Outbox。
-> 集成后的真实三 Harness Workbench 证据仍在待验证，因此现在还不声称第 2
-> 次迭代已完成。Context Graph 实时调试、工具拦截、可执行 Fork、自适应规划和
-> 其他第 3 次以后的能力仍是目标架构。
+> 第 2 次迭代已经通过一条跨越三个 Harness 的同机真实 Workbench Mission
+> 验证，包括已验证 Receipt 和重启后的稳定恢复。Context Graph 实时调试、工具拦截、
+> 可执行 Fork、自适应规划和其他第 3 次以后的能力仍是目标架构。
 
 ![MissionBraid 本地 Workbench 总览](docs/assets/missionbraid-workbench-overview.png)
 
@@ -33,7 +32,7 @@ Workbench（运行时工作台）**。它把 Codex、Qoder、Claude Code、OpenC
 | 产品         | 用一个 Workbench 配置 Runtime Profile、运行持久 Mission、实时检查上下文和工具、在支持的边界暂停、从 Checkpoint 分叉、切换 Harness、对比 Branch，并验收结果。                                                                                                               |
 | 核心抽象     | **Mission** 持有目标、执行 Branch、证据、Effect 和完成状态；Harness 只是可替换的 Runtime。                                                                                                                                                                                 |
 | 当前已经实现 | 双语本地 Workbench、Mission Kernel、Codex/Qoder/Claude Code 执行 Adapter、Root Branch、已解析的 Runtime Profile 与 Binding、按来源定序的 Event IR 与脱敏 Native Artifact、持久 Command/Outbox 恢复、工作区 Checkpoint 证据、Handoff Capsule、Verifier 和 Outcome Receipt。 |
-| 交付计划     | **共 10 次主要产品迭代。第 1 次已完成；第 2 次已有源码实现，但要等真实三 Harness Workbench 证据后才能完成；第 3–10 次已规划。**                                                                                                                                            |
+| 交付计划     | **共 10 次主要产品迭代。第 1、2 次已在本地实现并验证；第 3–10 次已规划。**                                                                                                                                                                                                 |
 
 ## 为什么要做 MissionBraid
 
@@ -188,36 +187,36 @@ Kandev 可以通过公开的 Provider 边界，为成熟的工作区和进程执
 - 进程外验收和 Hash 绑定的 Outcome Receipt；
 - 重启后的状态恢复，以及中断 Mission 的继续运行。
 
-当前公开证据只证明一条同一台机器上的 Codex-to-Qoder 路径。第 2 次迭代的源码已实现，
-但集成后的真实 Codex/Qoder/Claude Workbench 记录仍在待验证。当前证据不证明自动最优路由、
-通用工具拦截、任意 Harness 兼容、生产级隔离或第三方采用。
+当前最强的公开证据证明了一条同机 Workbench Mission 跨越 Codex、Qoder 和
+Claude Code，得到已验证 Receipt，并在重启后稳定恢复。它不证明自动路由、实时工具拦截、
+可执行 Fork/Replay、跨主机复现、生产级隔离或第三方采用。
 
 ## 当前 Runtime 支持情况
 
-| Runtime 或 Provider | 发现支持           | 执行 Attempt | 当前证据                                |
-| ------------------- | ------------------ | -----------: | --------------------------------------- |
-| Codex               | 已实现探测/清单    |           是 | 已发布的恢复与 Codex-to-Qoder Mission   |
-| Qoder               | 已实现探测/清单    |           是 | 已发布的 Capsule 确认与继续执行         |
-| Claude Code         | 已实现探测/清单    |           是 | Adapter 已实现；集成 Mission 证据待验证 |
-| OpenCode            | 已实现探测/清单    |           否 | 仅支持发现                              |
-| Hermes              | 已实现探测/清单    |           否 | 仅支持发现                              |
-| DeepSeek Harness    | Bootstrap/清单信号 |           否 | 仅支持发现                              |
-| Kandev v0.91.0      | 独立兼容路径       |           否 | 只验证公开 Task/Worktree/Process 接口   |
+| Runtime 或 Provider | 发现支持           | 执行 Attempt | 当前证据                              |
+| ------------------- | ------------------ | -----------: | ------------------------------------- |
+| Codex               | 已实现探测/清单    |           是 | 同机三 Harness Mission                |
+| Qoder               | 已实现探测/清单    |           是 | 同机三 Harness Mission                |
+| Claude Code         | 已实现探测/清单    |           是 | 同机三 Harness Mission                |
+| OpenCode            | 已实现探测/清单    |           否 | 仅支持发现                            |
+| Hermes              | 已实现探测/清单    |           否 | 仅支持发现                            |
+| DeepSeek Harness    | Bootstrap/清单信号 |           否 | 仅支持发现                            |
+| Kandev v0.91.0      | 独立兼容路径       |           否 | 只验证公开 Task/Worktree/Process 接口 |
 
 ## 十次产品迭代
 
-| 迭代 | 用户可见结果                                                                  | 状态                   |
-| ---: | ----------------------------------------------------------------------------- | ---------------------- |
-|    1 | 一条 Mission 能从中断中恢复，完成 Codex → Qoder 接力，并以已验证 Receipt 结束 | 本地已实现             |
-|    2 | Runtime Profile 和 Native 事件通过统一 Event IR 变得可观察                    | 已实现；真实证据待验证 |
-|    3 | 开发者可以检查实时执行、上下文组装、工具流和工作区变更                        | 已规划                 |
-|    4 | 工具调用可以在支持的前/后边界停止，并在继续前修改                             | 已规划                 |
-|    5 | Composite Checkpoint 支持诚实的 Playback、Replay 和可执行 Branch              | 已规划                 |
-|    6 | 可复现的 Planner 选择 Runtime、重新规划，并让 Mission 跨 Harness 接力         | 已规划                 |
-|    7 | 使用可观察的模型/上下文/工具/Harness/环境证据归因故障                         | 已规划                 |
-|    8 | Multi-Agent 工作成为持久 Mission Graph，并支持理解修订的协同                  | 已规划                 |
-|    9 | Branch 对比、Regression Case、Eval 和 Outcome Receipt 组成 Incident Studio    | 已规划                 |
-|   10 | 外部开发者可以安装、扩展并复现完整 Runtime Workbench                          | 已规划                 |
+| 迭代 | 用户可见结果                                                                  | 状态       |
+| ---: | ----------------------------------------------------------------------------- | ---------- |
+|    1 | 一条 Mission 能从中断中恢复，完成 Codex → Qoder 接力，并以已验证 Receipt 结束 | 本地已实现 |
+|    2 | Runtime Profile 和 Native 事件通过统一 Event IR 变得可观察                    | 本地已验证 |
+|    3 | 开发者可以检查实时执行、上下文组装、工具流和工作区变更                        | 已规划     |
+|    4 | 工具调用可以在支持的前/后边界停止，并在继续前修改                             | 已规划     |
+|    5 | Composite Checkpoint 支持诚实的 Playback、Replay 和可执行 Branch              | 已规划     |
+|    6 | 可复现的 Planner 选择 Runtime、重新规划，并让 Mission 跨 Harness 接力         | 已规划     |
+|    7 | 使用可观察的模型/上下文/工具/Harness/环境证据归因故障                         | 已规划     |
+|    8 | Multi-Agent 工作成为持久 Mission Graph，并支持理解修订的协同                  | 已规划     |
+|    9 | Branch 对比、Regression Case、Eval 和 Outcome Receipt 组成 Incident Studio    | 已规划     |
+|   10 | 外部开发者可以安装、扩展并复现完整 Runtime Workbench                          | 已规划     |
 
 每次迭代都必须结束于一条真实的 Workbench 用户流程，而不是孤立的 Schema、Adapter 或测试套件。
 详见[迭代路线](docs/roadmap.md)。
@@ -265,19 +264,20 @@ Complete the dependency-free JSONL Effect Ledger in this disposable repository. 
 
 ## 证据
 
-[旗舰机器可读记录](evidence/unified-workbench-codex-qoder-local-2026-08-24.json)将一次
-干净公开 Clone 的运行绑定到：
+[第 2 次迭代机器可读记录](evidence/iteration-2-three-harness-local-2026-08-25.json)
+将一个干净修订绑定到：
 
-- 通过 Workbench 提交的一条 Mission；
-- 真实的 Codex 和 Qoder Attempt，并且二者产生了不同的工作区变更；
-- 在修改前完成的目标 Runtime 确认；
-- 12 项通过的目标测试；
-- 一张由 26 个事件组成的已验证 Receipt；
-- 重启后恢复同一条 Mission 和 Receipt。
+- 通过正常本地 Workbench API 提交的一条 Mission，没有手写 Mission YAML 或手工跨 Harness 搬运上下文；
+- 同一条 Root Branch 上成功运行的真实 Codex、Qoder 和 Claude Code Attempt；
+- 三个 Runtime 的 Profile Definition、Catalog Observation、不可变 Snapshot 和 Attempt Binding；
+- 1,066 个按来源定序的 Runtime 事件和 1,066 个脱敏 Native Artifact；
+- 两次协作式 Handoff 确认，其 Native 来源事件都早于对应目标的第一个已观察 Tool Request 事件；这是顺序证据，不是实时工具拦截；
+- 已验证 Receipt，以及 Workbench 重启后稳定的 Mission Head、Receipt、来源序列和因果链接。
 
-目前所有记录均来自本地同一台机器。只有当正常 Workbench 完成并重启恢复一条真实的
-Codex/Qoder/Claude Mission 后，才会加入第 2 次迭代的同机证据记录。[证据索引](evidence/README.md)
-会把这项待验证证据与已实现源码、目标架构严格分开。
+早期的 [Codex-to-Qoder 记录](evidence/unified-workbench-codex-qoder-local-2026-08-24.json)
+保留了相匹配的源 Checkpoint/目标 Baseline 工作区快照，以及不同的前后工作区 Digest；本项目不用它声称已实现受强制的修改前拦截。
+
+目前所有记录都是本地同机结果。[证据索引](evidence/README.md)严格区分已经演示的结果与目标架构。这些记录不证明实时工具拦截、自动路由、可执行 Fork/Replay、跨主机复现或生产就绪。
 
 ## 文档
 

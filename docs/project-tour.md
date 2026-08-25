@@ -211,9 +211,10 @@ sequenceDiagram
   S-->>UI: Rebuild timeline and result
 ```
 
-This proves the Mission can outlive a process and cross one real Runtime
-boundary. It does not yet provide the target live debugger, executable
-time-travel branches, adaptive planner, or general failure attribution.
+The Iteration 1 flow above proves the Mission can outlive a process and cross
+one real Runtime boundary. It does not yet provide the target live debugger,
+executable time-travel branches, adaptive planner, or general failure
+attribution.
 
 Iteration 2 is now implemented in source:
 
@@ -231,10 +232,14 @@ Iteration 2 is now implemented in source:
 - the Workbench can switch between English and Chinese and remembers the local
   browser choice.
 
-This implementation is not yet an Iteration 2 completion claim. The remaining
-gate is a retained real Workbench record in which Codex, Qoder, and Claude Code
-execute one Mission, produce source-linked events and native artifacts, reach a
-Receipt, and restore the same result after restart.
+The [retained Iteration 2 record](../evidence/iteration-2-three-harness-local-2026-08-25.json)
+validates this slice at the same-host local level. Codex, Qoder, and Claude Code
+all completed successful real Attempts; 1,066 source-linked Runtime events and
+sanitized native artifacts were retained; the Receipt was verified; and the
+Mission head, Receipt, source sequences, and causal links remained stable after
+restart. The two Handoff acknowledgements precede their target's first observed
+tool-request event in the native source stream. This is cooperative ordering
+evidence, not an enforced live tool gate.
 
 ## What is authoritative?
 
@@ -290,24 +295,30 @@ Direct local adapters remain supported.
 
 ## Verified foundation
 
-The strongest current record is bound to a clean public clone:
+The strongest current record is bound to clean revision `d14201b`:
 
-- one Mission was submitted through the Workbench without a hand-written
-  Mission file;
-- real Codex and Qoder Profiles ran ordered Attempts;
-- both made distinct workspace changes;
-- Qoder acknowledged the Capsule before mutation;
-- the declared `node --test` verifier passed 12 target tests;
-- the 26-event chain issued a Receipt with no unresolved item;
-- a new Workbench process restored the same Mission and Receipt.
+- one Mission was submitted through the normal local Workbench API without a
+  hand-written Mission file or manual context transfer;
+- real Codex, Qoder, and Claude Code Profiles ran successful ordered Attempts
+  on one root Branch;
+- 1,066 Runtime events retained source order, Mission ingest order, causal
+  links, and sanitized native artifacts;
+- both cooperative Handoff acknowledgements precede the target's first observed
+  tool-request event in its native source stream;
+- the Receipt was verified with no unresolved item;
+- a new Workbench process restored the same Mission head, Receipt, source
+  sequences, and causal links.
 
-See the
-[machine-readable record](../evidence/unified-workbench-codex-qoder-local-2026-08-24.json)
-and [evidence index](../evidence/README.md).
+See the [Iteration 2 machine-readable
+record](../evidence/iteration-2-three-harness-local-2026-08-25.json) and
+[evidence index](../evidence/README.md).
 
-This is local, same-host evidence for one controlled path. It is not evidence of
-automatic routing, broad Harness compatibility, production isolation,
-third-party reproduction, or adoption.
+The earlier [Codex-to-Qoder
+record](../evidence/unified-workbench-codex-qoder-local-2026-08-24.json) retains
+a matching source-checkpoint/target-baseline workspace snapshot and distinct
+before/after workspace digests. Neither record proves an enforced pre-tool
+gate. Both are local same-host evidence, not automatic routing, executable
+Fork/Replay, cross-host reproduction, production isolation, or adoption.
 
 ## Code map for the current foundation
 
@@ -328,10 +339,9 @@ third-party reproduction, or adoption.
 ## What happens next
 
 MissionBraid has **ten major product iterations**. The foundation above is
-Iteration 1. Iteration 2 has been implemented in source and next needs its
-integrated real three-Harness Workbench proof. Iterations 3–10 then add live
-debugging, honest execution forks, adaptive handoff, failure intelligence,
-multi-Agent Mission graphs, evaluation, and an open Adapter SDK.
+Iteration 1; Iteration 2 is now implemented and validated locally. Iterations
+3–10 next add live debugging, honest execution forks, adaptive handoff, failure
+intelligence, multi-Agent Mission graphs, evaluation, and an open Adapter SDK.
 
 Continue with the [product requirements](product-requirements.md),
 [architecture](architecture.md), [roadmap](roadmap.md), and
