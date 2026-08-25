@@ -248,11 +248,11 @@ try {
     continuity: {
       attempts: completed.attempts,
       handoffAcknowledgements,
-      everyHandoffAcknowledgedBeforeControlledAction:
+      everyHandoffOrderingEstablished:
         handoffAcknowledgements.length === 2 &&
         handoffAcknowledgements.every(
           (acknowledgement) =>
-            acknowledgement.beforeControlledAction === true &&
+            acknowledgement.handoffOrderingEstablished === true &&
             typeof acknowledgement.orderingEvidence === 'string' &&
             acknowledgement.orderingEvidence !== 'unknown',
         ),

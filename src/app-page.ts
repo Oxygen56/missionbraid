@@ -2721,8 +2721,11 @@ function timelineDescription(entry) {
     return t('timeline.description.handoffPrepared');
   }
   if (entry.kind === 'handoff.acknowledged') {
-    return data.beforeMutation === false
-      ? t('timeline.description.handoffAcknowledgedLate')
+    if (data.handoffOrderingEstablished === false || data.beforeMutation === false) {
+      return t('timeline.description.handoffAcknowledgedLate');
+    }
+    return data.orderingEvidence === 'native-source-before-tool-request'
+      ? t('timeline.description.handoffAcknowledgedNativeOrder')
       : t('timeline.description.handoffAcknowledged');
   }
   if (entry.kind === 'effect.recorded') {

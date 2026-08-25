@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 import { NativeArtifactStore, sanitizeNativeArtifact } from './artifact-store.js';
 import {
-  mutationCapableToolRequestName,
+  nativeToolRequestName,
   nativeEventIdentityIds,
   nativeParentCorrelationIds,
   normalizeRuntimeOutput,
@@ -96,21 +96,22 @@ describe('native runtime evidence', () => {
       sourceSequence: 6,
       runtimeEventId: 'runtime-event-ack',
     };
-    const firstMutationRequest = {
+    const firstToolRequest = {
       sourceId: acknowledgement.sourceId,
       sourceSequence: 7,
       runtimeEventId: 'runtime-event-write',
     };
 
     expect(
-      mutationCapableToolRequestName({
+      nativeToolRequestName({
         type: 'assistant',
         message: { content: [{ type: 'tool_use', name: 'Write' }] },
       }),
     ).toBe('Write');
-    expect(resolveCooperativeHandoffOrdering(acknowledgement, firstMutationRequest, false)).toEqual(
-      { accepted: true, evidence: 'native-source-before-mutation-tool' },
-    );
+    expect(resolveCooperativeHandoffOrdering(acknowledgement, firstToolRequest, false)).toEqual({
+      accepted: true,
+      evidence: 'native-source-before-tool-request',
+    });
   });
 
   it('rejects an acknowledgement that follows a native mutation-capable request', () => {
@@ -121,7 +122,26 @@ describe('native runtime evidence', () => {
         { sourceId, sourceSequence: 7, runtimeEventId: 'runtime-event-write' },
         true,
       ),
-    ).toEqual({ accepted: false, evidence: 'native-source-not-before-mutation-tool' });
+    ).toEqual({ accepted: false, evidence: 'native-source-not-before-tool-request' });
+  });
+
+  it('treats unknown and cross-source tool requests as ordering barriers', () => {
+    expect(nativeToolRequestName({ type: 'tool_call' })).toBe('unknown-tool');
+    expect(
+      resolveCooperativeHandoffOrdering(
+        {
+          sourceId: 'attempt-1:claude:claude-stream-json:stdout',
+          sourceSequence: 2,
+          runtimeEventId: 'runtime-event-ack',
+        },
+        {
+          sourceId: 'attempt-1:claude:claude-stream-json:stderr',
+          sourceSequence: 1,
+          runtimeEventId: 'runtime-event-tool',
+        },
+        true,
+      ),
+    ).toEqual({ accepted: false, evidence: 'unknown' });
   });
 
   it('falls back to the workspace snapshot when native source ordering is unavailable', () => {

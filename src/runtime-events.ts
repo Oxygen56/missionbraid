@@ -27,8 +27,8 @@ export interface RuntimeSourcePosition {
 
 export type CooperativeHandoffOrderingEvidence =
   | 'workspace-snapshot'
-  | 'native-source-before-mutation-tool'
-  | 'native-source-not-before-mutation-tool'
+  | 'native-source-before-tool-request'
+  | 'native-source-not-before-tool-request'
   | 'unknown';
 
 export interface CooperativeHandoffOrdering {
@@ -95,12 +95,11 @@ export function nativeParentCorrelationIds(value: unknown): string[] {
 }
 
 /**
- * Finds the first native request for a tool that can mutate the workspace.
- * Shell-like tools are intentionally classified as mutation-capable because
- * their command text cannot be treated as a reliable effect boundary here.
+ * Finds a native tool request without guessing whether an unknown tool is
+ * read-only. Every tool request is an ordering barrier for cooperative handoff.
  */
-export function mutationCapableToolRequestName(value: unknown): string | undefined {
-  return findMutationCapableToolRequest(value, new WeakSet<object>(), 0);
+export function nativeToolRequestName(value: unknown): string | undefined {
+  return findNativeToolRequest(value, new WeakSet<object>(), 0);
 }
 
 /**
@@ -110,17 +109,17 @@ export function mutationCapableToolRequestName(value: unknown): string | undefin
  */
 export function resolveCooperativeHandoffOrdering(
   acknowledgement: RuntimeSourcePosition | undefined,
-  firstMutationRequest: RuntimeSourcePosition | undefined,
+  firstToolRequest: RuntimeSourcePosition | undefined,
   workspaceUnchangedAtObservation: boolean,
 ): CooperativeHandoffOrdering {
   if (acknowledgement === undefined) return { accepted: false, evidence: 'unknown' };
-  if (
-    firstMutationRequest !== undefined &&
-    acknowledgement.sourceId === firstMutationRequest.sourceId
-  ) {
-    return acknowledgement.sourceSequence < firstMutationRequest.sourceSequence
-      ? { accepted: true, evidence: 'native-source-before-mutation-tool' }
-      : { accepted: false, evidence: 'native-source-not-before-mutation-tool' };
+  if (firstToolRequest !== undefined) {
+    if (acknowledgement.sourceId !== firstToolRequest.sourceId) {
+      return { accepted: false, evidence: 'unknown' };
+    }
+    return acknowledgement.sourceSequence < firstToolRequest.sourceSequence
+      ? { accepted: true, evidence: 'native-source-before-tool-request' }
+      : { accepted: false, evidence: 'native-source-not-before-tool-request' };
   }
   if (workspaceUnchangedAtObservation) {
     return { accepted: true, evidence: 'workspace-snapshot' };
@@ -140,23 +139,7 @@ function nativeType(line: RuntimeOutputLine): string {
   return `${line.stream}.json`;
 }
 
-const MUTATION_CAPABLE_TOOL_NAMES = new Set([
-  'apply_patch',
-  'bash',
-  'computer',
-  'edit',
-  'exec',
-  'exec_command',
-  'execute',
-  'multiedit',
-  'notebookedit',
-  'shell',
-  'terminal',
-  'write',
-  'write_file',
-]);
-
-function findMutationCapableToolRequest(
+function findNativeToolRequest(
   value: unknown,
   seen: WeakSet<object>,
   depth: number,
@@ -166,7 +149,7 @@ function findMutationCapableToolRequest(
   seen.add(value);
   if (Array.isArray(value)) {
     for (const member of value) {
-      const nested = findMutationCapableToolRequest(member, seen, depth + 1);
+      const nested = findNativeToolRequest(member, seen, depth + 1);
       if (nested !== undefined) return nested;
     }
     return undefined;
@@ -183,14 +166,15 @@ function findMutationCapableToolRequest(
     (candidate): candidate is string => typeof candidate === 'string',
   );
   if (
-    name !== undefined &&
-    (type === 'tool_use' || type === 'tool_call' || type === 'function_call') &&
-    MUTATION_CAPABLE_TOOL_NAMES.has(name.toLowerCase())
+    type === 'tool_use' ||
+    type === 'tool_call' ||
+    type === 'function_call' ||
+    type === 'tool_request'
   ) {
-    return name;
+    return name ?? 'unknown-tool';
   }
   for (const nestedValue of Object.values(record)) {
-    const nested = findMutationCapableToolRequest(nestedValue, seen, depth + 1);
+    const nested = findNativeToolRequest(nestedValue, seen, depth + 1);
     if (nested !== undefined) return nested;
   }
   return undefined;

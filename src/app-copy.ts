@@ -132,9 +132,11 @@ const EN_COPY = {
   'timeline.description.handoffPrepared':
     'The control plane projected the objective, constraints, workspace summary, and remaining work into a Capsule.',
   'timeline.description.handoffAcknowledgedLate':
-    'The target Runtime did not establish Capsule acknowledgement before its first observable mutation action.',
+    'Cooperative Capsule acknowledgement ordering could not be established.',
+  'timeline.description.handoffAcknowledgedNativeOrder':
+    'Native source order shows the Capsule acknowledgement before the first observed tool request.',
   'timeline.description.handoffAcknowledged':
-    'The target Runtime acknowledged the same Capsule before its first observable mutation action.',
+    'The workspace was unchanged when the target Runtime acknowledged the same Capsule.',
   'timeline.description.effectRecorded':
     'The mutable workspace action received an identity before the Runtime executed it.',
   'timeline.description.effectStatus': 'Current Effect status: {status}.',
@@ -412,10 +414,11 @@ const ZH_CN_COPY = {
     '工作区状态已冻结，后续 Runtime 将从这条可验证边界继续。',
   'timeline.description.handoffPrepared':
     '控制面已把目标、约束、工作区摘要和剩余工作投影为 Capsule。',
-  'timeline.description.handoffAcknowledgedLate':
-    '目标 Runtime 未能证明在第一个可观察的变更动作前确认 Capsule。',
+  'timeline.description.handoffAcknowledgedLate': '无法建立 Capsule 协作式确认的顺序证据。',
+  'timeline.description.handoffAcknowledgedNativeOrder':
+    '原生事件顺序表明：Capsule 确认早于第一个已观察的工具请求。',
   'timeline.description.handoffAcknowledged':
-    '目标 Runtime 已在第一个可观察的变更动作前确认同一 Capsule。',
+    '目标 Runtime 确认同一 Capsule 时，工作区快照尚未变化。',
   'timeline.description.effectRecorded': '可变工作区动作已先登记身份，再交给 Runtime 执行。',
   'timeline.description.effectStatus': 'Effect 当前状态：{status}。',
   'timeline.description.verificationPassed': '原始完成判据已通过。',

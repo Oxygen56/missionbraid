@@ -50,7 +50,7 @@ import {
 } from './spec.js';
 import { hashPayload, MissionStore } from './store.js';
 import {
-  mutationCapableToolRequestName,
+  nativeToolRequestName,
   nativeEventIdentityIds,
   nativeParentCorrelationIds,
   normalizeRuntimeOutput,
@@ -818,10 +818,10 @@ export class MissionEngine {
     const outputHash = createHash('sha256');
     let outputLines = 0;
     let acknowledged = capsule === undefined;
-    let acknowledgementBeforeMutation = capsule === undefined;
+    let handoffOrderingEstablished = capsule === undefined;
     let acknowledgementId: string | undefined;
     let acknowledgementPosition: RuntimeSourcePosition | undefined;
-    let firstMutationRequest: RuntimeSourcePosition | undefined;
+    let firstToolRequest: RuntimeSourcePosition | undefined;
     let workspaceUnchangedAtAcknowledgement = capsule === undefined;
     let acknowledgementOrderingEvidence = capsule === undefined ? 'not-required' : 'unknown';
     let runtimeFailure: RuntimeFailureObservation | undefined;
@@ -861,11 +861,8 @@ export class MissionEngine {
       for (const nativeIdentity of nativeEventIdentityIds(line.value)) {
         runtimeEventIdByNativeIdentity.set(nativeIdentity, runtimeEvent.runtimeEventId);
       }
-      if (
-        firstMutationRequest === undefined &&
-        mutationCapableToolRequestName(line.value) !== undefined
-      ) {
-        firstMutationRequest = {
+      if (firstToolRequest === undefined && nativeToolRequestName(line.value) !== undefined) {
+        firstToolRequest = {
           sourceId: runtimeEvent.sourceId,
           sourceSequence: runtimeEvent.sourceSequence,
           runtimeEventId: runtimeEvent.runtimeEventId,
@@ -922,10 +919,10 @@ export class MissionEngine {
     if (capsule !== undefined) {
       const ordering = resolveCooperativeHandoffOrdering(
         acknowledgementPosition,
-        firstMutationRequest,
+        firstToolRequest,
         workspaceUnchangedAtAcknowledgement,
       );
-      acknowledgementBeforeMutation = ordering.accepted;
+      handoffOrderingEstablished = ordering.accepted;
       acknowledgementOrderingEvidence = ordering.evidence;
       if (
         acknowledged &&
@@ -939,12 +936,11 @@ export class MissionEngine {
             acknowledgementId,
             capsuleId: capsule.capsuleId,
             checkpointId: capsule.checkpoint.checkpointId,
-            beforeMutation: acknowledgementBeforeMutation,
-            beforeControlledAction: acknowledgementBeforeMutation,
+            handoffOrderingEstablished,
             workspaceUnchangedAtObservation: workspaceUnchangedAtAcknowledgement,
             orderingEvidence: acknowledgementOrderingEvidence,
             acknowledgementRuntimeEventId: acknowledgementPosition.runtimeEventId,
-            firstMutationRuntimeEventId: firstMutationRequest?.runtimeEventId ?? null,
+            firstToolRequestRuntimeEventId: firstToolRequest?.runtimeEventId ?? null,
           },
           fence,
           attemptId,
@@ -955,8 +951,7 @@ export class MissionEngine {
     const after = snapshotGitWorkspace(spec.workspace);
     const delta = createStageWorkspaceDelta(before, after);
     const processSucceeded = processResultSucceeded(runtimeResult);
-    const handoffAccepted =
-      capsule === undefined || (acknowledged && acknowledgementBeforeMutation);
+    const handoffAccepted = capsule === undefined || (acknowledged && handoffOrderingEstablished);
     const attemptSucceeded = processSucceeded && handoffAccepted;
     const canHandOff =
       !runtimeResult.process.aborted &&
@@ -1011,13 +1006,12 @@ export class MissionEngine {
         outputSha256: outputHash.digest('hex'),
         outputLines,
         acknowledged,
-        acknowledgementBeforeMutation,
-        acknowledgementBeforeControlledAction: acknowledgementBeforeMutation,
+        handoffOrderingEstablished,
         workspaceUnchangedAtAcknowledgement,
         acknowledgementOrderingEvidence,
         acknowledgementId: acknowledgementId ?? null,
         acknowledgementRuntimeEventId: acknowledgementPosition?.runtimeEventId ?? null,
-        firstMutationRuntimeEventId: firstMutationRequest?.runtimeEventId ?? null,
+        firstToolRequestRuntimeEventId: firstToolRequest?.runtimeEventId ?? null,
       },
       fence,
       attemptId,
@@ -1058,7 +1052,7 @@ export class MissionEngine {
                 runtimeResult,
                 capsule !== undefined,
                 acknowledged,
-                acknowledgementBeforeMutation,
+                handoffOrderingEstablished,
                 runtimeFailure,
               ),
         },
@@ -1074,7 +1068,7 @@ export class MissionEngine {
         runtimeResult,
         capsule !== undefined,
         acknowledged,
-        acknowledgementBeforeMutation,
+        handoffOrderingEstablished,
         runtimeFailure,
       ),
       fence,
@@ -2058,7 +2052,7 @@ function failureSummary(
   result: RuntimeRunResult,
   acknowledgementRequired: boolean,
   acknowledged: boolean,
-  acknowledgementBeforeMutation: boolean,
+  handoffOrderingEstablished: boolean,
   runtimeFailure?: RuntimeFailureObservation,
 ): string {
   if (runtimeFailure?.code === 'CREDIT_LIMIT') return 'Qoder account credit limit reached';
@@ -2071,8 +2065,8 @@ function failureSummary(
     return `Runtime process exited with ${String(result.process.exitCode)}`;
   if (acknowledgementRequired && !acknowledged)
     return 'Target runtime did not acknowledge the Handoff Capsule';
-  if (acknowledgementRequired && !acknowledgementBeforeMutation)
-    return 'Target runtime did not establish acknowledgement before its first controlled mutation action';
+  if (acknowledgementRequired && !handoffOrderingEstablished)
+    return 'Target runtime did not establish cooperative Handoff Capsule acknowledgement ordering';
   return 'Runtime attempt did not satisfy the execution contract';
 }
 
