@@ -225,6 +225,70 @@ describe('MissionEngine', () => {
     }
   });
 
+  it('creates a complete restorable Checkpoint from a stopped clean Attempt and restores it after restart', async () => {
+    const fixture = await createFixture('claude');
+    const adapters = () => ({
+      claudeAdapter: new ClaudeAdapter({ command: fixture.claude }),
+    });
+    const engine = new MissionEngine({ stateDir: fixture.stateDir, ...adapters() });
+    const result = await engine.run(fixture.missionFile, { workspace: fixture.workspace });
+    expect(result.status).toBe('succeeded');
+    execFileSync('git', ['add', 'claude.txt'], { cwd: fixture.workspace });
+    execFileSync(
+      'git',
+      [
+        '-c',
+        'user.name=MissionBraid',
+        '-c',
+        'user.email=fixture@example.invalid',
+        'commit',
+        '-qm',
+        'agent revision boundary',
+      ],
+      { cwd: fixture.workspace },
+    );
+    const attemptId = result.receipt?.attemptIds?.[0];
+    expect(attemptId).toBeDefined();
+    const checkpoint = await engine.createCompositeCheckpoint(result.missionId, attemptId);
+    expect(checkpoint).toMatchObject({
+      source: {
+        missionId: result.missionId,
+        branchId: result.receipt?.branchId,
+        attemptId,
+      },
+      workspace: {
+        state: 'restorable-artifact',
+        artifactRef: expect.stringMatching(/^git-commit:[0-9a-f]{40,64}$/),
+        artifactDigest: expect.stringMatching(/^git-tree:[0-9a-f]{40,64}$/),
+      },
+      process: { status: 'stopped' },
+      nativeSession: { status: 'unavailable', harness: 'claude' },
+    });
+    expect(new Set(checkpoint.components.map((component) => component.component)).size).toBe(12);
+    expect(
+      engine
+        .timeline(result.missionId)
+        .some(
+          (entry) =>
+            entry.kind === 'composite-checkpoint.created' &&
+            entry.data !== null &&
+            entry.data !== undefined &&
+            !Array.isArray(entry.data) &&
+            typeof entry.data === 'object' &&
+            entry.data.checkpointId === checkpoint.checkpointId,
+        ),
+    ).toBe(true);
+    engine.close();
+
+    const reopened = new MissionEngine({ stateDir: fixture.stateDir, ...adapters() });
+    try {
+      expect(reopened.compositeCheckpoints(result.missionId)).toEqual([checkpoint]);
+      expect(reopened.status(result.missionId).chainValid).toBe(true);
+    } finally {
+      reopened.close();
+    }
+  });
+
   it('reopens an accepted command and reaches a Receipt without another user submission', async () => {
     const fixture = await createFixture('claude');
     const adapters = () => ({

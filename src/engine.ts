@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, realpathSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
@@ -15,16 +16,23 @@ import {
   type CanonicalCapsuleV1,
 } from './capsule.js';
 import { deriveContextGraph, type ContextGraphV1 } from './context-graph.js';
+import {
+  createCompositeCheckpoint,
+  type CompositeCheckpointManifestV1,
+} from './composite-checkpoint.js';
 import { createClaudeToolGateBinding, type ClaudeToolGateBindingV1 } from './claude-tool-gate.js';
 import {
   DOMAIN_SCHEMA_VERSION,
   type ContractV1,
   type AdapterCapabilitiesV1,
   type AttemptBindingV1,
+  type AttemptV1,
+  type BranchV1,
   type EffectV1,
   type EventV1,
   type JsonValue,
   type MissionProjectionV1,
+  type MissionV1,
   type MissionCommandActionV1,
   type MissionCommandV1,
   type ProfileV1,
@@ -469,6 +477,195 @@ export class MissionEngine {
       )
     ).filter((artifact): artifact is NativeArtifactContent => artifact !== undefined);
     return deriveContextGraph({ timeline, nativeArtifacts });
+  }
+
+  compositeCheckpoints(missionId: string): readonly CompositeCheckpointManifestV1[] {
+    this.#requireMission(missionId);
+    return this.#store.listEvents(missionId).flatMap((event): CompositeCheckpointManifestV1[] => {
+      if (
+        event.type !== 'runtime.observation' ||
+        event.payload.kind !== 'composite-checkpoint.created' ||
+        !isJsonObject(event.payload.data) ||
+        !isJsonObject(event.payload.data.manifest)
+      ) {
+        return [];
+      }
+      return [event.payload.data.manifest as unknown as CompositeCheckpointManifestV1];
+    });
+  }
+
+  async createCompositeCheckpoint(
+    missionId: string,
+    requestedAttemptId?: string,
+  ): Promise<CompositeCheckpointManifestV1> {
+    const mission = this.#requireMission(missionId);
+    const spec = this.#requireSpecSnapshot(missionId);
+    const ownerId = `checkpoint-${this.#id()}`;
+    return await this.#withLease(mission.workspaceKey, ownerId, async (fence) => {
+      const events = this.#store.listEvents(missionId);
+      const started = events.filter(
+        (event): event is Extract<StoredEventV1, { type: 'attempt.started' }> =>
+          event.type === 'attempt.started',
+      );
+      const startedEvent =
+        requestedAttemptId === undefined
+          ? [...started]
+              .reverse()
+              .find((candidate) =>
+                events.some(
+                  (event) =>
+                    event.type === 'attempt.finished' &&
+                    event.payload.attemptId === candidate.payload.attempt.attemptId,
+                ),
+              )
+          : started.find((candidate) => candidate.payload.attempt.attemptId === requestedAttemptId);
+      if (startedEvent === undefined) {
+        throw new MissionExecutionError(
+          requestedAttemptId === undefined
+            ? `Mission ${missionId} has no finished Attempt to checkpoint`
+            : `Attempt ${requestedAttemptId} does not belong to Mission ${missionId}`,
+        );
+      }
+      const sourceAttempt = startedEvent.payload.attempt;
+      const finishedEvent = events.find(
+        (event): event is Extract<StoredEventV1, { type: 'attempt.finished' }> =>
+          event.type === 'attempt.finished' && event.payload.attemptId === sourceAttempt.attemptId,
+      );
+      if (finishedEvent === undefined) {
+        throw new MissionExecutionError(
+          `Attempt ${sourceAttempt.attemptId} is still running and has no safe Checkpoint boundary`,
+        );
+      }
+      const processStarted = events.find(
+        (event) =>
+          event.type === 'runtime.observation' &&
+          event.payload.kind === 'runtime.process_started' &&
+          event.attemptId === sourceAttempt.attemptId,
+      );
+      const processFinished = events.find(
+        (event) =>
+          event.type === 'runtime.observation' &&
+          event.payload.kind === 'runtime.process_finished' &&
+          event.attemptId === sourceAttempt.attemptId,
+      );
+      if (processStarted !== undefined && processFinished === undefined) {
+        throw new MissionExecutionError(
+          `Attempt ${sourceAttempt.attemptId} has no durable stopped-process evidence`,
+        );
+      }
+
+      const createdEvent = events.find(
+        (event): event is Extract<StoredEventV1, { type: 'mission.created' }> =>
+          event.type === 'mission.created',
+      );
+      if (createdEvent === undefined) {
+        throw new MissionExecutionError(`Mission ${missionId} has no creation event`);
+      }
+      const branch = this.#store.getBranch(missionId, sourceAttempt.branchId);
+      if (branch === undefined) {
+        throw new MissionExecutionError(
+          `Branch ${sourceAttempt.branchId} is not persisted for Mission ${missionId}`,
+        );
+      }
+      const profile = profileForAttempt(events, sourceAttempt, createdEvent.payload.profile);
+      const workspace = snapshotGitWorkspace(spec.workspace);
+      if (workspace.head === null || workspace.status.length > 0) {
+        throw new MissionExecutionError(
+          'Executable Fork requires a clean Git Checkpoint; commit or discard the current workspace delta first',
+        );
+      }
+      const commit = gitObject(spec.workspace, 'HEAD^{commit}');
+      const tree = gitObject(spec.workspace, `${commit}^{tree}`);
+      const context = await this.contextGraph(missionId);
+      const contextDigest = `sha256:${hashPayload(context)}`;
+      const contextEvidenceRefs = uniqueStrings([
+        `context-graph:${contextDigest}`,
+        ...context.nodes.flatMap((node) => node.evidenceRefs),
+      ]);
+      const processStartedData = runtimeObservationData(processStarted);
+      const processFinishedData = runtimeObservationData(processFinished);
+      const projection = this.#requireMission(missionId);
+      const attempt: AttemptV1 = {
+        ...sourceAttempt,
+        status: finishedEvent.payload.status,
+        endedAt: finishedEvent.payload.endedAt,
+      };
+      const checkpoint = createCompositeCheckpoint({
+        mission: createdEvent.payload.mission,
+        branch,
+        attempt,
+        contract: projection.contract,
+        profile,
+        eventPrefix: {
+          throughSeq: projection.lastSeq,
+          headHash: projection.headHash,
+          evidenceRefs: [`kernel-head:${projection.headHash}`],
+        },
+        visibleContext: {
+          status: 'captured',
+          contextDigest,
+          artifactRefs: contextEvidenceRefs,
+          evidenceRefs: contextEvidenceRefs,
+        },
+        workspace: {
+          kind: 'restorable-artifact',
+          workspaceKey: projection.workspaceKey,
+          workspaceDigest: workspace.workspaceDigest,
+          artifactRef: `git-commit:${commit}`,
+          artifactDigest: `git-tree:${tree}`,
+          evidenceRefs: [
+            `git-commit:${commit}`,
+            `git-tree:${tree}`,
+            `workspace:${workspace.workspaceDigest}`,
+          ],
+        },
+        permissions: {
+          permissionMode: profile.permissionMode ?? 'unknown',
+          evidenceRefs: [`profile:${profile.profileId}`],
+        },
+        effects: projectMissionEffects(events),
+        process: {
+          status: 'stopped',
+          stoppedAt: finishedEvent.payload.endedAt,
+          ...(typeof processStartedData?.pid === 'number'
+            ? { processRef: `pid:${String(processStartedData.pid)}` }
+            : {}),
+          ...(typeof processFinishedData?.exitCode === 'number' ||
+          processFinishedData?.exitCode === null
+            ? { exitCode: processFinishedData.exitCode }
+            : {}),
+          evidenceRefs: [`event:${finishedEvent.eventId}`],
+        },
+        nativeSession: {
+          status: 'unavailable',
+          harness: profile.harness,
+          reason:
+            'The Adapter did not expose a resumable native session at this stopped boundary; the workspace and visible context remain reconstructable.',
+          evidenceRefs: [`attempt:${sourceAttempt.attemptId}`],
+        },
+        capturedAt: this.#now().toISOString(),
+      });
+      this.#store.appendEvent(
+        {
+          schemaVersion: DOMAIN_SCHEMA_VERSION,
+          eventId: `event-composite-checkpoint-${checkpoint.manifestHash.slice('sha256:'.length)}`,
+          missionId,
+          attemptId: sourceAttempt.attemptId,
+          occurredAt: checkpoint.capturedAt,
+          type: 'runtime.observation',
+          payload: {
+            kind: 'composite-checkpoint.created',
+            data: {
+              checkpointId: checkpoint.checkpointId,
+              branchId: checkpoint.source.branchId,
+              manifest: checkpoint as unknown as JsonValue,
+            },
+          },
+        },
+        fence,
+      );
+      return checkpoint;
+    });
   }
 
   async pendingToolGates(missionId: string): Promise<readonly MissionToolGateView[]> {
@@ -1410,7 +1607,9 @@ export class MissionEngine {
       receiptId: `receipt-${this.#id()}`,
       missionId,
       contractId: projection.contract.contractId,
-      ...(projection.rootBranchId === undefined ? {} : { rootBranchId: projection.rootBranchId }),
+      ...(projection.rootBranchId === undefined
+        ? {}
+        : { branchId: projection.rootBranchId, rootBranchId: projection.rootBranchId }),
       outcome: verifiedOutcome ? 'verified' : 'rejected',
       verifications: spec.acceptanceCriteria.map((criterion, index) => {
         const result = results[index]!;
@@ -2232,6 +2431,14 @@ function isJsonObject(value: unknown): value is Record<string, JsonValue> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+function runtimeObservationData(
+  event: StoredEventV1 | undefined,
+): Record<string, JsonValue> | undefined {
+  return event?.type === 'runtime.observation' && isJsonObject(event.payload.data)
+    ? event.payload.data
+    : undefined;
+}
+
 function indexExternalEffectTargets(
   targets: readonly QueryableEffectTarget<JsonValue, JsonValue>[],
 ): ReadonlyMap<string, QueryableEffectTarget<JsonValue, JsonValue>> {
@@ -2246,6 +2453,76 @@ function indexExternalEffectTargets(
     indexed.set(target.targetId, target);
   }
   return indexed;
+}
+
+function profileForAttempt(
+  events: readonly StoredEventV1[],
+  attempt: AttemptV1,
+  initialProfile: ProfileV1,
+): ProfileV1 {
+  if (initialProfile.profileId === attempt.profileId) return initialProfile;
+  const selected = [...events]
+    .reverse()
+    .find(
+      (event): event is Extract<StoredEventV1, { type: 'profile.selected' }> =>
+        event.type === 'profile.selected' && event.payload.profile.profileId === attempt.profileId,
+    );
+  if (selected === undefined) {
+    throw new MissionExecutionError(
+      `Attempt ${attempt.attemptId} references unknown Profile ${attempt.profileId}`,
+    );
+  }
+  return selected.payload.profile;
+}
+
+function projectMissionEffects(events: readonly StoredEventV1[]): EffectV1[] {
+  const effects = new Map<string, EffectV1>();
+  for (const event of events) {
+    if (event.type === 'effect.recorded') {
+      if (effects.has(event.payload.effect.effectId)) {
+        throw new MissionExecutionError(
+          `Effect ${event.payload.effect.effectId} has duplicate immutable records`,
+        );
+      }
+      effects.set(event.payload.effect.effectId, event.payload.effect);
+      continue;
+    }
+    if (event.type !== 'effect.status_changed') continue;
+    const effect = effects.get(event.payload.effectId);
+    if (effect === undefined) {
+      throw new MissionExecutionError(
+        `Effect ${event.payload.effectId} changed status before it was recorded`,
+      );
+    }
+    effects.set(effect.effectId, {
+      ...effect,
+      status: event.payload.status,
+      evidenceRefs: uniqueStrings([...effect.evidenceRefs, ...event.payload.evidenceRefs]),
+    });
+  }
+  return [...effects.values()].sort((left, right) => left.effectId.localeCompare(right.effectId));
+}
+
+function gitObject(workspace: string, revision: string): string {
+  let value: string;
+  try {
+    value = execFileSync('git', ['-C', workspace, 'rev-parse', '--verify', revision], {
+      encoding: 'utf8',
+      maxBuffer: 1024 * 1024,
+    }).trim();
+  } catch (error) {
+    throw new MissionExecutionError(`Git Checkpoint object ${revision} is unavailable`, {
+      cause: error,
+    });
+  }
+  if (!/^[0-9a-f]{40,64}$/.test(value)) {
+    throw new MissionExecutionError(`Git returned an invalid object identity for ${revision}`);
+  }
+  return value;
+}
+
+function uniqueStrings(values: readonly string[]): string[] {
+  return [...new Set(values)].sort((left, right) => left.localeCompare(right, 'en'));
 }
 
 function profileDefinition(stage: AttemptStageSpecV1): RuntimeProfileDefinitionV1 {
