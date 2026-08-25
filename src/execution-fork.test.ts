@@ -22,6 +22,7 @@ import {
   CHECKPOINT_OPERATION_BOUNDARIES_V1,
   ExecutionForkService,
   FileExecutionForkEvidenceJournal,
+  executionForkWorkspaceEffectId,
   type ExecutionForkRequestV1,
   type RuntimeContinuationPortV1,
 } from './execution-fork.js';
@@ -137,6 +138,7 @@ describe('executable execution Fork', () => {
       ],
       externalEffectDecisions: [{ effectId: 'effect-deploy-a', action: 'inherit-no-repeat' }],
       workspaceEffectInput: {
+        effectId: executionForkWorkspaceEffectId(result.forkId, result.lineage.childWorkspaceKey),
         scope: 'branch_local_workspace',
         status: 'executed',
         beforeWorkspaceDigest: result.baselineSnapshot?.workspaceDigest,

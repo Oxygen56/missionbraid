@@ -197,6 +197,21 @@ export interface ExecutionForkReceiptInputV1 {
   readonly authority: 'receipt-input-not-kernel-state';
 }
 
+/**
+ * Stable Effect identity available as soon as the immutable Fork lineage is
+ * durable. The Kernel can therefore record intent before any writable Runtime
+ * continuation starts.
+ */
+export function executionForkWorkspaceEffectId(forkId: string, childWorkspaceKey: string): string {
+  requireIdentifier(forkId, 'forkId');
+  requireIdentifier(childWorkspaceKey, 'childWorkspaceKey');
+  return `effect-${digest({
+    kind: 'workspace.execution-fork',
+    forkId,
+    childWorkspaceKey,
+  }).slice('sha256:'.length)}`;
+}
+
 export type ExecutionForkEventTypeV1 =
   | 'fork.planned'
   | 'worktree.create-started'
@@ -568,11 +583,7 @@ export class ExecutionForkService {
           ...decision,
         })),
         workspaceEffectInput: {
-          effectId: `effect-${digest({
-            forkId,
-            before: baselineSnapshot.workspaceDigest,
-            after: futureSnapshot.workspaceDigest,
-          }).slice('sha256:'.length)}`,
+          effectId: executionForkWorkspaceEffectId(forkId, lineage.childWorkspaceKey),
           kind: 'workspace.execution-fork' as const,
           resourceKey: lineage.childWorkspaceKey,
           scope: 'branch_local_workspace' as const,
@@ -1197,9 +1208,7 @@ function isNodeError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && 'code' in error;
 }
 
-function isExecError(
-  error: unknown,
-): error is Error & {
+function isExecError(error: unknown): error is Error & {
   readonly code?: number | string;
   readonly stdout?: unknown;
   readonly stderr?: unknown;
