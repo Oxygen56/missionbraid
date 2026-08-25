@@ -1,0 +1,97 @@
+{
+  "schemaVersion": "missionbraid.dev/evidence/iteration-3/v1",
+  "evidenceLevel": "same-host-local-real-runtime-and-browser",
+  "recordedOn": "2026-08-25",
+  "implementation": {
+    "revision": "c3d64b3136bdb31d105bb4f4f801080df8083751",
+    "tree": "6848237932fc02260bbce36da94d6e4f76e9bd10",
+    "dirtyBeforeRun": false,
+    "nodeVersion": "v26.4.0"
+  },
+  "productEntry": "local Workbench page plus durable SSE event stream",
+  "nativeProtocols": [
+    "codex-jsonl",
+    "claude-stream-json"
+  ],
+  "runs": [
+    {
+      "harness": "codex",
+      "runtimeVersion": "0.149.0-alpha.4.3",
+      "missionId": "mission-a371c796-5875-418e-bd88-5cbb454cbb16",
+      "receiptId": "receipt-a0706c93-76ad-4acb-a48b-7f57f546226c",
+      "sourceProtocol": "codex-jsonl",
+      "runtimeEventCount": 298,
+      "semanticFactKinds": [
+        "model_call",
+        "failure",
+        "message",
+        "tool_request",
+        "test_run",
+        "tool_result",
+        "workspace_change",
+        "usage"
+      ],
+      "failedTestRuntimeEventId": "runtime-event-83ccd727f280a7e1848d4bedda5b68cf",
+      "failedTestArtifactId": "artifact-c448bff8348cb708c3cd83512704ed4a4a8a66001c6b5468589fc81795a48528",
+      "promptContextSnapshotId": "context-snapshot-d73e6a463d764cec576e4c263636",
+      "promptArtifactId": "artifact-73a168972287f99a890a77fb123644fffcb66caa482ac0cb1cc89f429adf7a2f",
+      "promptRedactionCount": 0,
+      "runtimeArtifactsRedactedByMissionBraid": 0,
+      "eventDeliveredBeforeProcessFinished": true,
+      "browserRenderedBeforeProcessFinished": true,
+      "browserTimelineText": "实时中 · 持久日志到浏览器 81 毫秒",
+      "browserContextVisible": true
+    },
+    {
+      "harness": "claude",
+      "runtimeVersion": "2.1.245",
+      "missionId": "mission-5eed94c9-6337-4c35-a861-08eef839bc7b",
+      "receiptId": "receipt-22b8041e-7df8-496b-9b4c-7c97bd5ed6e9",
+      "sourceProtocol": "claude-stream-json",
+      "runtimeEventCount": 271,
+      "semanticFactKinds": [
+        "context",
+        "model_call",
+        "message",
+        "subagent_started",
+        "usage",
+        "tool_request",
+        "tool_result",
+        "test_run",
+        "failure"
+      ],
+      "failedTestRuntimeEventId": "runtime-event-ecf70be891751ed9d766e4f8653de753",
+      "failedTestArtifactId": "artifact-79badf78ab3785e8be01b8d57171d2386225b11f8b8032471a94a6dd19cfd3db",
+      "promptContextSnapshotId": "context-snapshot-82bf7e9a0eb6d123a13422c91136",
+      "promptArtifactId": "artifact-c0949b6e6153139c8e6bc77b83e9713d7ea69286bea4d1688c1cea47dd89812a",
+      "promptRedactionCount": 0,
+      "runtimeArtifactsRedactedByMissionBraid": 6,
+      "eventDeliveredBeforeProcessFinished": true,
+      "browserRenderedBeforeProcessFinished": true,
+      "browserTimelineText": "实时中 · 持久日志到浏览器 4579 毫秒",
+      "browserContextVisible": true
+    }
+  ],
+  "latency": {
+    "sampleCount": 30,
+    "p50Ms": 58,
+    "p95Ms": 93,
+    "measurement": "durable journal recordedAt to Node EventSource consumer receive time",
+    "releaseTarget": "p95 <= 1000 ms on the retained same-host fixture"
+  },
+  "restartRecovery": {
+    "sameMissionHeads": true,
+    "sameReceipts": true,
+    "sameContextGraphs": true
+  },
+  "redaction": {
+    "evidenceLevel": "deterministic-local-artifact-store-through-public-read-api",
+    "probeArtifactId": "artifact-6b46945d1ecec5eb70d07afd3eb2128fa4911f061a99fe5460f17e87ab6c931a",
+    "probeRedactionCount": 1,
+    "injectedCredentialLikeFixtureRemoved": true,
+    "stableAfterRestart": true,
+    "promptArtifactHashesVerified": true
+  },
+  "claimBoundary": "This proves same-host live durable event delivery and browser rendering before process completion for real Codex and Claude Code native protocols, visible controller-prompt provenance, structured test failure evidence, explicit unavailable hidden context, deterministic local artifact redaction through the public read path, and restart-stable Context Graph reconstruction. The real providers may omit credential-like output before MissionBraid can observe it, so this evidence does not claim provider-pre-filtered material was locally redacted. It also does not prove complete provider context, global native ordering, pre-tool control, production latency, or independent external reproduction.",
+  "proofRoot": "/var/folders/s6/97lfn3_942g3b1w0cw82sgz00000gn/T/missionbraid-i3-proof-Jk7Q51"
+}
