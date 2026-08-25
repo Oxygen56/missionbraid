@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["src/**/*.ts", "examples/minimal-adapter.ts"],
+  "exclude": ["src/**/*.test.ts"]
+}

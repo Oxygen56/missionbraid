@@ -235,11 +235,14 @@ Claude Code，得到已验证 Receipt，并在重启后稳定恢复。它不证�
 要求：Node.js 24–26、pnpm、Git，以及至少一个已安装并完成认证的受支持 Runtime。真实的跨
 Harness 路径目前同时需要 `codex` 和 `qodercli`。
 
-MissionBraid 目前从源码运行；尚未发布 npm Package 或带 Tag 的 Release。
+MissionBraid 已能构建为可本地安装的 npm 压缩包，但尚未发布到 Package Registry，也没有
+创建带 Tag 的 Release。公开的 v1 Adapter 接口与全新目录安装验证见
+[Adapter SDK 指南](docs/adapter-sdk.md)。
 
 ```sh
 pnpm install --frozen-lockfile
 pnpm build
+pnpm test:package
 node dist/src/cli.js runtimes list --json
 
 MISSIONBRAID_DEMO_ROOT="$(mktemp -d)"

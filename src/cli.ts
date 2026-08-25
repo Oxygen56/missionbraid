@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { randomUUID } from 'node:crypto';
+import { realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -314,6 +315,6 @@ function waitForInterrupt(): Promise<void> {
 }
 
 const executable = process.argv[1];
-if (executable !== undefined && import.meta.url === pathToFileURL(executable).href) {
+if (executable !== undefined && import.meta.url === pathToFileURL(realpathSync(executable)).href) {
   process.exitCode = await main();
 }

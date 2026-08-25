@@ -273,12 +273,15 @@ Requirements: Node.js 24–26, pnpm, Git, and at least one installed and
 authenticated supported Runtime. The real cross-Harness path currently requires
 both `codex` and `qodercli`.
 
-MissionBraid is currently run from source; there is no npm package or tagged
-release yet.
+MissionBraid can be built as a locally installable npm tarball, but it has not
+been published to a package registry or tagged as a release. The public v1
+Adapter surface and clean-install check are documented in the
+[Adapter SDK guide](docs/adapter-sdk.md).
 
 ```sh
 pnpm install --frozen-lockfile
 pnpm build
+pnpm test:package
 node dist/src/cli.js runtimes list --json
 
 MISSIONBRAID_DEMO_ROOT="$(mktemp -d)"

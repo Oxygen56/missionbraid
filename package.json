@@ -1,7 +1,7 @@
 {
   "name": "missionbraid",
-  "version": "0.0.0",
-  "private": true,
+  "version": "1.0.0",
+  "private": false,
   "description": "Local-first Agent Runtime Workbench for native coding agents.",
   "license": "Apache-2.0",
   "type": "module",
@@ -11,14 +11,60 @@
   "bin": {
     "missionbraid": "./dist/src/cli.js"
   },
+  "types": "./dist/src/public-api.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/public-api.d.ts",
+      "import": "./dist/src/public-api.js"
+    },
+    "./v1": {
+      "types": "./dist/src/public-api.d.ts",
+      "import": "./dist/src/public-api.js"
+    },
+    "./adapter-sdk": {
+      "types": "./dist/src/adapter-sdk.d.ts",
+      "import": "./dist/src/adapter-sdk.js"
+    },
+    "./adapter-sdk/v1": {
+      "types": "./dist/src/adapter-sdk.d.ts",
+      "import": "./dist/src/adapter-sdk.js"
+    },
+    "./adapter-conformance": {
+      "types": "./dist/src/adapter-conformance.d.ts",
+      "import": "./dist/src/adapter-conformance.js"
+    },
+    "./adapter-conformance/v1": {
+      "types": "./dist/src/adapter-conformance.d.ts",
+      "import": "./dist/src/adapter-conformance.js"
+    },
+    "./package-contract": {
+      "types": "./dist/src/package-contract.d.ts",
+      "import": "./dist/src/package-contract.js"
+    },
+    "./examples/minimal-adapter": {
+      "types": "./dist/examples/minimal-adapter.d.ts",
+      "import": "./dist/examples/minimal-adapter.js"
+    }
+  },
+  "files": [
+    "dist",
+    "docs/adapter-sdk.md",
+    "examples/third-party-adapter",
+    "README.md",
+    "README.zh-CN.md",
+    "LICENSE",
+    "NOTICE"
+  ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "node scripts/build-package.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:package": "node scripts/run-i10-package-smoke.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "dev": "tsx src/cli.ts"
+    "dev": "tsx src/cli.ts",
+    "prepack": "pnpm build"
   },
   "dependencies": {
     "yaml": "2.8.1"
