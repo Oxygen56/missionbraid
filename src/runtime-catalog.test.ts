@@ -4,7 +4,8 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import type { RuntimeDetection } from './adapters/types.js';
+import { CODEX_ADAPTER_CAPABILITIES } from './adapters/codex.js';
+import type { RuntimeDetection, RuntimeId } from './adapters/types.js';
 import {
   createCommandVersionProbe,
   discoverRuntimeCatalog,
@@ -36,6 +37,7 @@ describe('discoverRuntimeCatalog', () => {
     const catalog = await discoverRuntimeCatalog({
       codexAdapter: adapterDetection(readyDetection('codex', '/opt/bin/codex', '0.149.0')),
       qoderAdapter: adapterDetection(readyDetection('qoder', '/opt/bin/qodercli', '1.1.6')),
+      claudeAdapter: adapterDetection(readyDetection('claude', '/opt/bin/claude', '2.1.241')),
       commandProbe,
       pathExists: async (path) => path === '/Applications/DeepSeek Harness.app',
       now: () => new Date(FIXED_TIME),
@@ -64,13 +66,26 @@ describe('discoverRuntimeCatalog', () => {
         'model-selection',
         'reasoning-effort',
       ],
+      capabilityDeclarations: CODEX_ADAPTER_CAPABILITIES,
       checkedAt: FIXED_TIME,
     });
     expect(catalog.find((entry) => entry.id === 'claude')).toMatchObject({
-      status: 'installed-unsupported',
-      support: 'unsupported',
+      status: 'ready-supported',
+      support: 'supported',
       path: '/opt/bin/claude',
       version: '2.1.241',
+      capabilities: expect.arrayContaining(['stream-json-events', 'hook-events']),
+      capabilityDeclarations: {
+        observe: expect.objectContaining({ status: 'supported', control: 'native' }),
+        context_capture: expect.objectContaining({ status: 'unknown' }),
+        interrupt: expect.objectContaining({ status: 'supported', control: 'controller' }),
+        pre_tool_gate: expect.objectContaining({ status: 'unsupported' }),
+        steer: expect.any(Object),
+        resume: expect.any(Object),
+        native_fork: expect.any(Object),
+        workspace_restore: expect.any(Object),
+        external_effect_control: expect.any(Object),
+      },
     });
     expect(catalog.find((entry) => entry.id === 'deepseek-harness')).toMatchObject({
       status: 'needs-bootstrap',
@@ -99,6 +114,12 @@ describe('discoverRuntimeCatalog', () => {
         probeExitCode: null,
         probeSignal: 'SIGTERM',
       }),
+      claudeAdapter: adapterDetection({
+        ...readyDetection('claude', '/opt/bin/claude', '2.1.241'),
+        responsive: false,
+        status: 'present-error',
+        probeExitCode: 1,
+      }),
       commandProbe: mappedProbe({
         claude: {
           command: 'claude',
@@ -123,8 +144,8 @@ describe('discoverRuntimeCatalog', () => {
       support: 'supported',
     });
     expect(catalog.find((entry) => entry.id === 'claude')).toMatchObject({
-      status: 'installed-unsupported',
-      support: 'unsupported',
+      status: 'installed-unavailable',
+      support: 'supported',
     });
     expect(catalog.find((entry) => entry.id === 'opencode')).toMatchObject({
       status: 'missing',
@@ -141,6 +162,7 @@ describe('discoverRuntimeCatalog', () => {
     const catalog = await discoverRuntimeCatalog({
       codexAdapter: adapterDetection(missingDetection('codex')),
       qoderAdapter: adapterDetection(missingDetection('qoder')),
+      claudeAdapter: adapterDetection(missingDetection('claude')),
       commandProbe: mappedProbe({
         claude: missingProbe('claude'),
         opencode: missingProbe('opencode'),
@@ -165,6 +187,7 @@ describe('discoverRuntimeCatalog', () => {
     const catalog = await discoverRuntimeCatalog({
       codexAdapter: adapterDetection(missingDetection('codex')),
       qoderAdapter: adapterDetection(missingDetection('qoder')),
+      claudeAdapter: adapterDetection(missingDetection('claude')),
       commandProbe: mappedProbe({
         claude: missingProbe('claude'),
         opencode: missingProbe('opencode'),
@@ -218,7 +241,7 @@ function adapterDetection(detection: RuntimeDetection): { detect(): Promise<Runt
 }
 
 function readyDetection(
-  runtime: 'codex' | 'qoder',
+  runtime: RuntimeId,
   executablePath: string,
   version: string,
 ): RuntimeDetection {
@@ -238,7 +261,7 @@ function readyDetection(
   };
 }
 
-function missingDetection(runtime: 'codex' | 'qoder'): RuntimeDetection {
+function missingDetection(runtime: RuntimeId): RuntimeDetection {
   return {
     runtime,
     command: runtime === 'qoder' ? 'qodercli' : runtime,

@@ -13,79 +13,86 @@ import type {
   RuntimeRunResult,
 } from './types.js';
 
-const DEFAULT_COMMAND = 'qodercli';
+const DEFAULT_COMMAND = 'claude';
 const DEFAULT_PROBE_TIMEOUT_MS = 2_000;
-// The current official CLI reference lists `dont_ask` as a permission mode:
-// https://docs.qoder.com/cli/cli-reference. Local qodercli 1.1.6 help currently
-// blocks without output, so real headless acceptance remains an E1 runtime test.
-const DEFAULT_PERMISSION_MODE = 'dont_ask' as const;
+const DEFAULT_PERMISSION_MODE = 'dontAsk' as const;
 
-export type QoderPermissionMode =
+export type ClaudePermissionMode =
   | 'default'
-  | 'plan'
+  | 'acceptEdits'
   | 'auto'
-  | 'bypass_permissions'
-  | 'accept_edits'
-  | 'dont_ask';
+  | 'bypassPermissions'
+  | 'manual'
+  | 'dontAsk'
+  | 'plan';
 
-export interface QoderRunRequest extends AdapterRunRequest {
+export interface ClaudeRunRequest extends AdapterRunRequest {
   readonly model?: string;
   readonly reasoningEffort?: string;
-  readonly permissionMode?: QoderPermissionMode;
+  readonly permissionMode?: ClaudePermissionMode;
   readonly maxTurns?: number;
   readonly noSessionPersistence?: boolean;
+  readonly includeHookEvents?: boolean;
+  readonly includePartialMessages?: boolean;
 }
 
-export interface QoderAdapterOptions {
+export interface ClaudeAdapterOptions {
   readonly command?: string;
   readonly probeTimeoutMs?: number;
 }
 
-export const QODER_ADAPTER_CAPABILITIES = {
+/**
+ * Claims describe this direct one-shot adapter, not every feature Claude Code
+ * may expose through interactive mode, hooks, the Agent SDK, or future flags.
+ */
+export const CLAUDE_ADAPTER_CAPABILITIES = {
   observe: {
     status: 'supported',
     control: 'native',
-    detail: 'Qoder stream-json events are preserved.',
+    detail: 'Claude stream-json supplies native system, message, hook, and result events.',
   },
   context_capture: {
     status: 'unknown',
     control: 'unknown',
-    detail: 'Complete effective context is not exposed.',
+    detail:
+      'The adapter does not claim that stream-json exposes the complete effective model context.',
   },
   steer: {
     status: 'unsupported',
     control: 'none',
-    detail: 'The one-shot adapter has no live steering channel.',
+    detail: 'This adapter sends one text input and does not expose a live steering channel.',
   },
   interrupt: {
     status: 'supported',
     control: 'controller',
-    detail: 'The controller owns and can terminate the process.',
+    detail:
+      'AbortSignal terminates the owned Claude process; no semantic Claude cancel is claimed.',
   },
   pre_tool_gate: {
     status: 'unsupported',
     control: 'none',
-    detail: 'Tool dispatch is not mediated by this adapter.',
+    detail: 'Hook events are observed, but this adapter does not mediate tool permission requests.',
   },
   resume: {
     status: 'unsupported',
     control: 'none',
-    detail: 'Session resume is not exposed by this adapter.',
+    detail: 'This adapter does not expose Claude session resume arguments.',
   },
   native_fork: {
     status: 'unsupported',
     control: 'none',
-    detail: 'Native session fork is not exposed.',
+    detail: 'This adapter does not expose Claude native session fork arguments.',
   },
   workspace_restore: {
     status: 'unsupported',
     control: 'none',
-    detail: 'Workspace restore belongs to the controller.',
+    detail: 'Workspace restoration remains outside the Claude process adapter.',
   },
   external_effect_control: {
     status: 'unknown',
     control: 'unknown',
-    detail: 'External effects are not controlled at this boundary.',
+    detail:
+      'Effects outside the owned process and workspace are not controlled or reconciled here.',
   },
 } as const satisfies RuntimeAdapterCapabilities;
 
@@ -95,22 +102,22 @@ function requireNonEmpty(value: string, name: string): void {
   }
 }
 
-function validateRequest(request: QoderRunRequest): void {
+function validateRequest(request: ClaudeRunRequest): void {
   if (!isAbsolute(request.workspace)) {
-    throw new TypeError('Qoder workspace must be an absolute path.');
+    throw new TypeError('Claude workspace must be an absolute path.');
   }
-  requireNonEmpty(request.prompt, 'Qoder prompt');
+  requireNonEmpty(request.prompt, 'Claude prompt');
   if (request.model !== undefined) {
-    requireNonEmpty(request.model, 'Qoder model');
+    requireNonEmpty(request.model, 'Claude model');
   }
   if (request.reasoningEffort !== undefined) {
-    requireNonEmpty(request.reasoningEffort, 'Qoder reasoning effort');
+    requireNonEmpty(request.reasoningEffort, 'Claude reasoning effort');
   }
   if (
     request.maxTurns !== undefined &&
     (!Number.isSafeInteger(request.maxTurns) || request.maxTurns <= 0)
   ) {
-    throw new TypeError('Qoder maxTurns must be a positive safe integer.');
+    throw new TypeError('Claude maxTurns must be a positive safe integer.');
   }
 }
 
@@ -126,33 +133,33 @@ function parseVersion(lines: readonly string[]): string | null {
 
 function parseVersionFromPath(executablePath: string): string | null {
   const match = basename(executablePath).match(
-    /qoder(?:cli)?[-_]?v?(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)/i,
+    /claude(?:-code)?[-_]?v?(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)/i,
   );
   return match?.[1] ?? null;
 }
 
 function parseJsonLine(event: ProcessOutputLine): RuntimeOutputLine {
   if (event.stream !== 'stdout') {
-    return { ...event, runtime: 'qoder' };
+    return { ...event, runtime: 'claude' };
   }
 
   try {
     return {
       ...event,
-      runtime: 'qoder',
+      runtime: 'claude',
       value: JSON.parse(event.line) as unknown,
     };
   } catch {
-    return { ...event, runtime: 'qoder' };
+    return { ...event, runtime: 'claude' };
   }
 }
 
-export function buildQoderInvocation(
-  request: QoderRunRequest,
+export function buildClaudeInvocation(
+  request: ClaudeRunRequest,
   command = DEFAULT_COMMAND,
 ): RuntimeInvocation {
   validateRequest(request);
-  requireNonEmpty(command, 'Qoder command');
+  requireNonEmpty(command, 'Claude command');
 
   const args: string[] = [
     '--print',
@@ -160,17 +167,22 @@ export function buildQoderInvocation(
     'stream-json',
     '--input-format',
     'text',
-    '--cwd',
-    request.workspace,
+    '--verbose',
     '--permission-mode',
     request.permissionMode ?? DEFAULT_PERMISSION_MODE,
   ];
 
+  if (request.includeHookEvents !== false) {
+    args.push('--include-hook-events');
+  }
+  if (request.includePartialMessages === true) {
+    args.push('--include-partial-messages');
+  }
   if (request.model !== undefined) {
     args.push('--model', request.model);
   }
   if (request.reasoningEffort !== undefined) {
-    args.push('--reasoning-effort', request.reasoningEffort);
+    args.push('--effort', request.reasoningEffort);
   }
   if (request.maxTurns !== undefined) {
     args.push('--max-turns', String(request.maxTurns));
@@ -180,8 +192,8 @@ export function buildQoderInvocation(
   }
 
   return {
-    runtime: 'qoder',
-    outputProtocol: 'qoder-stream-json',
+    runtime: 'claude',
+    outputProtocol: 'claude-stream-json',
     command,
     args,
     cwd: request.workspace,
@@ -189,18 +201,18 @@ export function buildQoderInvocation(
   };
 }
 
-export class QoderAdapter implements RuntimeAdapter<QoderRunRequest> {
-  readonly runtime = 'qoder' as const;
-  readonly capabilities = QODER_ADAPTER_CAPABILITIES;
+export class ClaudeAdapter implements RuntimeAdapter<ClaudeRunRequest> {
+  readonly runtime = 'claude' as const;
+  readonly capabilities = CLAUDE_ADAPTER_CAPABILITIES;
   readonly command: string;
   readonly probeTimeoutMs: number;
 
-  constructor(options: QoderAdapterOptions = {}) {
+  constructor(options: ClaudeAdapterOptions = {}) {
     this.command = options.command ?? DEFAULT_COMMAND;
     this.probeTimeoutMs = options.probeTimeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS;
-    requireNonEmpty(this.command, 'Qoder command');
+    requireNonEmpty(this.command, 'Claude command');
     if (!Number.isFinite(this.probeTimeoutMs) || this.probeTimeoutMs <= 0) {
-      throw new TypeError('Qoder probeTimeoutMs must be a positive number.');
+      throw new TypeError('Claude probeTimeoutMs must be a positive number.');
     }
   }
 
@@ -211,7 +223,7 @@ export class QoderAdapter implements RuntimeAdapter<QoderRunRequest> {
 
     if (executablePath === null) {
       return {
-        runtime: 'qoder',
+        runtime: 'claude',
         command: this.command,
         executablePath: null,
         available: false,
@@ -255,7 +267,7 @@ export class QoderAdapter implements RuntimeAdapter<QoderRunRequest> {
     const status = probe.aborted ? 'present-unresponsive' : responsive ? 'ready' : 'present-error';
 
     return {
-      runtime: 'qoder',
+      runtime: 'claude',
       command: this.command,
       executablePath,
       available: true,
@@ -270,11 +282,11 @@ export class QoderAdapter implements RuntimeAdapter<QoderRunRequest> {
     };
   }
 
-  buildInvocation(request: QoderRunRequest): RuntimeInvocation {
-    return buildQoderInvocation(request, this.command);
+  buildInvocation(request: ClaudeRunRequest): RuntimeInvocation {
+    return buildClaudeInvocation(request, this.command);
   }
 
-  async run(request: QoderRunRequest): Promise<RuntimeRunResult> {
+  async run(request: ClaudeRunRequest): Promise<RuntimeRunResult> {
     const invocation = this.buildInvocation(request);
     const processResult = await runProcess(invocation, {
       ...(request.signal === undefined ? {} : { signal: request.signal }),
@@ -289,13 +301,13 @@ export class QoderAdapter implements RuntimeAdapter<QoderRunRequest> {
     });
 
     return {
-      runtime: 'qoder',
-      outputProtocol: 'qoder-stream-json',
+      runtime: 'claude',
+      outputProtocol: 'claude-stream-json',
       process: processResult,
     };
   }
 }
 
-export function createQoderAdapter(options: QoderAdapterOptions = {}): QoderAdapter {
-  return new QoderAdapter(options);
+export function createClaudeAdapter(options: ClaudeAdapterOptions = {}): ClaudeAdapter {
+  return new ClaudeAdapter(options);
 }

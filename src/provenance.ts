@@ -14,8 +14,11 @@ export interface ProvenanceChangedPathV1 {
 export interface ProvenanceStageV1 {
   readonly checkpointId: string;
   readonly stageId: string;
-  readonly harness: 'codex' | 'qoder';
+  readonly harness: 'codex' | 'qoder' | 'claude';
   readonly attemptId: string;
+  readonly branchId: string;
+  readonly bindingId: string;
+  readonly profileId: string;
   readonly status: 'succeeded' | 'handed_off' | 'failed';
   readonly origin: 'runtime-completion' | 'controller-recovery';
   readonly beforeWorkspaceDigest: string;
@@ -26,6 +29,7 @@ export interface ProvenanceStageV1 {
 export interface ProvenanceManifestV1 {
   readonly schemaVersion: typeof PROVENANCE_SCHEMA_VERSION;
   readonly missionId: string;
+  readonly rootBranchId: string;
   readonly stages: readonly ProvenanceStageV1[];
 }
 

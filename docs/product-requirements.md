@@ -489,9 +489,19 @@ not product success measures.
 
 The repository currently provides:
 
-- a local Workbench and CLI;
+- a local CLI and a bilingual Workbench with a browser-persisted
+  English/Chinese selection;
 - durable Mission and Outcome Contract state;
-- direct Codex and Qoder Attempts;
+- direct Codex, Qoder, and Claude Code execution Adapters;
+- a default root Branch for each new Mission, without Fork behavior yet;
+- separate Runtime Profile Definitions, timestamped Catalog Observations,
+  immutable effective Snapshots, and Mission-specific Attempt Bindings;
+- explicit Adapter capability declarations and honest unknown/unsupported
+  effective fields;
+- source-scoped Event IR records linked to sanitized, content-addressed native
+  artifacts;
+- a durable command/outbox path that retains accepted execution intent across
+  application restart;
 - local Runtime discovery for additional Harnesses;
 - Git workspace baseline/checkpoint evidence (digest and delta, not a
   restorable snapshot);
@@ -501,9 +511,12 @@ The repository currently provides:
 - application-restart restoration.
 
 The strongest current evidence is indexed in
-[evidence/README.md](../evidence/README.md). It is a same-host local result, not
-evidence for the target debugger, replay, planner, broad Adapter matrix,
-third-party installation, or production use.
+[evidence/README.md](../evidence/README.md). It is a same-host Codex-to-Qoder
+result. The Iteration 2 implementation above still needs one integrated real
+Codex/Qoder/Claude Workbench run, source-linked Event IR/native artifacts, a
+Receipt, and restart restoration before Iteration 2 can be called complete. It
+is not evidence for the target Context Graph debugger, replay, planner, broad
+Adapter matrix, third-party installation, or production use.
 
 ## Scope and claim boundaries
 

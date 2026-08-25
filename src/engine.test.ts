@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { CodexAdapter } from './adapters/codex.js';
+import { ClaudeAdapter } from './adapters/claude.js';
 import { QoderAdapter } from './adapters/qoder.js';
 import {
   DOMAIN_SCHEMA_VERSION,
@@ -30,6 +31,7 @@ describe('MissionEngine', () => {
       classifyRuntimeOutputFailure({
         runtime: 'qoder',
         sequence: 1,
+        streamSequence: 1,
         stream: 'stdout',
         line: '{redacted}',
         receivedAt: '2026-08-24T00:00:00.000Z',
@@ -126,6 +128,157 @@ describe('MissionEngine', () => {
     }
   });
 
+  it('runs Claude Code through the same Branch, Binding, Event IR, and Receipt path', async () => {
+    const fixture = await createFixture('claude');
+    const missionSource = await readFile(fixture.missionFile, 'utf8');
+    await writeFile(
+      fixture.missionFile,
+      missionSource.replace('model: deepseek-v4-pro', 'model: claude-requested-model'),
+      'utf8',
+    );
+    const engine = new MissionEngine({
+      stateDir: fixture.stateDir,
+      codexAdapter: new CodexAdapter({ command: fixture.codex }),
+      qoderAdapter: new QoderAdapter({ command: fixture.qoder }),
+      claudeAdapter: new ClaudeAdapter({ command: fixture.claude }),
+    });
+    try {
+      const result = await engine.run(fixture.missionFile, { workspace: fixture.workspace });
+      expect(result).toMatchObject({ status: 'succeeded', receipt: { outcome: 'verified' } });
+      expect(engine.status(result.missionId).attempts).toMatchObject([
+        { harness: 'claude', status: 'succeeded' },
+      ]);
+      const runtimeEntries = engine
+        .timeline(result.missionId)
+        .filter((entry) => entry.kind === 'runtime.event');
+      expect(runtimeEntries).toHaveLength(3);
+      const runtimeData = runtimeEntries.map(
+        (entry) =>
+          entry.data as {
+            runtimeEventId: string;
+            semanticKind: string;
+            sourceSequence: number;
+            causalParentIds: string[];
+          },
+      );
+      expect(runtimeData.map((event) => event.semanticKind)).toEqual([
+        'session',
+        'message',
+        'turn',
+      ]);
+      expect(runtimeData.map((event) => event.sourceSequence)).toEqual([1, 2, 3]);
+      expect(runtimeData.map((event) => event.causalParentIds)).toEqual([[], [], []]);
+      const effectiveReports = engine
+        .timeline(result.missionId)
+        .filter((entry) => entry.kind === 'runtime.effective_profile_reported')
+        .map((entry) => entry.data);
+      expect(effectiveReports[0]).toMatchObject({
+        requestedModel: 'claude-requested-model',
+        observedModel: 'deepseek-v4-pro',
+        modelOverride: true,
+        permissionMode: 'dontAsk',
+        tools: ['Read', 'Write'],
+        skills: ['grill-me'],
+        mcpServers: ['filesystem (connected)'],
+        runtimeVersion: '2.1.245',
+      });
+      expect(effectiveReports).toContainEqual(
+        expect.objectContaining({ contextWindowTokens: 131_072, costUsd: 0.01 }),
+      );
+      expect(result.receipt?.rootBranchId).toMatch(/^branch-root-/);
+
+      const stableRuntimeIdentity = runtimeData.map((event) => ({
+        runtimeEventId: event.runtimeEventId,
+        sourceSequence: event.sourceSequence,
+        causalParentIds: event.causalParentIds,
+      }));
+      engine.close();
+      const reopened = new MissionEngine({
+        stateDir: fixture.stateDir,
+        codexAdapter: new CodexAdapter({ command: fixture.codex }),
+        qoderAdapter: new QoderAdapter({ command: fixture.qoder }),
+        claudeAdapter: new ClaudeAdapter({ command: fixture.claude }),
+      });
+      try {
+        expect(
+          reopened
+            .timeline(result.missionId)
+            .filter((entry) => entry.kind === 'runtime.event')
+            .map((entry) => {
+              const data = entry.data as {
+                runtimeEventId: string;
+                sourceSequence: number;
+                causalParentIds: string[];
+              };
+              return {
+                runtimeEventId: data.runtimeEventId,
+                sourceSequence: data.sourceSequence,
+                causalParentIds: data.causalParentIds,
+              };
+            }),
+        ).toEqual(stableRuntimeIdentity);
+      } finally {
+        reopened.close();
+      }
+    } finally {
+      engine.close();
+    }
+  });
+
+  it('reopens an accepted command and reaches a Receipt without another user submission', async () => {
+    const fixture = await createFixture('claude');
+    const adapters = () => ({
+      codexAdapter: new CodexAdapter({ command: fixture.codex }),
+      qoderAdapter: new QoderAdapter({ command: fixture.qoder }),
+      claudeAdapter: new ClaudeAdapter({ command: fixture.claude }),
+    });
+    const creator = new MissionEngine({ stateDir: fixture.stateDir, ...adapters() });
+    const created = await creator.create(fixture.missionFile, { workspace: fixture.workspace });
+    const accepted = await creator.acceptCommand(created.missionId, 'resume', 'restart-proof');
+    creator.close();
+
+    const recovered = new MissionEngine({ stateDir: fixture.stateDir, ...adapters() });
+    try {
+      const claimed = recovered.claimNextCommand('supervisor-after-restart');
+      expect(claimed).toMatchObject({ commandId: accepted.commandId, status: 'dispatching' });
+      const result = await recovered.executeCommand(accepted.commandId);
+      expect(result).toMatchObject({ status: 'succeeded', receipt: { outcome: 'verified' } });
+      expect(recovered.command(accepted.commandId)?.status).toBe('completed');
+      expect(recovered.status(created.missionId)).toMatchObject({
+        chainValid: true,
+        mission: { status: 'succeeded', rootBranchId: result.receipt?.rootBranchId },
+      });
+    } finally {
+      recovered.close();
+    }
+  });
+
+  it('keeps Profile Definition identity stable while Runtime snapshots change', async () => {
+    const fixture = await createFixture('claude');
+    const engine = new MissionEngine({
+      stateDir: fixture.stateDir,
+      claudeAdapter: new ClaudeAdapter({ command: fixture.claude }),
+    });
+    try {
+      const first = await engine.create(fixture.missionFile, { workspace: fixture.workspace });
+      const firstProfile = engine.status(first.missionId).mission.activeProfile;
+      const source = await readFile(fixture.claude, 'utf8');
+      await writeFile(fixture.claude, source.replace('2.1.245', '2.1.246'), 'utf8');
+      const second = await engine.create(fixture.missionFile, { workspace: fixture.workspace });
+      const secondProfile = engine.status(second.missionId).mission.activeProfile;
+
+      expect(firstProfile.definition?.definitionId).toBe(secondProfile.definition?.definitionId);
+      expect(firstProfile.profileId).not.toBe(secondProfile.profileId);
+      expect(firstProfile.runtimeVersion).toBe('2.1.245');
+      expect(secondProfile.runtimeVersion).toBe('2.1.246');
+      expect(firstProfile.catalogObservation?.observationId).not.toBe(
+        secondProfile.catalogObservation?.observationId,
+      );
+    } finally {
+      engine.close();
+    }
+  });
+
   it('verifies the original Kernel snapshot after the Mission YAML is replaced', async () => {
     const fixture = await createFixture('resume');
     const engine = new MissionEngine({
@@ -186,6 +339,7 @@ describe('MissionEngine', () => {
       const result = await engine.run(fixture.missionFile, { workspace: fixture.workspace });
       expect(result.status).toBe('succeeded');
       expect(result.receipt).toMatchObject({ outcome: 'verified' });
+      expect(result.receipt?.rootBranchId).toMatch(/^branch-root-/);
       expect(result.receipt?.attemptIds).toHaveLength(2);
       expect(result.receipt?.handoffIds).toHaveLength(1);
       const provenance = JSON.parse(
@@ -212,6 +366,50 @@ describe('MissionEngine', () => {
       expect(
         engine.timeline(result.missionId).some((entry) => entry.kind === 'mission.spec_snapshot'),
       ).toBe(false);
+      const audit = new MissionStore(join(fixture.stateDir, 'kernel.sqlite'));
+      try {
+        const events = audit.listEvents(result.missionId);
+        const branch = events.find((event) => event.type === 'branch.created');
+        expect(branch?.type === 'branch.created' ? branch.payload.branch.branchId : undefined).toBe(
+          result.receipt?.rootBranchId,
+        );
+        const bindings = events.filter((event) => event.type === 'attempt.bound');
+        expect(bindings).toHaveLength(2);
+        expect(
+          bindings.every(
+            (event) =>
+              event.type === 'attempt.bound' &&
+              event.payload.binding.branchId === result.receipt?.rootBranchId,
+          ),
+        ).toBe(true);
+        const runtimeEvents = events.filter((event) => event.type === 'runtime.event');
+        expect(runtimeEvents).toHaveLength(2);
+        expect(
+          runtimeEvents.map((event) =>
+            event.type === 'runtime.event'
+              ? {
+                  harness: event.payload.event.sourceHarness,
+                  sourceSequence: event.payload.event.sourceSequence,
+                  artifact: event.payload.event.nativeArtifact.relativePath,
+                }
+              : undefined,
+          ),
+        ).toMatchObject([
+          { harness: 'codex', sourceSequence: 1 },
+          { harness: 'qoder', sourceSequence: 1 },
+        ]);
+        for (const event of runtimeEvents) {
+          if (event.type !== 'runtime.event') continue;
+          const artifact = await readFile(
+            join(fixture.stateDir, 'artifacts', event.payload.event.nativeArtifact.relativePath),
+            'utf8',
+          );
+          expect(hashPayload(JSON.parse(artifact) as unknown)).toBeTruthy();
+        }
+        expect(audit.verifyEventChain(result.missionId).valid).toBe(true);
+      } finally {
+        audit.close();
+      }
     } finally {
       engine.close();
     }
@@ -319,13 +517,14 @@ describe('MissionEngine', () => {
   });
 });
 
-async function createFixture(mode: 'resume' | 'handoff' | 'controller-crash'): Promise<{
+async function createFixture(mode: 'resume' | 'handoff' | 'controller-crash' | 'claude'): Promise<{
   root: string;
   workspace: string;
   stateDir: string;
   missionFile: string;
   codex: string;
   qoder: string;
+  claude: string;
   runtimePidFile: string;
 }> {
   const root = await mkdtemp(join(tmpdir(), 'missionbraid-engine-'));
@@ -409,6 +608,22 @@ process.stdin.on('end', () => {
 });
 `,
   );
+  const claude = join(bin, 'claude');
+  await executable(
+    claude,
+    `#!/usr/bin/env node
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+if (process.argv[2] === '--version') { console.log('2.1.245 (Claude Code)'); process.exit(0); }
+process.stdin.resume();
+process.stdin.on('end', () => {
+  console.log(JSON.stringify({ type: 'system', subtype: 'init', session_id: 'session-fixture', model: 'deepseek-v4-pro', permissionMode: 'dontAsk', tools: ['Read', 'Write'], skills: ['grill-me'], mcp_servers: [{ name: 'filesystem', status: 'connected' }], claude_code_version: '2.1.245' }));
+  writeFileSync(join(process.cwd(), 'claude.txt'), 'claude-complete\\n');
+  console.log(JSON.stringify({ type: 'assistant', message: { id: 'message-fixture', model: 'deepseek-v4-pro' }, session_id: 'session-fixture' }));
+  console.log(JSON.stringify({ type: 'result', subtype: 'success', session_id: 'session-fixture', total_cost_usd: 0.01, modelUsage: { 'deepseek-v4-pro': { contextWindow: 131072 } } }));
+});
+`,
+  );
   const verifier = join(source, 'verify.mjs');
   await writeFile(
     verifier,
@@ -417,6 +632,10 @@ import { join } from 'node:path';
 const workspace = process.env.MISSIONBRAID_TARGET_WORKSPACE;
 const provenanceFile = process.env.PROVENANCE_FILE;
 if (!workspace || !provenanceFile) process.exit(2);
+if (${JSON.stringify(mode)} === 'claude') {
+  if (readFileSync(join(workspace, 'claude.txt'), 'utf8') !== 'claude-complete\\n') process.exit(3);
+  process.exit(0);
+}
 if (readFileSync(join(workspace, 'codex.txt'), 'utf8') !== 'checkpoint\\n') process.exit(3);
 if (!existsSync(join(workspace, 'done.txt'))) process.exit(4);
 const provenance = JSON.parse(readFileSync(provenanceFile, 'utf8'));
@@ -429,8 +648,18 @@ if (${JSON.stringify(mode)} !== 'resume') {
   );
   const missionFile = join(source, 'mission.yaml');
   const stages =
-    mode === 'resume'
-      ? `  - stageId: codex-only
+    mode === 'claude'
+      ? `  - stageId: claude-primary
+    profile:
+      harness: claude
+      model: deepseek-v4-pro
+      reasoningEffort: medium
+      permissionMode: dontAsk
+      injectionBudgetTokens: 4000
+    instruction: Complete the Claude fixture.
+    onFailure: stop`
+      : mode === 'resume'
+        ? `  - stageId: codex-only
     profile:
       harness: codex
       model: default
@@ -439,7 +668,7 @@ if (${JSON.stringify(mode)} !== 'resume') {
       injectionBudgetTokens: 4000
     instruction: Continue the fixture.
     onFailure: stop`
-      : `  - stageId: codex-source
+        : `  - stageId: codex-source
     profile:
       harness: codex
       model: default
@@ -478,7 +707,7 @@ attemptPlan:
 ${stages}
 `,
   );
-  return { root, workspace, stateDir, missionFile, codex, qoder, runtimePidFile };
+  return { root, workspace, stateDir, missionFile, codex, qoder, claude, runtimePidFile };
 }
 
 async function executable(path: string, source: string): Promise<void> {
@@ -544,6 +773,7 @@ function seedLegacyDanglingMission(fixture: {
           workspaceKey,
           contractId: 'contract-legacy-dangling',
           initialProfileId: profileId,
+          rootBranchId: 'branch-root-legacy-dangling',
           status: 'pending',
           createdAt: timestamp,
         },
@@ -623,6 +853,7 @@ function seedLegacyDanglingMission(fixture: {
           schemaVersion: DOMAIN_SCHEMA_VERSION,
           attemptId,
           missionId,
+          branchId: 'branch-root-legacy-dangling',
           profileId,
           stageId: spec.attemptPlan[0]!.stageId,
           status: 'running',

@@ -1,23 +1,40 @@
+import { APP_COPY } from './app-copy.js';
+
+const APP_COPY_JSON = JSON.stringify(APP_COPY).replaceAll('<', '\\u003c');
+
 export const APP_HTML = String.raw`<!doctype html>
-<html lang="zh-CN">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light" />
     <meta name="theme-color" content="#EEF3F8" />
-    <title>MissionBraid · 任务编织控制台</title>
+    <title>MissionBraid · Agent Runtime Workbench</title>
     <link rel="stylesheet" href="/app.css" />
   </head>
   <body>
-    <a class="skip-link" href="#mission-stage">跳到 Mission 详情</a>
+    <a class="skip-link" href="#mission-stage" data-i18n="nav.skipToMission">Skip to Mission details</a>
     <div class="app-shell">
       <header class="masthead">
         <div class="brand-lockup">
           <div class="brand-mark" aria-hidden="true">MB</div>
           <div>
-            <p class="eyebrow">Mission runtime workbench</p>
-            <h1>MissionBraid</h1>
-            <p class="brand-subtitle">任务属于 Mission，不属于某个 CLI。</p>
+            <p class="eyebrow" data-i18n="brand.eyebrow">Mission runtime workbench</p>
+            <div class="brand-title-row">
+              <h1>MissionBraid</h1>
+              <div
+                class="language-switch"
+                role="group"
+                aria-label="Language"
+                data-i18n-aria-label="language.ariaLabel"
+              >
+                <button type="button" data-locale="en" lang="en" aria-pressed="true">EN</button>
+                <button type="button" data-locale="zh-CN" lang="zh-CN" aria-pressed="false">中文</button>
+              </div>
+            </div>
+            <p class="brand-subtitle" data-i18n="brand.subtitle">
+              A Mission belongs to the Mission—not to one CLI.
+            </p>
           </div>
         </div>
 
@@ -40,12 +57,12 @@ export const APP_HTML = String.raw`<!doctype html>
               d="M0 67 C72 67 72 25 144 25 S216 67 288 67 S360 25 432 25 S504 67 576 67 S648 25 720 25"
             />
           </svg>
-          <span class="braid-caption">MISSION CONTINUITY</span>
+          <span class="braid-caption" data-i18n="brand.continuity">MISSION CONTINUITY</span>
         </div>
 
         <div class="connection-state" aria-live="polite">
           <span class="connection-dot" aria-hidden="true"></span>
-          <span id="connection-label">正在连接本地控制面</span>
+          <span id="connection-label">Connecting to the local control plane</span>
         </div>
       </header>
 
@@ -54,15 +71,17 @@ export const APP_HTML = String.raw`<!doctype html>
       <section class="runtime-belt" aria-labelledby="runtime-heading">
         <div class="section-heading runtime-heading-row">
           <div>
-            <p class="eyebrow">Runtime inventory</p>
-            <h2 id="runtime-heading">本机运行环境</h2>
+            <p class="eyebrow" data-i18n="runtime.eyebrow">Runtime inventory</p>
+            <h2 id="runtime-heading" data-i18n="runtime.heading">Local runtimes</h2>
           </div>
-          <button id="refresh-runtimes" class="quiet-button" type="button">
-            刷新清单
+          <button id="refresh-runtimes" class="quiet-button" type="button" data-i18n="runtime.refresh">
+            Refresh inventory
           </button>
         </div>
         <div id="runtime-list" class="runtime-list" aria-live="polite" aria-busy="true">
-          <p class="loading-note">正在识别 Codex、Qoder 与其他本机 Harness…</p>
+          <p class="loading-note" data-i18n="runtime.loading">
+            Detecting Codex, Qoder, and other local Harnesses…
+          </p>
         </div>
       </section>
 
@@ -70,15 +89,21 @@ export const APP_HTML = String.raw`<!doctype html>
         <aside class="panel mission-index" aria-labelledby="mission-index-heading">
           <div class="panel-heading">
             <div>
-              <p class="eyebrow">Mission index</p>
-              <h2 id="mission-index-heading">Mission</h2>
+              <p class="eyebrow" data-i18n="mission.indexEyebrow">Mission index</p>
+              <h2 id="mission-index-heading" data-i18n="mission.indexHeading">Missions</h2>
             </div>
-            <button id="refresh-missions" class="icon-button" type="button" aria-label="刷新 Mission 列表">
+            <button
+              id="refresh-missions"
+              class="icon-button"
+              type="button"
+              aria-label="Refresh Mission list"
+              data-i18n-aria-label="mission.refreshAria"
+            >
               ↻
             </button>
           </div>
           <div id="mission-list" class="mission-list" aria-live="polite" aria-busy="true">
-            <p class="empty-note">正在读取 Mission…</p>
+            <p class="empty-note" data-i18n="mission.loading">Loading Missions…</p>
           </div>
         </aside>
 
@@ -86,11 +111,13 @@ export const APP_HTML = String.raw`<!doctype html>
           <div id="mission-detail" class="mission-detail" aria-live="polite">
             <div class="detail-empty">
               <span class="empty-knot" aria-hidden="true"></span>
-              <p class="eyebrow">No mission selected</p>
-              <h2 id="mission-detail-heading">让一条任务穿过多个 Runtime</h2>
-              <p>
-                选择左侧已有 Mission，或在右侧创建一条新 Mission。这里会按真实顺序展示
-                Attempt、Capsule、Effect 与 Receipt。
+              <p class="eyebrow" data-i18n="mission.noSelectionEyebrow">No Mission selected</p>
+              <h2 id="mission-detail-heading" data-i18n="mission.noSelectionTitle">
+                Move one task across multiple Runtimes
+              </h2>
+              <p data-i18n="mission.noSelectionBody">
+                Select an existing Mission on the left or create one on the right. Attempts,
+                Capsules, Effects, and Receipts appear here in their real order.
               </p>
             </div>
           </div>
@@ -99,38 +126,40 @@ export const APP_HTML = String.raw`<!doctype html>
         <aside class="panel composer" aria-labelledby="composer-heading">
           <div class="panel-heading composer-heading">
             <div>
-              <p class="eyebrow">Compose</p>
-              <h2 id="composer-heading">编织新 Mission</h2>
+              <p class="eyebrow" data-i18n="composer.eyebrow">Compose</p>
+              <h2 id="composer-heading" data-i18n="composer.heading">Braid a new Mission</h2>
             </div>
-            <span class="step-chip">一次提交</span>
+            <span class="step-chip" data-i18n="composer.submitOnce">One submission</span>
           </div>
 
           <form id="mission-form" novalidate>
             <label class="field">
-              <span>标题</span>
+              <span data-i18n="form.titleLabel">Title</span>
               <input
                 id="mission-title"
                 name="title"
                 type="text"
                 autocomplete="off"
-                placeholder="修复浏览器任务持久化"
+                placeholder="Fix browser task persistence"
+                data-i18n-placeholder="form.titlePlaceholder"
                 required
               />
             </label>
 
             <label class="field">
-              <span>想得到什么结果</span>
+              <span data-i18n="form.objectiveLabel">What outcome do you want?</span>
               <textarea
                 id="mission-objective"
                 name="objective"
                 rows="4"
-                placeholder="描述最终可验证的代码结果，不必替 Runtime 拆步骤。"
+                placeholder="Describe the final verifiable code outcome. You do not need to break the work into Runtime steps."
+                data-i18n-placeholder="form.objectivePlaceholder"
                 required
               ></textarea>
             </label>
 
             <label class="field">
-              <span>Git 工作区绝对路径</span>
+              <span data-i18n="form.workspaceLabel">Absolute path to the Git workspace</span>
               <input
                 id="mission-workspace"
                 name="workspace"
@@ -139,17 +168,20 @@ export const APP_HTML = String.raw`<!doctype html>
                 autocomplete="off"
                 spellcheck="false"
                 placeholder="/Users/me/project-worktree"
+                data-i18n-placeholder="form.workspacePlaceholder"
                 required
               />
             </label>
 
             <div class="verifier-block">
               <div class="field-intro">
-                <span>完成判据</span>
-                <small>控制面会直接执行程序，不经过 Shell。</small>
+                <span data-i18n="form.verifierHeading">Completion criteria</span>
+                <small data-i18n="form.verifierHint">
+                  The control plane runs the program directly, without a Shell.
+                </small>
               </div>
               <label class="field compact-field">
-                <span>Executable</span>
+                <span data-i18n="form.executableLabel">Executable</span>
                 <input
                   id="verifier-executable"
                   name="verifierExecutable"
@@ -161,7 +193,7 @@ export const APP_HTML = String.raw`<!doctype html>
                 />
               </label>
               <label class="field compact-field">
-                <span>Arguments · 一行一个</span>
+                <span data-i18n="form.argumentsLabel">Arguments · one per line</span>
                 <textarea
                   id="verifier-args"
                   name="verifierArgs"
@@ -172,18 +204,24 @@ export const APP_HTML = String.raw`<!doctype html>
             </div>
 
             <fieldset class="route-fieldset">
-              <legend>Runtime 路线</legend>
+              <legend data-i18n="form.routeLegend">Runtime route</legend>
               <div class="route-options">
                 <input id="route-codex" name="route" type="radio" value="codex" />
                 <label for="route-codex" class="route-option">
                   <strong>Codex</strong>
-                  <small>单一 Attempt</small>
+                  <small data-i18n="form.singleAttempt">Single Attempt</small>
                 </label>
 
                 <input id="route-qoder" name="route" type="radio" value="qoder" />
                 <label for="route-qoder" class="route-option">
                   <strong>Qoder</strong>
-                  <small>单一 Attempt</small>
+                  <small data-i18n="form.singleAttempt">Single Attempt</small>
+                </label>
+
+                <input id="route-claude" name="route" type="radio" value="claude" />
+                <label for="route-claude" class="route-option">
+                  <strong>Claude Code</strong>
+                  <small data-i18n="form.singleAttempt">Single Attempt</small>
                 </label>
 
                 <input
@@ -195,15 +233,35 @@ export const APP_HTML = String.raw`<!doctype html>
                 />
                 <label for="route-braid" class="route-option route-option-braid">
                   <strong>Codex <span aria-hidden="true">→</span> Qoder</strong>
-                  <small>计划内 Capsule 接力</small>
+                  <small data-i18n="form.plannedHandoff">Planned Capsule handoff</small>
+                </label>
+
+                <input
+                  id="route-three-runtime"
+                  name="route"
+                  type="radio"
+                  value="codex-qoder-claude"
+                />
+                <label
+                  for="route-three-runtime"
+                  class="route-option route-option-braid route-option-wide"
+                >
+                  <strong>
+                    Codex <span aria-hidden="true">→</span> Qoder
+                    <span aria-hidden="true">→</span> Claude
+                  </strong>
+                  <small data-i18n="form.threeRuntimeHandoff">
+                    Three-stage Capsule handoff
+                  </small>
                 </label>
               </div>
             </fieldset>
 
             <details class="profile-editor" open>
-              <summary>Runtime Profile</summary>
-              <p class="profile-editor-note">
-                Harness 只是运行器；模型、推理强度和权限共同构成实际执行环境。
+              <summary data-i18n="form.profileSummary">Runtime Profile</summary>
+              <p class="profile-editor-note" data-i18n="form.profileHint">
+                A Harness is only the runner; the model, reasoning effort, and permissions define
+                the effective execution environment.
               </p>
               <div class="profile-editor-grid">
                 <section class="profile-editor-card" data-profile-editor="codex">
@@ -212,11 +270,11 @@ export const APP_HTML = String.raw`<!doctype html>
                     <span>workspace-write</span>
                   </div>
                   <label class="field compact-field">
-                    <span>Model</span>
+                    <span data-i18n="form.modelLabel">Model</span>
                     <input id="codex-model" type="text" value="gpt-5.6-sol" />
                   </label>
                   <label class="field compact-field">
-                    <span>Reasoning</span>
+                    <span data-i18n="form.reasoningLabel">Reasoning</span>
                     <select id="codex-reasoning">
                       <option value="low">low</option>
                       <option value="medium" selected>medium</option>
@@ -232,12 +290,31 @@ export const APP_HTML = String.raw`<!doctype html>
                     <span>bypass_permissions</span>
                   </div>
                   <label class="field compact-field">
-                    <span>Model</span>
+                    <span data-i18n="form.modelLabel">Model</span>
                     <input id="qoder-model" type="text" value="Qwen3.8-Max" />
                   </label>
                   <label class="field compact-field">
-                    <span>Reasoning</span>
+                    <span data-i18n="form.reasoningLabel">Reasoning</span>
                     <select id="qoder-reasoning">
+                      <option value="low">low</option>
+                      <option value="medium" selected>medium</option>
+                      <option value="high">high</option>
+                      <option value="max">max</option>
+                    </select>
+                  </label>
+                </section>
+                <section class="profile-editor-card" data-profile-editor="claude">
+                  <div class="profile-editor-heading">
+                    <strong>Claude Code</strong>
+                    <span>bypassPermissions</span>
+                  </div>
+                  <label class="field compact-field">
+                    <span data-i18n="form.modelLabel">Model</span>
+                    <input id="claude-model" type="text" value="deepseek-v4-pro" />
+                  </label>
+                  <label class="field compact-field">
+                    <span data-i18n="form.reasoningLabel">Reasoning</span>
+                    <select id="claude-reasoning">
                       <option value="low">low</option>
                       <option value="medium" selected>medium</option>
                       <option value="high">high</option>
@@ -256,7 +333,7 @@ export const APP_HTML = String.raw`<!doctype html>
 
             <div id="form-status" class="form-status" role="status" aria-live="polite"></div>
             <button id="create-mission" class="primary-button" type="submit">
-              <span>创建并运行 Mission</span>
+              <span data-i18n="form.createAndRun">Create and run Mission</span>
               <span aria-hidden="true">↗</span>
             </button>
           </form>
@@ -264,8 +341,8 @@ export const APP_HTML = String.raw`<!doctype html>
       </main>
 
       <footer class="page-footer">
-        <span>LOCAL CONTROL PLANE</span>
-        <span>Mission Kernel 是任务状态的唯一事实源</span>
+        <span data-i18n="footer.controlPlane">LOCAL CONTROL PLANE</span>
+        <span data-i18n="footer.kernelTruth">Mission Kernel is the sole source of truth for Mission state</span>
       </footer>
     </div>
     <script type="module" src="/app.js"></script>
@@ -374,6 +451,45 @@ button:disabled {
   display: flex;
   gap: 15px;
   align-items: center;
+}
+
+.brand-title-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.language-switch {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.76);
+}
+
+.language-switch button {
+  min-width: 35px;
+  padding: 4px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.language-switch button + button {
+  border-left: 1px solid var(--line);
+}
+
+.language-switch button[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--white);
+}
+
+.language-switch button:hover:not([aria-pressed="true"]) {
+  color: var(--cobalt);
 }
 
 .brand-mark {
@@ -565,7 +681,7 @@ h3 {
 
 .runtime-list {
   display: grid;
-  grid-auto-columns: minmax(190px, 1fr);
+  grid-auto-columns: minmax(300px, 1fr);
   grid-auto-flow: column;
   gap: 9px;
   overflow-x: auto;
@@ -667,6 +783,78 @@ h3 {
   font-size: 0.58rem;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.runtime-capabilities {
+  margin-top: 11px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.runtime-capabilities-heading {
+  margin: 0 0 7px;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.54rem;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.runtime-capability-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.runtime-capability-item {
+  min-width: 0;
+  padding: 6px 7px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: rgba(247, 249, 252, 0.88);
+}
+
+.runtime-capability-name,
+.runtime-capability-state,
+.runtime-capability-control {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runtime-capability-name {
+  color: var(--ink);
+  font-size: 0.6rem;
+  font-weight: 750;
+}
+
+.runtime-capability-state,
+.runtime-capability-control {
+  margin-top: 2px;
+  font-family: var(--mono);
+  font-size: 0.52rem;
+}
+
+.runtime-capability-state {
+  color: var(--muted);
+}
+
+.runtime-capability-state.is-supported {
+  color: var(--teal);
+}
+
+.runtime-capability-state.is-unsupported {
+  color: var(--cobalt);
+}
+
+.runtime-capability-state.is-unknown {
+  color: var(--orange);
+}
+
+.runtime-capability-control {
+  color: var(--muted);
 }
 
 .loading-note,
@@ -806,6 +994,7 @@ h3 {
 }
 
 .status-badge.is-running,
+.status-badge.is-queued,
 .status-badge.is-pending,
 .status-badge.is-verifying {
   background: var(--wash-blue);
@@ -956,6 +1145,201 @@ h3 {
 
 .timeline-section {
   padding: 22px clamp(17px, 3vw, 31px) 27px;
+}
+
+.runtime-intelligence {
+  padding: 20px clamp(17px, 3vw, 31px) 22px;
+  border-bottom: 1px solid var(--line);
+  background: #f7f9fc;
+}
+
+.intelligence-heading {
+  margin-bottom: 13px;
+}
+
+.intelligence-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.intelligence-card {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--white);
+}
+
+.intelligence-card.is-wide {
+  grid-column: 1 / -1;
+}
+
+.intelligence-card-heading {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 9px;
+}
+
+.intelligence-card-heading h4 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 0.92rem;
+}
+
+.intelligence-card-heading span {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.55rem;
+}
+
+.intelligence-record + .intelligence-record {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.intelligence-record-title {
+  margin: 0 0 7px;
+  overflow: hidden;
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.intelligence-facts {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+}
+
+.intelligence-fact {
+  display: grid;
+  grid-template-columns: minmax(92px, 0.68fr) minmax(0, 1.32fr);
+  gap: 8px;
+  align-items: baseline;
+}
+
+.intelligence-fact dt,
+.intelligence-fact dd {
+  margin: 0;
+}
+
+.intelligence-fact dt {
+  color: var(--muted);
+  font-size: 0.58rem;
+}
+
+.intelligence-fact dd {
+  overflow-wrap: anywhere;
+  color: #394962;
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  line-height: 1.4;
+}
+
+.runtime-event-records {
+  max-height: 430px;
+  padding-right: 4px;
+  overflow: auto;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+.runtime-event-facts {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.runtime-event-fact {
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--white);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.53rem;
+  overflow-wrap: anywhere;
+}
+
+.native-artifact-button {
+  padding: 4px 7px;
+  border: 1px solid rgba(49, 91, 214, 0.3);
+  border-radius: 6px;
+  background: var(--wash-blue);
+  color: var(--cobalt);
+  font-size: 0.58rem;
+  font-weight: 750;
+}
+
+.native-artifact-button:hover:not(:disabled) {
+  border-color: var(--cobalt);
+}
+
+.native-artifact-viewer {
+  flex: 1 0 100%;
+  min-width: 0;
+  margin-top: 3px;
+  padding: 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--ink);
+  color: #eaf0f7;
+}
+
+.native-artifact-viewer[hidden] {
+  display: none;
+}
+
+.native-artifact-viewer-header {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.native-artifact-viewer-header strong {
+  font-size: 0.68rem;
+}
+
+.native-artifact-close {
+  padding: 3px 6px;
+  border: 1px solid rgba(234, 240, 247, 0.34);
+  border-radius: 5px;
+  background: transparent;
+  color: #eaf0f7;
+  font-size: 0.55rem;
+}
+
+.native-artifact-meta {
+  margin: 0 0 7px;
+  color: #aebed0;
+  font-family: var(--mono);
+  font-size: 0.52rem;
+  overflow-wrap: anywhere;
+}
+
+.native-artifact-viewer pre {
+  max-height: 300px;
+  margin: 0;
+  overflow: auto;
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.native-artifact-error {
+  margin: 0;
+  color: #ffc7ba;
+  font-size: 0.65rem;
 }
 
 .timeline-section-heading {
@@ -1273,7 +1657,7 @@ h3 {
 
 .route-options {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 5px;
 }
 
@@ -1328,6 +1712,10 @@ h3 {
   background: linear-gradient(120deg, var(--wash-blue), var(--wash-orange));
   color: var(--ink);
   box-shadow: inset 0 -3px 0 var(--orange);
+}
+
+.route-option-wide {
+  grid-column: 1 / -1;
 }
 
 .route-summary {
@@ -1421,6 +1809,10 @@ h3 {
 
 .route-thread-qoder {
   color: #83d8d2;
+}
+
+.route-thread-claude {
+  color: #ffc09f;
 }
 
 .route-arrow {
@@ -1580,6 +1972,14 @@ h3 {
     grid-template-columns: 1fr;
   }
 
+  .intelligence-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .intelligence-card.is-wide {
+    grid-column: auto;
+  }
+
   .route-option {
     min-height: 52px;
   }
@@ -1612,13 +2012,47 @@ h3 {
   }
 }`;
 
-export const APP_JAVASCRIPT = String.raw`const state = {
+export const APP_JAVASCRIPT = String.raw`const COPY = ${APP_COPY_JSON};
+const LOCALE_STORAGE_KEY = 'missionbraid.locale';
+const SUPPORTED_LOCALES = ['en', 'zh-CN'];
+
+function normalizeLocale(value) {
+  if (typeof value !== 'string') return null;
+  if (value.toLowerCase().startsWith('zh')) return 'zh-CN';
+  if (value.toLowerCase().startsWith('en')) return 'en';
+  return null;
+}
+
+function preferredLocale() {
+  try {
+    const stored = normalizeLocale(window.localStorage.getItem(LOCALE_STORAGE_KEY));
+    if (stored) return stored;
+  } catch (_error) {
+    // The Workbench still functions when browser storage is unavailable.
+  }
+  const browserLocales = Array.isArray(navigator.languages)
+    ? navigator.languages
+    : [navigator.language];
+  for (const browserLocale of browserLocales) {
+    const locale = normalizeLocale(browserLocale);
+    if (locale) return locale;
+  }
+  return 'en';
+}
+
+const state = {
+  locale: preferredLocale(),
   runtimes: [],
   missions: [],
   selectedMissionId: null,
   detail: null,
+  runtimesLoading: false,
   missionsLoading: false,
   detailLoading: false,
+  connection: { online: false, message: { key: 'connection.connecting' } },
+  pageAlert: null,
+  formMessage: null,
+  formMessageKind: '',
 };
 
 const elements = {
@@ -1634,25 +2068,53 @@ const elements = {
   formStatus: document.querySelector('#form-status'),
   createButton: document.querySelector('#create-mission'),
   routeSummary: document.querySelector('#route-summary'),
+  languageButtons: document.querySelectorAll('[data-locale]'),
 };
 
-const STATUS_LABELS = {
-  pending: '待运行',
-  running: '运行中',
-  waiting: '等待继续',
-  verifying: '验收中',
-  succeeded: '已验证',
-  failed: '未通过',
-  cancelled: '已取消',
-  interrupted: '已中断 · 可继续',
+const STATUS_LABEL_KEYS = {
+  pending: 'mission.status.pending',
+  queued: 'mission.status.queued',
+  running: 'mission.status.running',
+  waiting: 'mission.status.waiting',
+  verifying: 'mission.status.verifying',
+  succeeded: 'mission.status.succeeded',
+  failed: 'mission.status.failed',
+  cancelled: 'mission.status.cancelled',
+  interrupted: 'mission.status.interrupted',
 };
 
-const RUNTIME_STATUS_LABELS = {
-  'ready-supported': '已就绪 · 可执行 Mission',
-  'installed-unavailable': '已安装 · 当前不可用',
-  'installed-unsupported': '已发现 · 尚未接入 Mission',
-  'needs-bootstrap': '已发现外壳 · 需要启动命令',
-  missing: '本机未发现',
+const RUNTIME_STATUS_LABEL_KEYS = {
+  'ready-supported': 'runtime.status.ready-supported',
+  'installed-unavailable': 'runtime.status.installed-unavailable',
+  'installed-unsupported': 'runtime.status.installed-unsupported',
+  'needs-bootstrap': 'runtime.status.needs-bootstrap',
+  missing: 'runtime.status.missing',
+};
+
+const RUNTIME_CAPABILITY_FIELDS = [
+  ['observe', 'runtime.capability.observe'],
+  ['interrupt', 'runtime.capability.interrupt'],
+  ['steer', 'runtime.capability.steer'],
+  ['pre_tool_gate', 'runtime.capability.gate'],
+  ['resume', 'runtime.capability.resume'],
+  ['native_fork', 'runtime.capability.fork'],
+  ['workspace_restore', 'runtime.capability.restore'],
+  ['external_effect_control', 'runtime.capability.effectControl'],
+];
+
+const RUNTIME_CAPABILITY_STATUS_KEYS = {
+  supported: 'runtime.capability.status.supported',
+  unsupported: 'runtime.capability.status.unsupported',
+  unknown: 'runtime.capability.status.unknown',
+};
+
+const RUNTIME_CAPABILITY_CONTROL_KEYS = {
+  native: 'runtime.capability.control.native',
+  controller: 'runtime.capability.control.controller',
+  cooperative: 'runtime.capability.control.cooperative',
+  'observe-only': 'runtime.capability.control.observe-only',
+  none: 'runtime.capability.control.none',
+  unknown: 'runtime.capability.control.unknown',
 };
 
 const MISSION_ACTION_PATHS = {
@@ -1664,24 +2126,109 @@ const MISSION_ACTION_PATHS = {
   },
 };
 
-const KIND_LABELS = {
-  'mission.created': 'Mission 已创建',
-  'mission.status_changed': 'Mission 状态更新',
-  'profile.selected': 'Runtime Profile 已选择',
-  'attempt.started': 'Attempt 已开始',
-  'attempt.finished': 'Attempt 已结束',
-  'checkpoint.created': 'Checkpoint 已冻结',
-  'handoff.prepared': 'Capsule 已准备',
-  'handoff.acknowledged': 'Capsule 已确认',
-  'handoff.rejected': 'Capsule 被拒绝',
-  'effect.recorded': 'Effect 已登记',
-  'effect.status_changed': 'Effect 状态更新',
-  'runtime.process_started': 'Runtime 进程已启动',
-  'runtime.process_finished': 'Runtime 进程已结束',
-  'verification.completed': '完成判据已执行',
-  'receipt.issued': 'Outcome Receipt 已签发',
-  'failure.observed': '已观察到故障',
+const KIND_LABEL_KEYS = {
+  'mission.created': 'event.mission.created',
+  'mission.status_changed': 'event.mission.status_changed',
+  'branch.created': 'event.branch.created',
+  'runtime.catalog_observed': 'event.runtime.catalog_observed',
+  'profile.definition_recorded': 'event.profile.definition_recorded',
+  'profile.selected': 'event.profile.selected',
+  'attempt.bound': 'event.attempt.bound',
+  'attempt.started': 'event.attempt.started',
+  'attempt.finished': 'event.attempt.finished',
+  'attempt.baseline': 'event.attempt.baseline',
+  'checkpoint.created': 'event.checkpoint.created',
+  'handoff.prepared': 'event.handoff.prepared',
+  'handoff.acknowledged': 'event.handoff.acknowledged',
+  'handoff.rejected': 'event.handoff.rejected',
+  'effect.recorded': 'event.effect.recorded',
+  'effect.status_changed': 'event.effect.status_changed',
+  'runtime.process_started': 'event.runtime.process_started',
+  'runtime.process_finished': 'event.runtime.process_finished',
+  'runtime.event': 'event.runtime.event',
+  'runtime.effective_profile_reported': 'event.runtime.effective_profile_reported',
+  'command.accepted': 'event.command.accepted',
+  'command.status_changed': 'event.command.status_changed',
+  'verification.completed': 'event.verification.completed',
+  'receipt.issued': 'event.receipt.issued',
+  'failure.observed': 'event.failure.observed',
 };
+
+function t(key, variables) {
+  const localeCopy = COPY[state.locale] || COPY.en;
+  const template = localeCopy[key] || COPY.en[key] || key;
+  const values = variables || {};
+  return String(template).replace(/\{([a-zA-Z0-9_]+)\}/g, function (_match, name) {
+    return values[name] === undefined || values[name] === null ? '' : String(values[name]);
+  });
+}
+
+function translated(key, variables) {
+  return { key: key, variables: variables || {} };
+}
+
+function messageText(message) {
+  if (!message) return '';
+  if (typeof message.raw === 'string') return message.raw;
+  return t(message.key, message.variables);
+}
+
+function localizedError(key, variables) {
+  const error = new Error(t(key, variables));
+  error.translation = translated(key, variables);
+  return error;
+}
+
+function errorMessage(error, fallbackKey) {
+  if (error && error.translation) return error.translation;
+  if (error && typeof error.message === 'string' && error.message) {
+    return { raw: error.message };
+  }
+  return translated(fallbackKey);
+}
+
+function translateStaticContent() {
+  document.querySelectorAll('[data-i18n]').forEach(function (node) {
+    node.textContent = t(node.getAttribute('data-i18n'));
+  });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(function (node) {
+    node.setAttribute('placeholder', t(node.getAttribute('data-i18n-placeholder')));
+  });
+  document.querySelectorAll('[data-i18n-aria-label]').forEach(function (node) {
+    node.setAttribute('aria-label', t(node.getAttribute('data-i18n-aria-label')));
+  });
+}
+
+function applyLocale(locale, options) {
+  const normalized = normalizeLocale(locale) || 'en';
+  state.locale = normalized;
+  if (options && options.persist) {
+    try {
+      window.localStorage.setItem(LOCALE_STORAGE_KEY, normalized);
+    } catch (_error) {
+      // A private browser context may reject storage; the current switch still applies.
+    }
+  }
+  document.documentElement.lang = normalized;
+  document.title = t('page.title');
+  translateStaticContent();
+  elements.languageButtons.forEach(function (button) {
+    button.setAttribute('aria-pressed', button.getAttribute('data-locale') === normalized ? 'true' : 'false');
+  });
+  renderConnection();
+  renderPageAlert();
+  renderFormStatus();
+  if (options && options.rerender) {
+    renderRuntimes();
+    renderMissionList();
+    if (state.detail) {
+      renderDetail();
+    } else if (state.selectedMissionId && state.detailLoading) {
+      replaceWithMessage(elements.missionDetail, 'empty-note', t('mission.detailLoading'));
+    }
+    renderRouteSummary();
+  }
+}
 
 function createElement(tagName, className, text) {
   const node = document.createElement(tagName);
@@ -1695,19 +2242,106 @@ function replaceWithMessage(container, className, text) {
   container.replaceChildren(paragraph);
 }
 
-function showPageAlert(message) {
-  if (!message) {
+function renderPageAlert() {
+  if (!state.pageAlert) {
     elements.pageAlert.hidden = true;
     elements.pageAlert.textContent = '';
     return;
   }
-  elements.pageAlert.textContent = message;
+  elements.pageAlert.textContent = messageText(state.pageAlert);
   elements.pageAlert.hidden = false;
 }
 
-function setConnection(online, message) {
-  elements.connection.classList.toggle('is-online', online);
-  elements.connectionLabel.textContent = message;
+function showPageAlert(message) {
+  state.pageAlert = message;
+  renderPageAlert();
+}
+
+function renderConnection() {
+  elements.connection.classList.toggle('is-online', state.connection.online);
+  elements.connectionLabel.textContent = messageText(state.connection.message);
+}
+
+function setConnection(online, key, variables) {
+  state.connection = { online: online, message: translated(key, variables) };
+  renderConnection();
+}
+
+function responseError(payload, status) {
+  const code = payload && typeof payload.code === 'string' ? payload.code : '';
+  const params = payload && recordValue(payload.params) ? payload.params : {};
+  let message = payload && typeof payload.message === 'string' ? payload.message : '';
+  let invalidMissionDraft = false;
+  if (code === 'APP_STOPPING') return localizedError('error.appStopping');
+  if (code === 'MISSION_ALREADY_RUNNING') {
+    return localizedError('error.missionAlreadyRunning', {
+      missionId: params.missionId || t('intelligence.unknown'),
+    });
+  }
+  if (code === 'RUNTIME_NOT_READY') {
+    return localizedError('error.runtimeNotReady', {
+      harness: params.runtime || t('runtime.nameFallback'),
+      reason: params.reason || t('intelligence.unknown'),
+    });
+  }
+  if (code === 'ROUTE_NOT_FOUND') return localizedError('error.routeNotFound');
+  if (code === 'INVALID_CONTENT_TYPE') return localizedError('error.invalidContentType');
+  if (code === 'REQUEST_TOO_LARGE') return localizedError('error.requestTooLarge');
+  if (code === 'INVALID_JSON') return localizedError('error.invalidJson');
+  if (code === 'ARTIFACT_NOT_FOUND') {
+    return localizedError('artifact.notFound', {
+      artifactId: params.artifactId || t('intelligence.unknown'),
+    });
+  }
+  if (code === 'INVALID_MISSION_DRAFT') {
+    invalidMissionDraft = true;
+    if (typeof params.detail === 'string') message = params.detail;
+  }
+  if (message === 'MissionBraid app is stopping.') return localizedError('error.appStopping');
+  if (message === 'Route not found.') return localizedError('error.routeNotFound');
+  if (message === 'Content-Type must be application/json.') {
+    return localizedError('error.invalidContentType');
+  }
+  if (message === 'Request body is too large.') return localizedError('error.requestTooLarge');
+  if (message === 'Request body must be valid JSON.') return localizedError('error.invalidJson');
+  if (message === 'input.workspace must be an absolute path') {
+    return localizedError('validation.workspaceAbsolute');
+  }
+  if (message === 'workspaceRoot must be a directory') {
+    return localizedError('validation.workspaceDirectory');
+  }
+  if (message === 'workspaceRoot must be the Git worktree root') {
+    return localizedError('validation.workspaceGitRoot');
+  }
+  if (
+    message ===
+    'input.verifier.executable must invoke the verifier directly, not through a shell'
+  ) {
+    return localizedError('validation.verifierDirect');
+  }
+  const credentialMatch = message.match(/^Credential-like (?:value at|field) (.+) is not accepted$/);
+  if (credentialMatch) {
+    return localizedError('error.credentialRejected', { path: credentialMatch[1] });
+  }
+  const gitMatch = message.match(/^(?:Unable to execute Git:|Git command failed with status) (.+)$/);
+  if (gitMatch) return localizedError('error.gitUnavailable', { reason: gitMatch[1] });
+  const runningMatch = message.match(/^Mission (.+) already has a running operation\.$/);
+  if (runningMatch) {
+    return localizedError('error.missionAlreadyRunning', { missionId: runningMatch[1] });
+  }
+  const runtimeMatch = message.match(/^(.+) is not ready for Mission execution: (.+)$/);
+  if (runtimeMatch) {
+    return localizedError('error.runtimeNotReady', {
+      harness: runtimeMatch[1],
+      reason: runtimeMatch[2],
+    });
+  }
+  if (message) {
+    return invalidMissionDraft
+      ? localizedError('error.invalidMissionDraft', { detail: message })
+      : new Error(message);
+  }
+  return localizedError('error.requestFailedStatus', { status: status });
 }
 
 async function requestJson(path, options) {
@@ -1724,8 +2358,8 @@ async function requestJson(path, options) {
       signal: requestOptions.signal,
     });
   } catch (_error) {
-    setConnection(false, '本地控制面未连接');
-    throw new Error('无法连接本地 MissionBraid 服务。确认 app 服务仍在运行。');
+    setConnection(false, 'connection.disconnected');
+    throw localizedError('error.cannotConnect');
   }
 
   let payload = null;
@@ -1740,13 +2374,9 @@ async function requestJson(path, options) {
   }
 
   if (!response.ok) {
-    const message =
-      payload && typeof payload.message === 'string'
-        ? payload.message
-        : '请求未完成，服务返回 ' + String(response.status) + '。';
-    throw new Error(message);
+    throw responseError(payload, response.status);
   }
-  setConnection(true, '本地控制面已连接');
+  setConnection(true, 'connection.connected');
   return payload;
 }
 
@@ -1778,7 +2408,8 @@ function missionStatusOf(value) {
 }
 
 function statusBadge(status) {
-  const label = STATUS_LABELS[status] || status || '未知';
+  const key = STATUS_LABEL_KEYS[status];
+  const label = key ? t(key) : status || t('mission.status.unknown');
   return createElement('span', 'status-badge is-' + String(status || 'unknown'), label);
 }
 
@@ -1791,13 +2422,59 @@ function runtimeCardClass(entry) {
   return 'runtime-card';
 }
 
+function renderRuntimeCapabilities(entry) {
+  const declarations = recordValue(entry.capabilityDeclarations) || {};
+  const section = createElement('section', 'runtime-capabilities');
+  section.setAttribute('aria-label', t('runtime.capabilitiesHeading'));
+  const heading = createElement(
+    'p',
+    'runtime-capabilities-heading',
+    t('runtime.capabilitiesHeading'),
+  );
+  const grid = createElement('div', 'runtime-capability-grid');
+  RUNTIME_CAPABILITY_FIELDS.forEach(function (field) {
+    const declaration = recordValue(declarations[field[0]]);
+    const status =
+      declaration && RUNTIME_CAPABILITY_STATUS_KEYS[declaration.status]
+        ? declaration.status
+        : 'unknown';
+    const control =
+      declaration && RUNTIME_CAPABILITY_CONTROL_KEYS[declaration.control]
+        ? declaration.control
+        : 'unknown';
+    const item = createElement('div', 'runtime-capability-item');
+    if (declaration && typeof declaration.detail === 'string') {
+      item.title = declaration.detail;
+    }
+    const name = createElement('span', 'runtime-capability-name', t(field[1]));
+    const stateLabel = createElement(
+      'span',
+      'runtime-capability-state is-' + status,
+      t(RUNTIME_CAPABILITY_STATUS_KEYS[status]),
+    );
+    const controlLabel = createElement(
+      'span',
+      'runtime-capability-control',
+      t(RUNTIME_CAPABILITY_CONTROL_KEYS[control]),
+    );
+    item.append(name, stateLabel, controlLabel);
+    grid.append(item);
+  });
+  section.append(heading, grid);
+  return section;
+}
+
 function renderRuntimes() {
-  elements.runtimeList.setAttribute('aria-busy', 'false');
+  elements.runtimeList.setAttribute('aria-busy', state.runtimesLoading ? 'true' : 'false');
+  if (state.runtimesLoading) {
+    replaceWithMessage(elements.runtimeList, 'loading-note', t('runtime.loading'));
+    return;
+  }
   if (state.runtimes.length === 0) {
     replaceWithMessage(
       elements.runtimeList,
       'empty-note',
-      '没有发现 Runtime。安装并登录 Codex 或 Qoder 后刷新清单。',
+      t('runtime.empty'),
     );
     return;
   }
@@ -1805,13 +2482,23 @@ function renderRuntimes() {
   state.runtimes.forEach(function (entry) {
     const card = createElement('article', runtimeCardClass(entry));
     const head = createElement('div', 'runtime-card-head');
-    const name = createElement('span', 'runtime-name', entry.displayName || entry.id || 'Runtime');
-    const version = createElement('span', 'runtime-version', entry.version || 'version —');
+    const name = createElement(
+      'span',
+      'runtime-name',
+      entry.displayName || entry.id || t('runtime.nameFallback'),
+    );
+    const version = createElement(
+      'span',
+      'runtime-version',
+      entry.version || t('runtime.versionFallback'),
+    );
     head.append(name, version);
     const stateLabel = createElement(
       'span',
       'runtime-state',
-      RUNTIME_STATUS_LABELS[entry.status] || entry.reason || '状态未知',
+      RUNTIME_STATUS_LABEL_KEYS[entry.status]
+        ? t(RUNTIME_STATUS_LABEL_KEYS[entry.status])
+        : entry.reason || t('runtime.stateFallback'),
     );
     card.append(head, stateLabel);
     if (entry.path) {
@@ -1819,34 +2506,43 @@ function renderRuntimes() {
       path.title = String(entry.path);
       card.append(path);
     }
+    card.append(renderRuntimeCapabilities(entry));
     fragment.append(card);
   });
   elements.runtimeList.replaceChildren(fragment);
 }
 
 async function loadRuntimes() {
+  state.runtimesLoading = true;
   elements.runtimeList.setAttribute('aria-busy', 'true');
   elements.refreshRuntimes.disabled = true;
   try {
     const payload = await requestJson('/api/v1/runtimes');
     state.runtimes = arrayFromPayload(payload, 'runtimes');
+    state.runtimesLoading = false;
     renderRuntimes();
   } catch (error) {
-    replaceWithMessage(elements.runtimeList, 'empty-note', error.message);
+    state.runtimesLoading = false;
+    replaceWithMessage(
+      elements.runtimeList,
+      'empty-note',
+      messageText(errorMessage(error, 'error.cannotConnect')),
+    );
   } finally {
+    state.runtimesLoading = false;
     elements.runtimeList.setAttribute('aria-busy', 'false');
     elements.refreshRuntimes.disabled = false;
   }
 }
 
 function renderMissionList() {
-  elements.missionList.setAttribute('aria-busy', 'false');
+  elements.missionList.setAttribute('aria-busy', state.missionsLoading ? 'true' : 'false');
+  if (state.missionsLoading) {
+    replaceWithMessage(elements.missionList, 'empty-note', t('mission.loading'));
+    return;
+  }
   if (state.missions.length === 0) {
-    replaceWithMessage(
-      elements.missionList,
-      'empty-note',
-      '还没有 Mission。填写创建表单，让第一条任务开始跨 Runtime 流动。',
-    );
+    replaceWithMessage(elements.missionList, 'empty-note', t('mission.empty'));
     return;
   }
   const fragment = document.createDocumentFragment();
@@ -1862,7 +2558,11 @@ function renderMissionList() {
     button.type = 'button';
     button.dataset.missionId = missionId;
     button.setAttribute('aria-pressed', state.selectedMissionId === missionId ? 'true' : 'false');
-    const title = createElement('span', 'mission-list-title', mission.title || '未命名 Mission');
+    const title = createElement(
+      'span',
+      'mission-list-title',
+      mission.title || t('mission.untitled'),
+    );
     const meta = createElement('span', 'mission-list-meta');
     const shortId = createElement('span', 'mission-list-id', compactId(missionId));
     meta.append(shortId, statusBadge(mission.status));
@@ -1892,9 +2592,17 @@ async function loadMissions(options) {
       state.selectedMissionId = null;
       state.detail = null;
     }
+    state.missionsLoading = false;
     renderMissionList();
   } catch (error) {
-    if (!quiet) replaceWithMessage(elements.missionList, 'empty-note', error.message);
+    state.missionsLoading = false;
+    if (!quiet) {
+      replaceWithMessage(
+        elements.missionList,
+        'empty-note',
+        messageText(errorMessage(error, 'error.cannotConnect')),
+      );
+    }
   } finally {
     state.missionsLoading = false;
     elements.missionList.setAttribute('aria-busy', 'false');
@@ -1908,10 +2616,10 @@ function compactId(value) {
 }
 
 function formatTime(value) {
-  if (typeof value !== 'string') return '时间未知';
+  if (typeof value !== 'string') return t('common.unknownTime');
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat('zh-CN', {
+  return new Intl.DateTimeFormat(state.locale, {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
@@ -1938,60 +2646,264 @@ function timelineMarker(category) {
 }
 
 function timelineLabel(entry) {
-  return KIND_LABELS[entry.kind] || entry.label || entry.kind || '运行记录';
+  const key = KIND_LABEL_KEYS[entry.kind];
+  return key ? t(key) : entry.label || entry.kind || t('timeline.recordFallback');
 }
 
 function timelineDescription(entry) {
   const data = entry && entry.data && typeof entry.data === 'object' ? entry.data : {};
+  if (entry.kind === 'branch.created') {
+    return t('timeline.description.branchCreated', {
+      branchId: data.branchId || t('intelligence.unknown'),
+    });
+  }
+  if (entry.kind === 'runtime.catalog_observed') {
+    return t('timeline.description.catalogObserved', {
+      harness: data.harness || entry.harness || t('runtime.nameFallback'),
+      availability: data.availability || t('intelligence.unknown'),
+    });
+  }
+  if (entry.kind === 'profile.definition_recorded') {
+    return t('timeline.description.profileDefinitionRecorded', {
+      harness: data.harness || entry.harness || t('runtime.nameFallback'),
+    });
+  }
+  if (entry.kind === 'attempt.bound') {
+    return t('timeline.description.attemptBound', {
+      attemptId: data.attemptId || entry.attemptId || t('intelligence.unknown'),
+    });
+  }
+  if (entry.kind === 'runtime.event') {
+    return t('timeline.description.runtimeEvent', {
+      harness: data.sourceHarness || entry.harness || t('runtime.nameFallback'),
+      sourceSequence: data.sourceSequence ?? t('intelligence.unknown'),
+      semanticKind: data.semanticKind || t('intelligence.unknown'),
+      nativeEventType: data.nativeEventType || t('intelligence.unknown'),
+    });
+  }
+  if (entry.kind === 'runtime.effective_profile_reported') {
+    return t('timeline.description.effectiveProfileReported', {
+      harness: entry.harness || t('runtime.nameFallback'),
+      model: data.observedModel || data.requestedModel || t('intelligence.unknown'),
+    });
+  }
+  if (entry.kind === 'command.accepted') {
+    return t('timeline.description.commandAccepted', {
+      action: data.action || t('intelligence.unknown'),
+    });
+  }
+  if (entry.kind === 'command.status_changed') {
+    return t('timeline.description.commandStatus', {
+      status: data.status || t('intelligence.unknown'),
+    });
+  }
   if (entry.kind === 'attempt.started') {
-    return (entry.harness || 'Runtime') + ' 开始执行当前阶段。';
+    return t('timeline.description.attemptStarted', {
+      harness: entry.harness || t('runtime.nameFallback'),
+    });
   }
   if (entry.kind === 'attempt.finished') {
-    return typeof data.summary === 'string' ? data.summary : '当前 Attempt 已留下可追溯结果。';
+    return typeof data.summary === 'string'
+      ? data.summary
+      : t('timeline.description.attemptFinished');
   }
   if (entry.kind === 'profile.selected') {
-    const model = typeof data.model === 'string' ? data.model : '默认模型';
-    return (entry.harness || 'Runtime') + ' 使用 ' + model + ' Profile。';
+    const model = typeof data.model === 'string' ? data.model : t('timeline.defaultModel');
+    return t('timeline.description.profileSelected', {
+      harness: entry.harness || t('runtime.nameFallback'),
+      model: model,
+    });
   }
   if (entry.kind === 'checkpoint.created') {
-    return '工作区状态已冻结，后续 Runtime 将从这条可验证边界继续。';
+    return t('timeline.description.checkpointCreated');
   }
   if (entry.kind === 'handoff.prepared') {
-    return '控制面已把目标、约束、工作区摘要和剩余工作投影为 Capsule。';
+    return t('timeline.description.handoffPrepared');
   }
   if (entry.kind === 'handoff.acknowledged') {
     return data.beforeMutation === false
-      ? '目标 Runtime 在修改工作区后才确认 Capsule，连续性条件未满足。'
-      : '目标 Runtime 已在修改工作区前确认同一 Capsule。';
+      ? t('timeline.description.handoffAcknowledgedLate')
+      : t('timeline.description.handoffAcknowledged');
   }
   if (entry.kind === 'effect.recorded') {
-    return '可变工作区动作已先登记身份，再交给 Runtime 执行。';
+    return t('timeline.description.effectRecorded');
   }
   if (entry.kind === 'effect.status_changed') {
-    return 'Effect 当前状态：' + String(data.status || '未知') + '。';
+    return t('timeline.description.effectStatus', {
+      status: data.status || t('common.unknown'),
+    });
   }
   if (entry.kind === 'verification.completed') {
-    return data.passed === true ? '原始完成判据已通过。' : '原始完成判据未通过。';
+    return data.passed === true
+      ? t('timeline.description.verificationPassed')
+      : t('timeline.description.verificationFailed');
   }
   if (entry.kind === 'receipt.issued') {
     return data.outcome === 'verified'
-      ? '所有必要判据和 Effect 状态已闭合。'
-      : 'Receipt 保留了未通过或未确定的结果。';
+      ? t('timeline.description.receiptVerified')
+      : t('timeline.description.receiptOther');
   }
   if (entry.kind === 'failure.observed') {
-    return '这里只记录已经观察到的故障，不把推测冒充根因。';
+    return t('timeline.description.failureObserved');
   }
-  if (entry.kind === 'runtime.process_started') return '真实 Runtime 进程已经启动。';
-  if (entry.kind === 'runtime.process_finished') return '真实 Runtime 进程已经结束。';
-  return '这条记录来自 Mission Kernel 的追加事件链。';
+  if (entry.kind === 'runtime.process_started') {
+    return t('timeline.description.runtimeStarted');
+  }
+  if (entry.kind === 'runtime.process_finished') {
+    return t('timeline.description.runtimeFinished');
+  }
+  return t('timeline.description.kernelFallback');
 }
 
 function safeJson(value) {
   try {
     return JSON.stringify(value, null, 2);
   } catch (_error) {
-    return '记录无法序列化';
+    return t('timeline.unserializable');
   }
+}
+
+function recordValue(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+}
+
+function displayValue(value) {
+  if (value === undefined || value === null || value === '') return t('intelligence.unknown');
+  if (Array.isArray(value)) {
+    return value.length === 0 ? t('intelligence.unknown') : value.map(displayValue).join(', ');
+  }
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value);
+    } catch (_error) {
+      return t('intelligence.unknown');
+    }
+  }
+  return String(value);
+}
+
+function runtimeFieldValue(value) {
+  const field = recordValue(value);
+  if (!field || typeof field.status !== 'string') return displayValue(value);
+  if (field.status === 'known') {
+    return t('intelligence.known', { value: displayValue(field.value) });
+  }
+  if (field.status === 'partial') {
+    const partial = t('intelligence.partial', { value: displayValue(field.value) });
+    return field.reason ? partial + ' · ' + String(field.reason) : partial;
+  }
+  const label = t(
+    field.status === 'unsupported' ? 'intelligence.unsupported' : 'intelligence.unknown',
+  );
+  return field.reason ? label + ' · ' + String(field.reason) : label;
+}
+
+function effectiveProfileListValue(value) {
+  if (Array.isArray(value)) {
+    return value.length === 0 ? t('intelligence.none') : value.map(displayValue).join(', ');
+  }
+  return runtimeFieldValue(value);
+}
+
+function booleanValue(value) {
+  if (value === true) return t('common.yes');
+  if (value === false) return t('common.no');
+  return runtimeFieldValue(value);
+}
+
+function renderNativeArtifactPayload(viewer, payload, artifactId, trigger) {
+  const record = recordValue(payload) || {};
+  const header = createElement('div', 'native-artifact-viewer-header');
+  const title = createElement('strong', '', t('artifact.heading'));
+  const close = createElement('button', 'native-artifact-close', t('artifact.close'));
+  close.type = 'button';
+  close.addEventListener('click', function () {
+    viewer.hidden = true;
+    trigger.setAttribute('aria-expanded', 'false');
+  });
+  header.append(title, close);
+  const meta = createElement(
+    'p',
+    'native-artifact-meta',
+    artifactId +
+      ' · ' +
+      t('artifact.mediaType') +
+      ' ' +
+      displayValue(record.mediaType) +
+      ' · ' +
+      t('artifact.sha256') +
+      ' ' +
+      displayValue(record.sha256),
+  );
+  const content =
+    typeof record.content === 'string' ? record.content : safeJson(record.content ?? record);
+  const pre = createElement('pre', '', content);
+  viewer.replaceChildren(header, meta, pre);
+}
+
+function createNativeArtifactButton(artifactId, host) {
+  const button = createElement('button', 'native-artifact-button', t('artifact.view'));
+  button.type = 'button';
+  button.setAttribute('aria-expanded', 'false');
+  let viewer = null;
+  let loaded = false;
+  button.addEventListener('click', async function () {
+    if (viewer && loaded) {
+      viewer.hidden = !viewer.hidden;
+      button.setAttribute('aria-expanded', viewer.hidden ? 'false' : 'true');
+      return;
+    }
+    if (!viewer) {
+      viewer = createElement('section', 'native-artifact-viewer');
+      viewer.setAttribute('aria-live', 'polite');
+      viewer.setAttribute('aria-label', t('artifact.heading'));
+      host.append(viewer);
+    }
+    viewer.hidden = false;
+    viewer.replaceChildren(createElement('p', 'loading-note', t('artifact.loading')));
+    button.disabled = true;
+    button.setAttribute('aria-expanded', 'true');
+    try {
+      const payload = await requestJson(
+        '/api/v1/artifacts/' + encodeURIComponent(artifactId),
+      );
+      renderNativeArtifactPayload(viewer, payload, artifactId, button);
+      loaded = true;
+    } catch (error) {
+      const descriptor = errorMessage(error, 'artifact.unavailable');
+      viewer.replaceChildren(
+        createElement('p', 'native-artifact-error', messageText(descriptor)),
+      );
+    } finally {
+      button.disabled = false;
+    }
+  });
+  return button;
+}
+
+function renderRuntimeEventFacts(dataValue) {
+  const data = recordValue(dataValue) || {};
+  const facts = createElement('div', 'runtime-event-facts');
+  const artifact = recordValue(data.nativeArtifact);
+  const causalParents = Array.isArray(data.causalParentIds) ? data.causalParentIds : [];
+  const values = [
+    t('intelligence.field.sourceSequence') + ' #' + displayValue(data.sourceSequence),
+    t('intelligence.field.causalParent') +
+      ' · ' +
+      (causalParents.length === 0
+        ? t('intelligence.rootSource')
+        : displayValue(causalParents)),
+    t('intelligence.field.nativeArtifact') +
+      ' · ' +
+      displayValue(artifact && (artifact.artifactId || artifact.relativePath)),
+  ];
+  values.forEach(function (value) {
+    facts.append(createElement('span', 'runtime-event-fact', value));
+  });
+  if (artifact && typeof artifact.artifactId === 'string') {
+    facts.append(createNativeArtifactButton(artifact.artifactId, facts));
+  }
+  return facts;
 }
 
 function renderTimeline(entries) {
@@ -2015,9 +2927,10 @@ function renderTimeline(entries) {
     heading.append(title, meta);
     const description = createElement('p', 'timeline-description', timelineDescription(entry));
     card.append(heading, description);
+    if (entry.kind === 'runtime.event') card.append(renderRuntimeEventFacts(entry.data));
     if (entry.data !== undefined) {
       const details = createElement('details', 'timeline-details');
-      const summary = createElement('summary', '', '查看 Kernel 记录');
+      const summary = createElement('summary', '', t('timeline.viewKernelRecord'));
       const pre = createElement('pre', '', safeJson(entry.data));
       details.append(summary, pre);
       card.append(details);
@@ -2026,6 +2939,335 @@ function renderTimeline(entries) {
     list.append(item);
   });
   return list;
+}
+
+function timelineRecords(entries, kind, member) {
+  return entries.flatMap(function (entry) {
+    if (entry.kind !== kind) return [];
+    const data = recordValue(entry.data);
+    if (!data) return [];
+    const nested = member ? recordValue(data[member]) : null;
+    const record = nested || data;
+    return [
+      {
+        ...record,
+        ...(entry.harness && record.harness === undefined
+          ? { harness: entry.harness }
+          : {}),
+        ...(entry.attemptId && record.attemptId === undefined
+          ? { attemptId: entry.attemptId }
+          : {}),
+      },
+    ];
+  });
+}
+
+function mergeEffectiveProfileReports(records) {
+  const reports = new Map();
+  records.forEach(function (record, index) {
+    const identity =
+      record.attemptId || record.profileId || record.sessionId || record.harness || String(index);
+    const previous = reports.get(identity) || {};
+    const merged = { ...previous };
+    Object.entries(record).forEach(function (entry) {
+      const key = entry[0];
+      const value = entry[1];
+      if (value !== undefined && value !== null && value !== '') merged[key] = value;
+    });
+    if (previous.modelOverride === true || record.modelOverride === true) {
+      merged.modelOverride = true;
+    }
+    reports.set(identity, merged);
+  });
+  return [...reports.values()];
+}
+
+function recordIdentity(record, keys) {
+  for (const key of keys) {
+    if (typeof record[key] === 'string' && record[key]) return String(record[key]);
+  }
+  return safeJson(record);
+}
+
+function mergeUniqueRecords(records, keys) {
+  const unique = new Map();
+  records.forEach(function (record) {
+    const identity = recordIdentity(record, keys);
+    unique.set(identity, { ...(unique.get(identity) || {}), ...record });
+  });
+  return [...unique.values()];
+}
+
+function appendIntelligenceFact(list, labelKey, value) {
+  const row = createElement('div', 'intelligence-fact');
+  const term = createElement('dt', '', t(labelKey));
+  const description = createElement('dd', '', value);
+  row.append(term, description);
+  list.append(row);
+}
+
+function renderIntelligenceCard(options) {
+  const card = createElement(
+    'section',
+    'intelligence-card' + (options.wide ? ' is-wide' : ''),
+  );
+  const heading = createElement('div', 'intelligence-card-heading');
+  const title = createElement('h4', '', t(options.titleKey));
+  const count = createElement(
+    'span',
+    '',
+    t(options.records.length === 1 ? 'intelligence.oneRecord' : 'intelligence.recordCount', {
+      count: options.records.length,
+    }),
+  );
+  heading.append(title, count);
+  card.append(heading);
+  if (options.records.length === 0) {
+    card.append(createElement('p', 'empty-note', t('intelligence.notRecorded')));
+    return card;
+  }
+  const records = createElement('div', options.eventList ? 'runtime-event-records' : '');
+  options.records.forEach(function (record) {
+    const item = createElement('article', 'intelligence-record');
+    const recordTitle = createElement(
+      'p',
+      'intelligence-record-title',
+      recordIdentity(record, options.identityKeys),
+    );
+    const facts = createElement('dl', 'intelligence-facts');
+    options.facts(record).forEach(function (fact) {
+      appendIntelligenceFact(facts, fact[0], fact[1]);
+    });
+    const details = createElement('details', 'timeline-details');
+    const summary = createElement('summary', '', t('intelligence.viewRecord'));
+    const pre = createElement('pre', '', safeJson(record));
+    details.append(summary, pre);
+    item.append(recordTitle, facts, details);
+    if (options.artifactAction) {
+      const artifact = recordValue(record.nativeArtifact);
+      if (artifact && typeof artifact.artifactId === 'string') {
+        const actions = createElement('div', 'runtime-event-facts');
+        actions.append(createNativeArtifactButton(artifact.artifactId, actions));
+        item.append(actions);
+      }
+    }
+    records.append(item);
+  });
+  card.append(records);
+  return card;
+}
+
+function artifactReference(record) {
+  const artifact = recordValue(record.nativeArtifact);
+  if (!artifact) return t('intelligence.unknown');
+  return [artifact.artifactId, artifact.relativePath, artifact.sha256]
+    .filter(function (value) {
+      return typeof value === 'string' && value;
+    })
+    .join(' · ');
+}
+
+function renderRuntimeIntelligence(mission, timeline) {
+  const activeProfile = recordValue(mission.activeProfile);
+  const branchRecords = mergeUniqueRecords(
+    [
+      ...timelineRecords(timeline, 'branch.created', 'branch'),
+      ...(mission.rootBranchId
+        ? [{ branchId: mission.rootBranchId, status: 'active', parentBranchId: null }]
+        : []),
+    ],
+    ['branchId'],
+  );
+  const definitions = mergeUniqueRecords(
+    [
+      ...timelineRecords(timeline, 'profile.definition_recorded', 'definition'),
+      ...(activeProfile && recordValue(activeProfile.definition)
+        ? [recordValue(activeProfile.definition)]
+        : []),
+    ].filter(Boolean),
+    ['definitionId'],
+  );
+  const snapshots = mergeUniqueRecords(
+    [
+      ...timelineRecords(timeline, 'mission.created', 'profile'),
+      ...timelineRecords(timeline, 'profile.selected', 'profile'),
+      ...(activeProfile ? [activeProfile] : []),
+    ],
+    ['profileId'],
+  );
+  const observations = mergeUniqueRecords(
+    [
+      ...timelineRecords(timeline, 'runtime.catalog_observed', 'observation'),
+      ...(activeProfile && recordValue(activeProfile.catalogObservation)
+        ? [recordValue(activeProfile.catalogObservation)]
+        : []),
+    ].filter(Boolean),
+    ['observationId'],
+  );
+  const bindings = mergeUniqueRecords(
+    timelineRecords(timeline, 'attempt.bound', 'binding'),
+    ['bindingId'],
+  );
+  const effectiveReports = mergeEffectiveProfileReports(
+    timelineRecords(timeline, 'runtime.effective_profile_reported'),
+  );
+  const runtimeEvents = mergeUniqueRecords(
+    timelineRecords(timeline, 'runtime.event', 'event'),
+    ['runtimeEventId'],
+  );
+
+  const section = createElement('section', 'runtime-intelligence');
+  const heading = createElement('div', 'intelligence-heading');
+  const eyebrow = createElement('p', 'eyebrow', t('intelligence.eyebrow'));
+  const title = createElement('h3', '', t('intelligence.heading'));
+  heading.append(eyebrow, title);
+  const grid = createElement('div', 'intelligence-grid');
+  grid.append(
+    renderIntelligenceCard({
+      titleKey: 'intelligence.rootBranch',
+      records: branchRecords,
+      identityKeys: ['branchId'],
+      facts: function (record) {
+        return [
+          ['intelligence.field.id', displayValue(record.branchId)],
+          ['intelligence.field.status', displayValue(record.status)],
+          ['intelligence.field.parent', displayValue(record.parentBranchId)],
+        ];
+      },
+    }),
+    renderIntelligenceCard({
+      titleKey: 'intelligence.profileDefinitions',
+      records: definitions,
+      identityKeys: ['definitionId', 'harness'],
+      facts: function (record) {
+        return [
+          ['intelligence.field.harness', displayValue(record.harness)],
+          ['intelligence.field.requestedModel', displayValue(record.requestedModel)],
+          ['intelligence.field.reasoning', displayValue(record.requestedReasoningEffort)],
+          ['intelligence.field.permission', displayValue(record.permissionCeiling)],
+          ['intelligence.field.budget', displayValue(record.injectionBudgetTokens)],
+        ];
+      },
+    }),
+    renderIntelligenceCard({
+      titleKey: 'intelligence.profileSnapshots',
+      records: snapshots,
+      identityKeys: ['profileId', 'harness'],
+      facts: function (record) {
+        const effective = recordValue(record.effective) || {};
+        return [
+          ['intelligence.field.harness', displayValue(record.harness)],
+          [
+            'intelligence.field.effectiveModel',
+            runtimeFieldValue(effective.model || record.model),
+          ],
+          [
+            'intelligence.field.reasoning',
+            runtimeFieldValue(effective.reasoningEffort || record.reasoningEffort),
+          ],
+          [
+            'intelligence.field.effectivePermissions',
+            runtimeFieldValue(effective.permissions || record.permissionMode),
+          ],
+          ['intelligence.field.instructions', runtimeFieldValue(effective.instructions)],
+          ['intelligence.field.skills', runtimeFieldValue(effective.skills)],
+          ['intelligence.field.mcpServers', runtimeFieldValue(effective.mcpServers)],
+          ['intelligence.field.tools', runtimeFieldValue(effective.tools)],
+          ['intelligence.field.contextWindow', runtimeFieldValue(effective.contextWindowTokens)],
+          ['intelligence.field.session', runtimeFieldValue(effective.session)],
+          ['intelligence.field.availability', runtimeFieldValue(effective.availability)],
+          ['intelligence.field.quota', runtimeFieldValue(effective.quota)],
+          ['intelligence.field.cost', runtimeFieldValue(effective.cost)],
+          ['intelligence.field.version', displayValue(record.runtimeVersion)],
+          ['intelligence.field.digest', displayValue(record.configurationDigest)],
+        ];
+      },
+    }),
+    renderIntelligenceCard({
+      titleKey: 'intelligence.catalogObservations',
+      records: observations,
+      identityKeys: ['observationId', 'harness'],
+      facts: function (record) {
+        return [
+          ['intelligence.field.harness', displayValue(record.harness)],
+          ['intelligence.field.availability', displayValue(record.availability)],
+          ['intelligence.field.version', displayValue(record.version)],
+          ['intelligence.field.authentication', runtimeFieldValue(record.authentication)],
+          ['intelligence.field.quota', runtimeFieldValue(record.quota)],
+          ['intelligence.field.cost', runtimeFieldValue(record.cost)],
+          ['intelligence.field.observedAt', displayValue(record.observedAt)],
+        ];
+      },
+    }),
+    renderIntelligenceCard({
+      titleKey: 'intelligence.attemptBindings',
+      records: bindings,
+      identityKeys: ['bindingId', 'attemptId'],
+      facts: function (record) {
+        return [
+          ['intelligence.field.attempt', displayValue(record.attemptId)],
+          ['intelligence.field.branch', displayValue(record.branchId)],
+          ['intelligence.field.profile', displayValue(record.profileId)],
+          ['intelligence.field.contract', displayValue(record.contractId)],
+          ['intelligence.field.planNode', displayValue(record.planNodeId)],
+          ['intelligence.field.authority', displayValue(record.authority)],
+          ['intelligence.field.budget', displayValue(record.injectionBudgetTokens)],
+        ];
+      },
+    }),
+    renderIntelligenceCard({
+      titleKey: 'intelligence.effectiveProfileReports',
+      records: effectiveReports,
+      identityKeys: ['attemptId', 'sessionId', 'profileId', 'harness'],
+      wide: true,
+      facts: function (record) {
+        return [
+          ['intelligence.field.harness', displayValue(record.harness)],
+          ['intelligence.field.attempt', displayValue(record.attemptId)],
+          ['intelligence.field.requestedModel', runtimeFieldValue(record.requestedModel)],
+          ['intelligence.field.effectiveModel', runtimeFieldValue(record.observedModel)],
+          ['intelligence.field.modelOverride', booleanValue(record.modelOverride)],
+          ['intelligence.field.reasoning', runtimeFieldValue(record.reasoningEffort)],
+          ['intelligence.field.effectivePermissions', runtimeFieldValue(record.permissionMode)],
+          ['intelligence.field.skills', effectiveProfileListValue(record.skills)],
+          ['intelligence.field.mcpServers', effectiveProfileListValue(record.mcpServers)],
+          ['intelligence.field.contextWindow', runtimeFieldValue(record.contextWindowTokens)],
+          ['intelligence.field.session', runtimeFieldValue(record.sessionId)],
+          ['intelligence.field.tools', effectiveProfileListValue(record.tools)],
+          ['intelligence.field.cost', runtimeFieldValue(record.costUsd)],
+          ['intelligence.field.version', runtimeFieldValue(record.runtimeVersion)],
+        ];
+      },
+    }),
+    renderIntelligenceCard({
+      titleKey: 'intelligence.runtimeEvents',
+      records: runtimeEvents,
+      identityKeys: ['runtimeEventId', 'sourceId'],
+      wide: true,
+      eventList: true,
+      artifactAction: true,
+      facts: function (record) {
+        const causalParents = Array.isArray(record.causalParentIds)
+          ? record.causalParentIds
+          : [];
+        return [
+          ['intelligence.field.harness', displayValue(record.sourceHarness)],
+          ['intelligence.field.semanticKind', displayValue(record.semanticKind)],
+          ['intelligence.field.nativeType', displayValue(record.nativeEventType)],
+          ['intelligence.field.sourceSequence', displayValue(record.sourceSequence)],
+          [
+            'intelligence.field.causalParent',
+            causalParents.length === 0
+              ? t('intelligence.rootSource')
+              : displayValue(causalParents),
+          ],
+          ['intelligence.field.nativeArtifact', artifactReference(record)],
+        ];
+      },
+    }),
+  );
+  section.append(heading, grid);
+  return section;
 }
 
 function receiptFromDetail(detail, mission) {
@@ -2037,16 +3279,20 @@ function receiptFromDetail(detail, mission) {
 function renderReceipt(receipt) {
   const rejected = receipt.outcome !== 'verified';
   const card = createElement('section', 'receipt-card' + (rejected ? ' is-rejected' : ''));
-  card.setAttribute('aria-label', 'Outcome Receipt');
+  card.setAttribute('aria-label', t('receipt.ariaLabel'));
   const heading = createElement('div', 'receipt-heading');
   const headingText = createElement('div');
-  const eyebrow = createElement('p', 'eyebrow', 'Outcome receipt');
+  const eyebrow = createElement('p', 'eyebrow', t('receipt.eyebrow'));
   const outcome = createElement(
     'div',
     'receipt-outcome',
-    rejected ? '结果未被验证' : '结果已经验证',
+    rejected ? t('receipt.unverified') : t('receipt.verified'),
   );
-  const receiptId = createElement('p', 'receipt-id', receipt.receiptId || 'receipt id —');
+  const receiptId = createElement(
+    'p',
+    'receipt-id',
+    receipt.receiptId || t('receipt.idFallback'),
+  );
   headingText.append(eyebrow, outcome, receiptId);
   heading.append(headingText, statusBadge(rejected ? 'failed' : 'succeeded'));
   card.append(heading);
@@ -2058,12 +3304,16 @@ function renderReceipt(receipt) {
       const name = createElement(
         'span',
         '',
-        verification.criterionId || '未命名完成判据',
+        verification.criterionId || t('receipt.criterionFallback'),
       );
       const result = createElement(
         'span',
         'criterion-status',
-        verification.status === 'passed' ? 'PASSED' : String(verification.status || 'UNKNOWN'),
+        verification.status === 'passed'
+          ? t('receipt.passed')
+          : verification.status
+            ? String(verification.status)
+            : t('receipt.unknown'),
       );
       row.append(name, result);
       criteria.append(row);
@@ -2082,13 +3332,13 @@ function timelineFromDetail(detail) {
 
 function renderDetail() {
   if (!state.detail) {
-    replaceWithMessage(elements.missionDetail, 'empty-note', '正在读取 Mission 详情…');
+    replaceWithMessage(elements.missionDetail, 'empty-note', t('mission.detailLoading'));
     return;
   }
   const detail = state.detail;
   const mission = missionProjection(detail);
   if (!mission) {
-    replaceWithMessage(elements.missionDetail, 'empty-note', 'Mission 详情格式无法识别。');
+    replaceWithMessage(elements.missionDetail, 'empty-note', t('mission.detailInvalid'));
     return;
   }
   const missionId = missionIdOf(mission) || state.selectedMissionId || 'mission —';
@@ -2097,42 +3347,62 @@ function renderDetail() {
     detail.operation &&
     typeof detail.operation === 'object' &&
     detail.operation.phase === 'running';
+  const operationQueued =
+    detail.operation &&
+    typeof detail.operation === 'object' &&
+    detail.operation.phase === 'queued';
   const operationInterrupted =
     detail.operation &&
     typeof detail.operation === 'object' &&
     (detail.operation.phase === 'failed' || detail.operation.phase === 'interrupted');
-  const visibleStatus = operationRunning ? 'running' : operationInterrupted ? 'interrupted' : status;
+  const visibleStatus = operationRunning
+    ? 'running'
+    : operationQueued
+      ? 'queued'
+      : operationInterrupted
+        ? 'interrupted'
+        : status;
   const contract = mission.contract && typeof mission.contract === 'object' ? mission.contract : {};
   const objective =
     typeof contract.objective === 'string'
       ? contract.objective
       : typeof mission.objective === 'string'
         ? mission.objective
-        : '这条 Mission 没有可显示的目标摘要。';
+        : t('mission.objectiveMissing');
   const content = createElement('div', 'detail-content');
   const hero = createElement('header', 'detail-hero');
   const titleRow = createElement('div', 'detail-title-row');
   const titleBlock = createElement('div');
-  const eyebrow = createElement('p', 'eyebrow', 'Authoritative mission');
-  const title = createElement('h2', '', mission.title || '未命名 Mission');
+  const eyebrow = createElement('p', 'eyebrow', t('mission.authoritativeEyebrow'));
+  const title = createElement('h2', '', mission.title || t('mission.untitled'));
   title.id = 'mission-detail-heading';
   const id = createElement('p', 'mission-id', missionId);
   titleBlock.append(eyebrow, title, id);
   titleRow.append(titleBlock, statusBadge(visibleStatus));
   const objectiveNode = createElement('p', 'mission-objective', objective);
   const actions = createElement('div', 'detail-actions');
-  const resume = createElement('button', 'action-button', status === 'pending' ? '开始执行' : '继续 Mission');
+  const resume = createElement(
+    'button',
+    'action-button',
+    status === 'pending' ? t('mission.start') : t('mission.continue'),
+  );
   resume.type = 'button';
   resume.disabled =
     operationRunning ||
+    operationQueued ||
     (!operationInterrupted && status !== 'pending' && status !== 'waiting');
   resume.addEventListener('click', function () {
     runMissionAction('resume', resume);
   });
-  const verify = createElement('button', 'action-button', '重新验收');
+  const verify = createElement('button', 'action-button', t('mission.reverify'));
   verify.type = 'button';
   verify.disabled =
-    operationRunning || status === 'pending' || status === 'running' || status === 'verifying';
+    operationRunning ||
+    operationQueued ||
+    status === 'pending' ||
+    status === 'queued' ||
+    status === 'running' ||
+    status === 'verifying';
   verify.addEventListener('click', function () {
     runMissionAction('verify', verify);
   });
@@ -2144,21 +3414,32 @@ function renderDetail() {
         'p',
         'operation-note',
         detail.operation.phase === 'failed'
-          ? '上一次执行未完成：' + String(detail.operation.error || '未返回错误摘要')
-          : '控制台在 Mission 完成前中断。可从最后一个持久化事件继续。',
+          ? t('mission.lastRunFailed', {
+              error: detail.operation.error || t('mission.lastRunErrorFallback'),
+            })
+          : t('mission.controllerInterrupted'),
       ),
     );
   }
+  if (operationQueued || status === 'queued') {
+    hero.append(createElement('p', 'operation-note', t('mission.commandQueued')));
+  }
   hero.append(actions);
 
+  const timeline = timelineFromDetail(detail);
   const timelineSection = createElement('section', 'timeline-section');
   const timelineHeading = createElement('div', 'timeline-section-heading');
   const timelineHeadingText = createElement('div');
-  const timelineEyebrow = createElement('p', 'eyebrow', 'Evidence timeline');
-  const timelineTitle = createElement('h3', '', 'Attempt · Capsule · Effect · Receipt');
+  const timelineEyebrow = createElement('p', 'eyebrow', t('timeline.eyebrow'));
+  const timelineTitle = createElement('h3', '', t('timeline.heading'));
   timelineHeadingText.append(timelineEyebrow, timelineTitle);
-  const timeline = timelineFromDetail(detail);
-  const count = createElement('span', 'timeline-count', String(timeline.length) + ' EVENTS');
+  const count = createElement(
+    'span',
+    'timeline-count',
+    t(timeline.length === 1 ? 'timeline.oneEvent' : 'timeline.manyEvents', {
+      count: timeline.length,
+    }),
+  );
   timelineHeading.append(timelineHeadingText, count);
   timelineSection.append(timelineHeading);
   if (timeline.length === 0) {
@@ -2167,8 +3448,8 @@ function renderDetail() {
         'p',
         'empty-note',
         status === 'pending'
-          ? 'Mission 已创建，开始执行后这里会出现真实事件。'
-          : '当前 API 没有返回可显示的时间线。',
+          ? t('timeline.pending')
+          : t('timeline.empty'),
       ),
     );
   } else {
@@ -2176,7 +3457,7 @@ function renderDetail() {
   }
   const receipt = receiptFromDetail(detail, mission);
   if (receipt) timelineSection.append(renderReceipt(receipt));
-  content.append(hero, timelineSection);
+  content.append(hero, renderRuntimeIntelligence(mission, timeline), timelineSection);
   elements.missionDetail.replaceChildren(content);
 }
 
@@ -2184,13 +3465,21 @@ async function loadDetail(missionId, options) {
   if (!missionId || state.detailLoading) return;
   state.detailLoading = true;
   const quiet = options && options.quiet;
-  if (!quiet) replaceWithMessage(elements.missionDetail, 'empty-note', '正在读取 Mission 详情…');
+  if (!quiet) {
+    replaceWithMessage(elements.missionDetail, 'empty-note', t('mission.detailLoading'));
+  }
   try {
     state.detail = await requestJson('/api/v1/missions/' + encodeURIComponent(missionId));
+    state.detailLoading = false;
     if (state.selectedMissionId === missionId) renderDetail();
   } catch (error) {
+    state.detailLoading = false;
     if (!quiet && state.selectedMissionId === missionId) {
-      replaceWithMessage(elements.missionDetail, 'empty-note', error.message);
+      replaceWithMessage(
+        elements.missionDetail,
+        'empty-note',
+        messageText(errorMessage(error, 'error.cannotConnect')),
+      );
     }
   } finally {
     state.detailLoading = false;
@@ -2205,12 +3494,29 @@ function selectMission(missionId) {
 }
 
 function routeStages(route) {
-  const usesCodex = route === 'codex' || route === 'codex-qoder';
-  const usesQoder = route === 'qoder' || route === 'codex-qoder';
-  const codexModel = usesCodex ? requiredValue('#codex-model', 'Codex model') : '';
-  const codexReasoning = usesCodex ? requiredValue('#codex-reasoning', 'Codex reasoning') : '';
-  const qoderModel = usesQoder ? requiredValue('#qoder-model', 'Qoder model') : '';
-  const qoderReasoning = usesQoder ? requiredValue('#qoder-reasoning', 'Qoder reasoning') : '';
+  const usesCodex =
+    route === 'codex' || route === 'codex-qoder' || route === 'codex-qoder-claude';
+  const usesQoder =
+    route === 'qoder' || route === 'codex-qoder' || route === 'codex-qoder-claude';
+  const usesClaude = route === 'claude' || route === 'codex-qoder-claude';
+  const codexModel = usesCodex
+    ? requiredValue('#codex-model', 'validation.codexModelRequired')
+    : '';
+  const codexReasoning = usesCodex
+    ? requiredValue('#codex-reasoning', 'validation.codexReasoningRequired')
+    : '';
+  const qoderModel = usesQoder
+    ? requiredValue('#qoder-model', 'validation.qoderModelRequired')
+    : '';
+  const qoderReasoning = usesQoder
+    ? requiredValue('#qoder-reasoning', 'validation.qoderReasoningRequired')
+    : '';
+  const claudeModel = usesClaude
+    ? requiredValue('#claude-model', 'validation.claudeModelRequired')
+    : '';
+  const claudeReasoning = usesClaude
+    ? requiredValue('#claude-reasoning', 'validation.claudeReasoningRequired')
+    : '';
   const codex = {
     stageId: 'codex-primary',
     harness: 'codex',
@@ -2227,6 +3533,14 @@ function routeStages(route) {
     permissionMode: 'bypass_permissions',
     injectionBudgetTokens: 1600,
   };
+  const claude = {
+    stageId: 'claude-continuation',
+    harness: 'claude',
+    model: claudeModel,
+    reasoningEffort: claudeReasoning,
+    permissionMode: 'bypassPermissions',
+    injectionBudgetTokens: 1600,
+  };
   if (route === 'codex') return [codex];
   if (route === 'qoder') {
     return [
@@ -2240,6 +3554,19 @@ function routeStages(route) {
       },
     ];
   }
+  if (route === 'claude') {
+    return [
+      {
+        stageId: 'claude-primary',
+        harness: claude.harness,
+        model: claude.model,
+        reasoningEffort: claude.reasoningEffort,
+        permissionMode: claude.permissionMode,
+        injectionBudgetTokens: claude.injectionBudgetTokens,
+      },
+    ];
+  }
+  if (route === 'codex-qoder-claude') return [codex, qoder, claude];
   return [codex, qoder];
 }
 
@@ -2250,29 +3577,45 @@ function selectedRoute() {
 
 function renderRouteSummary() {
   const route = selectedRoute();
-  const codexModel = fieldValue('#codex-model') || 'model 未设置';
-  const codexReasoning = fieldValue('#codex-reasoning') || 'reasoning 未设置';
-  const qoderModel = fieldValue('#qoder-model') || 'model 未设置';
-  const qoderReasoning = fieldValue('#qoder-reasoning') || 'reasoning 未设置';
+  const codexModel = fieldValue('#codex-model') || t('route.modelUnset');
+  const codexReasoning = fieldValue('#codex-reasoning') || t('route.reasoningUnset');
+  const qoderModel = fieldValue('#qoder-model') || t('route.modelUnset');
+  const qoderReasoning = fieldValue('#qoder-reasoning') || t('route.reasoningUnset');
+  const claudeModel = fieldValue('#claude-model') || t('route.modelUnset');
+  const claudeReasoning = fieldValue('#claude-reasoning') || t('route.reasoningUnset');
   document.querySelectorAll('[data-profile-editor]').forEach(function (editor) {
     const profile = editor.getAttribute('data-profile-editor');
-    editor.hidden =
+    const visible =
       profile === 'codex'
-        ? route !== 'codex' && route !== 'codex-qoder'
-        : route !== 'qoder' && route !== 'codex-qoder';
+        ? route === 'codex' || route === 'codex-qoder' || route === 'codex-qoder-claude'
+        : profile === 'qoder'
+          ? route === 'qoder' || route === 'codex-qoder' || route === 'codex-qoder-claude'
+          : route === 'claude' || route === 'codex-qoder-claude';
+    editor.hidden = !visible;
   });
   const parts = [];
-  if (route === 'codex' || route === 'codex-qoder') {
+  if (route === 'codex' || route === 'codex-qoder' || route === 'codex-qoder-claude') {
     parts.push({
       className: 'route-thread route-thread-codex',
       text: 'Codex · ' + codexModel + ' · ' + codexReasoning,
     });
   }
-  if (route === 'codex-qoder') parts.push({ className: 'route-arrow', text: '→' });
-  if (route === 'qoder' || route === 'codex-qoder') {
+  if (route === 'codex-qoder' || route === 'codex-qoder-claude') {
+    parts.push({ className: 'route-arrow', text: '→' });
+  }
+  if (route === 'qoder' || route === 'codex-qoder' || route === 'codex-qoder-claude') {
     parts.push({
       className: 'route-thread route-thread-qoder',
       text: 'Qoder · ' + qoderModel + ' · ' + qoderReasoning,
+    });
+  }
+  if (route === 'codex-qoder-claude') {
+    parts.push({ className: 'route-arrow', text: '→' });
+  }
+  if (route === 'claude' || route === 'codex-qoder-claude') {
+    parts.push({
+      className: 'route-thread route-thread-claude',
+      text: 'Claude · ' + claudeModel + ' · ' + claudeReasoning,
     });
   }
   const fragment = document.createDocumentFragment();
@@ -2282,14 +3625,21 @@ function renderRouteSummary() {
   elements.routeSummary.replaceChildren(fragment);
 }
 
-function setFormStatus(message, kind) {
-  elements.formStatus.textContent = message || '';
-  elements.formStatus.className = 'form-status' + (kind ? ' is-' + kind : '');
+function renderFormStatus() {
+  elements.formStatus.textContent = messageText(state.formMessage);
+  elements.formStatus.className =
+    'form-status' + (state.formMessageKind ? ' is-' + state.formMessageKind : '');
 }
 
-function requiredValue(selector, label) {
+function setFormStatus(message, kind) {
+  state.formMessage = message;
+  state.formMessageKind = kind || '';
+  renderFormStatus();
+}
+
+function requiredValue(selector, errorKey) {
   const value = fieldValue(selector);
-  if (!value) throw new Error(label + '不能为空。');
+  if (!value) throw localizedError(errorKey);
   return value;
 }
 
@@ -2300,13 +3650,13 @@ function fieldValue(selector) {
 
 async function submitMission(event) {
   event.preventDefault();
-  setFormStatus('', '');
+  setFormStatus(null, '');
   elements.createButton.disabled = true;
   try {
-    const title = requiredValue('#mission-title', '标题');
-    const objective = requiredValue('#mission-objective', '目标');
-    const workspace = requiredValue('#mission-workspace', '工作区路径');
-    const executable = requiredValue('#verifier-executable', '验收程序');
+    const title = requiredValue('#mission-title', 'validation.titleRequired');
+    const objective = requiredValue('#mission-objective', 'validation.objectiveRequired');
+    const workspace = requiredValue('#mission-workspace', 'validation.workspaceRequired');
+    const executable = requiredValue('#verifier-executable', 'validation.verifierRequired');
     const argsField = elements.form.querySelector('#verifier-args');
     const args = String(argsField ? argsField.value : '')
       .split(/\r?\n/)
@@ -2329,7 +3679,7 @@ async function submitMission(event) {
       },
       stages: routeStages(route),
     };
-    setFormStatus('正在创建 Mission，并固定原始完成判据…', '');
+    setFormStatus(translated('form.creating'), '');
     const response = await requestJson('/api/v1/missions', {
       method: 'POST',
       body: JSON.stringify(payload),
@@ -2340,11 +3690,11 @@ async function submitMission(event) {
         : response && response.mission && typeof response.mission.missionId === 'string'
           ? response.mission.missionId
           : null;
-    setFormStatus('Mission 已创建并开始执行。进度会出现在中间时间线。', 'success');
+    setFormStatus(translated('form.created'), 'success');
     await loadMissions();
     if (missionId) selectMission(missionId);
   } catch (error) {
-    setFormStatus(error.message || 'Mission 未创建。检查输入后重试。', 'error');
+    setFormStatus(errorMessage(error, 'form.createFailed'), 'error');
   } finally {
     elements.createButton.disabled = false;
   }
@@ -2356,7 +3706,7 @@ async function runMissionAction(action, button) {
   const actionPath = MISSION_ACTION_PATHS[action];
   if (typeof actionPath !== 'function') return;
   button.disabled = true;
-  showPageAlert('');
+  showPageAlert(null);
   try {
     await requestJson(actionPath(missionId), {
       method: 'POST',
@@ -2365,7 +3715,7 @@ async function runMissionAction(action, button) {
     await loadMissions({ quiet: true });
     await loadDetail(missionId, { quiet: true });
   } catch (error) {
-    showPageAlert(error.message);
+    showPageAlert(errorMessage(error, 'error.requestFailedStatus'));
   } finally {
     button.disabled = false;
   }
@@ -2387,12 +3737,21 @@ elements.form.querySelectorAll('input[name="route"]').forEach(function (input) {
   input.addEventListener('change', renderRouteSummary);
 });
 elements.form
-  .querySelectorAll('#codex-model, #codex-reasoning, #qoder-model, #qoder-reasoning')
+  .querySelectorAll(
+    '#codex-model, #codex-reasoning, #qoder-model, #qoder-reasoning, #claude-model, #claude-reasoning',
+  )
   .forEach(function (input) {
     input.addEventListener('input', renderRouteSummary);
     input.addEventListener('change', renderRouteSummary);
   });
 
+elements.languageButtons.forEach(function (button) {
+  button.addEventListener('click', function () {
+    applyLocale(button.getAttribute('data-locale'), { persist: true, rerender: true });
+  });
+});
+
+applyLocale(state.locale, { persist: false, rerender: false });
 renderRouteSummary();
 Promise.allSettled([loadRuntimes(), loadMissions()]).then(function () {
   if (!state.selectedMissionId && state.missions.length > 0) {

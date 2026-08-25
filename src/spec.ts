@@ -7,6 +7,8 @@ export const MISSION_SPEC_VERSION = 'missionbraid.dev/mission/v1' as const;
 export const MISSION_SPEC_SNAPSHOT_VERSION =
   'missionbraid.dev/resolved-mission-snapshot/v1' as const;
 
+export type SupportedHarnessV1 = 'codex' | 'qoder' | 'claude';
+
 export interface CommandVerifierSpecV1 {
   readonly kind: 'command';
   readonly executable: string;
@@ -23,7 +25,7 @@ export interface MissionAcceptanceSpecV1 {
 }
 
 export interface AttemptProfileSpecV1 {
-  readonly harness: 'codex' | 'qoder';
+  readonly harness: SupportedHarnessV1;
   readonly model: string;
   readonly reasoningEffort?: string;
   readonly permissionMode?: string;
@@ -143,10 +145,7 @@ export function loadMissionSpec(
     (candidate, index): AttemptStageSpecV1 => {
       const stage = requireRecord(candidate, `attemptPlan[${index}]`);
       const profile = requireRecord(stage.profile, `attemptPlan[${index}].profile`);
-      const harness = requireString(profile.harness, `attemptPlan[${index}].profile.harness`);
-      if (harness !== 'codex' && harness !== 'qoder') {
-        throw new MissionSpecError(`Unsupported harness ${harness}`);
-      }
+      const harness = requireHarness(profile.harness, `attemptPlan[${index}].profile.harness`);
       return {
         stageId: requireIdentifier(stage.stageId, `attemptPlan[${index}].stageId`),
         profile: {
@@ -313,13 +312,10 @@ export function restoreMissionSpecSnapshot(
     (candidate, index): AttemptStageSpecV1 => {
       const stage = requireRecord(candidate, `snapshot.spec.attemptPlan[${index}]`);
       const profile = requireRecord(stage.profile, `snapshot.spec.attemptPlan[${index}].profile`);
-      const harness = requireString(
+      const harness = requireHarness(
         profile.harness,
         `snapshot.spec.attemptPlan[${index}].profile.harness`,
       );
-      if (harness !== 'codex' && harness !== 'qoder') {
-        throw new MissionSpecError(`Unsupported harness ${harness}`);
-      }
       return {
         stageId: requireIdentifier(stage.stageId, `snapshot.spec.attemptPlan[${index}].stageId`),
         profile: {
@@ -421,6 +417,14 @@ function requireString(value: unknown, path: string): string {
     throw new MissionSpecError(`${path} must be a non-empty string`);
   }
   return value;
+}
+
+function requireHarness(value: unknown, path: string): SupportedHarnessV1 {
+  const harness = requireString(value, path);
+  if (harness !== 'codex' && harness !== 'qoder' && harness !== 'claude') {
+    throw new MissionSpecError(`Unsupported harness ${harness}`);
+  }
+  return harness;
 }
 
 function requireIdentifier(value: unknown, path: string): string {

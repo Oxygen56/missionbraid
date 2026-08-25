@@ -167,6 +167,10 @@ export async function runProcess(
     };
 
     let sequence = 0;
+    const streamSequence: Record<OutputStream, number> = {
+      stdout: 0,
+      stderr: 0,
+    };
     let stdoutLineCount = 0;
     let stderrLineCount = 0;
     let aborted = false;
@@ -228,6 +232,7 @@ export async function runProcess(
     const emitLine = (stream: OutputStream, rawLine: string): void => {
       const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine;
       sequence += 1;
+      streamSequence[stream] += 1;
       if (stream === 'stdout') {
         stdoutLineCount += 1;
       } else {
@@ -235,6 +240,7 @@ export async function runProcess(
       }
       observe({
         sequence,
+        streamSequence: streamSequence[stream],
         stream,
         line,
         receivedAt: new Date().toISOString(),

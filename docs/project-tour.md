@@ -170,7 +170,8 @@ details.
 
 ## What works in this repository today
 
-Iteration 1 implements the continuity foundation:
+Iteration 1 implements and has retained real evidence for the continuity
+foundation:
 
 1. Open the local Workbench and inspect the discovered Runtime catalog.
 2. Create a Mission with an objective, Git workspace, and verifier.
@@ -213,6 +214,27 @@ sequenceDiagram
 This proves the Mission can outlive a process and cross one real Runtime
 boundary. It does not yet provide the target live debugger, executable
 time-travel branches, adaptive planner, or general failure attribution.
+
+Iteration 2 is now implemented in source:
+
+- Codex, Qoder, and Claude Code are execution Adapters with explicit capability
+  declarations;
+- every new Mission receives a default root Branch;
+- Runtime Profile Definition, Catalog Observation, immutable effective
+  Snapshot, and Attempt Binding are distinct persisted objects;
+- Runtime events retain per-source sequence and causal links while Mission
+  ingest order remains controller-specific;
+- every normalized Runtime event links to a sanitized, content-addressed native
+  artifact;
+- accepted execution intent uses a durable command/outbox path and can be
+  recovered by the Workbench supervisor after restart;
+- the Workbench can switch between English and Chinese and remembers the local
+  browser choice.
+
+This implementation is not yet an Iteration 2 completion claim. The remaining
+gate is a retained real Workbench record in which Codex, Qoder, and Claude Code
+execute one Mission, produce source-linked events and native artifacts, reach a
+Receipt, and restore the same result after restart.
 
 ## What is authoritative?
 
@@ -289,23 +311,25 @@ third-party reproduction, or adoption.
 
 ## Code map for the current foundation
 
-| Responsibility                            | Primary implementation                                                                                   | Focused tests                                                                                          |
-| ----------------------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| Workbench entry and background operations | [`src/app.ts`](../src/app.ts), [`src/app-page.ts`](../src/app-page.ts)                                   | [`src/app.test.ts`](../src/app.test.ts)                                                                |
-| Mission document construction             | [`src/mission-draft.ts`](../src/mission-draft.ts), [`src/spec.ts`](../src/spec.ts)                       | [`src/mission-draft.test.ts`](../src/mission-draft.test.ts), [`src/spec.test.ts`](../src/spec.test.ts) |
-| Execution, recovery, and handoff          | [`src/engine.ts`](../src/engine.ts)                                                                      | [`src/engine.test.ts`](../src/engine.test.ts)                                                          |
-| Events, projections, leases, and fencing  | [`src/store.ts`](../src/store.ts)                                                                        | [`src/store.test.ts`](../src/store.test.ts)                                                            |
-| Workspace boundary evidence               | [`src/workspace.ts`](../src/workspace.ts)                                                                | [`src/workspace.test.ts`](../src/workspace.test.ts)                                                    |
-| Capsule projection and acknowledgement    | [`src/capsule.ts`](../src/capsule.ts)                                                                    | [`src/capsule.test.ts`](../src/capsule.test.ts)                                                        |
-| Direct Runtime execution                  | [`src/adapters/codex.ts`](../src/adapters/codex.ts), [`src/adapters/qoder.ts`](../src/adapters/qoder.ts) | Adapter tests beside each implementation                                                               |
-| Independent verification                  | [`src/verifier.ts`](../src/verifier.ts)                                                                  | [`src/verifier.test.ts`](../src/verifier.test.ts)                                                      |
-| Runtime inventory                         | [`src/runtime-catalog.ts`](../src/runtime-catalog.ts)                                                    | [`src/runtime-catalog.test.ts`](../src/runtime-catalog.test.ts)                                        |
+| Responsibility                                                    | Primary implementation                                                                                                                                          | Focused tests                                                                                          |
+| ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Workbench, bilingual copy, and background command supervisor      | [`src/app.ts`](../src/app.ts), [`src/app-page.ts`](../src/app-page.ts), [`src/app-copy.ts`](../src/app-copy.ts)                                                 | [`src/app.test.ts`](../src/app.test.ts), [`src/app-copy.test.ts`](../src/app-copy.test.ts)             |
+| Mission document construction                                     | [`src/mission-draft.ts`](../src/mission-draft.ts), [`src/spec.ts`](../src/spec.ts)                                                                              | [`src/mission-draft.test.ts`](../src/mission-draft.test.ts), [`src/spec.test.ts`](../src/spec.test.ts) |
+| Mission, Branch, Profile, Binding, and event domain               | [`src/domain.ts`](../src/domain.ts)                                                                                                                             | Engine and store tests below                                                                           |
+| Execution, recovery, and handoff                                  | [`src/engine.ts`](../src/engine.ts)                                                                                                                             | [`src/engine.test.ts`](../src/engine.test.ts)                                                          |
+| Events, projections, durable commands/outbox, leases, and fencing | [`src/store.ts`](../src/store.ts)                                                                                                                               | [`src/store.test.ts`](../src/store.test.ts)                                                            |
+| Runtime Event IR and sanitized native artifacts                   | [`src/runtime-events.ts`](../src/runtime-events.ts), [`src/artifact-store.ts`](../src/artifact-store.ts)                                                        | [`src/runtime-events.test.ts`](../src/runtime-events.test.ts) and engine tests                         |
+| Workspace boundary evidence                                       | [`src/workspace.ts`](../src/workspace.ts)                                                                                                                       | [`src/workspace.test.ts`](../src/workspace.test.ts)                                                    |
+| Capsule projection and acknowledgement                            | [`src/capsule.ts`](../src/capsule.ts)                                                                                                                           | [`src/capsule.test.ts`](../src/capsule.test.ts)                                                        |
+| Direct Runtime execution                                          | [`src/adapters/codex.ts`](../src/adapters/codex.ts), [`src/adapters/qoder.ts`](../src/adapters/qoder.ts), [`src/adapters/claude.ts`](../src/adapters/claude.ts) | Adapter tests beside each implementation                                                               |
+| Independent verification                                          | [`src/verifier.ts`](../src/verifier.ts)                                                                                                                         | [`src/verifier.test.ts`](../src/verifier.test.ts)                                                      |
+| Runtime inventory                                                 | [`src/runtime-catalog.ts`](../src/runtime-catalog.ts)                                                                                                           | [`src/runtime-catalog.test.ts`](../src/runtime-catalog.test.ts)                                        |
 
 ## What happens next
 
 MissionBraid has **ten major product iterations**. The foundation above is
-Iteration 1. Iteration 2 turns effective Runtime Profiles and provider-native
-events into observable, versioned product state. The later iterations add live
+Iteration 1. Iteration 2 has been implemented in source and next needs its
+integrated real three-Harness Workbench proof. Iterations 3–10 then add live
 debugging, honest execution forks, adaptive handoff, failure intelligence,
 multi-Agent Mission graphs, evaluation, and an open Adapter SDK.
 

@@ -20,10 +20,11 @@ describe('writeProvenanceManifest', () => {
     await writeProvenanceManifest(file, {
       schemaVersion: PROVENANCE_SCHEMA_VERSION,
       missionId: 'mission-1',
+      rootBranchId: 'branch-root-1',
       stages: [],
     });
     expect(await readFile(file, 'utf8')).toBe(
-      '{"missionId":"mission-1","schemaVersion":"missionbraid.dev/provenance/v1","stages":[]}\n',
+      '{"missionId":"mission-1","rootBranchId":"branch-root-1","schemaVersion":"missionbraid.dev/provenance/v1","stages":[]}\n',
     );
   });
 });

@@ -1,13 +1,16 @@
 # MissionBraid Architecture
 
 > **Status:** final target architecture with a working pre-alpha foundation.
-> The repository already implements the Mission Kernel, local Workbench,
-> append-only event state, direct Codex and Qoder execution, workspace
+> The repository already implements the Mission Kernel, bilingual local
+> Workbench, append-only event state, direct Codex/Qoder/Claude Code execution,
+> a root Branch, the four-part Runtime Profile model, source-scoped Event IR
+> with sanitized native artifacts, durable command/outbox recovery, workspace
 > baseline/checkpoint evidence (digest and delta, not a restorable snapshot), a
 > bounded Handoff Capsule, independent verification, and an Outcome Receipt.
-> Runtime intelligence, unified live debugging,
-> counterfactual replay, adaptive planning, and broader Harness support are
-> target capabilities unless explicitly marked otherwise.
+> The integrated real three-Harness Workbench proof is still pending, so
+> Iteration 2 is not yet claimed complete. Live Context Graph debugging, tool
+> gating, counterfactual replay, adaptive planning, and the other Iteration 3+
+> capabilities remain targets unless explicitly marked otherwise.
 
 ## Product definition
 
@@ -228,6 +231,10 @@ machines. The Workbench contains seven connected views:
 
 The UI is a projection of authoritative Kernel and evidence state. Refreshing or
 restarting it must not alter execution truth.
+
+The current Workbench can be switched between English and Chinese, with the
+choice persisted in the local browser. The seven-view surface above remains the
+target as later iterations add the live debugger and branch-oriented views.
 
 ### Mission Control Plane
 
@@ -604,25 +611,29 @@ original revision and its branches remain inspectable.
 
 ## Current implementation and target boundary
 
-| Capability                   | Current repository                 | Final architecture                                   |
-| ---------------------------- | ---------------------------------- | ---------------------------------------------------- |
-| Mission and Outcome Contract | Implemented                        | Versioned Mission Plan and live revisions            |
-| Local Workbench              | Implemented                        | Full Runtime, trace, debug, branch and outcome views |
-| Runtime Profiles             | Basic Codex/Qoder fields           | Effective environment and capability graph           |
-| Execution                    | Direct Codex/Qoder                 | Direct, ACP, and provider-backed adapters            |
-| Events                       | Durable Mission/runtime events     | Raw + normalized live Agent Event IR                 |
-| Context                      | Capsule-oriented evidence          | Queryable Context Graph and diffs                    |
-| Tools/Effects                | Advisory workspace-stage Effects   | Tool-level gateway, permissions and Effect Ledger    |
-| Checkpoint                   | Git digest/delta boundary evidence | Multi-layer restorable safe-point Checkpoint         |
-| Replay/Fork                  | Not implemented                    | Playback, cached replay, resample, execution fork    |
-| Handoff                      | Codex-to-Qoder Capsule             | Debug-aware cross-Harness continuation               |
-| Failure attribution          | Bounded classifications            | Evidence graph and discriminating probes             |
-| Planner                      | User-selected route                | Capability, quota and outcome-aware planning         |
-| Verification                 | Command verifier and Receipt       | Branch comparison, extensible evaluators and Receipt |
+| Capability                   | Current repository                                                       | Final architecture                                   |
+| ---------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------- |
+| Mission and Outcome Contract | Implemented                                                              | Versioned Mission Plan and live revisions            |
+| Local Workbench              | Implemented, including persisted English/Chinese switching               | Full Runtime, trace, debug, branch and outcome views |
+| Branch                       | Default root Branch; no Fork semantics or UI                             | Isolated executable lineage and comparison           |
+| Runtime Profiles             | Definition, Catalog Observation, immutable Snapshot, and Attempt Binding | Effective environment and capability graph           |
+| Execution                    | Direct Codex/Qoder/Claude Code Adapters                                  | Direct, ACP, and provider-backed adapters            |
+| Commands                     | Durable accepted command/outbox dispatch with restart recovery           | Durable path for every control operation             |
+| Events                       | Source-scoped Event IR plus sanitized content-addressed native artifacts | Live Agent Event IR with richer semantic coverage    |
+| Context                      | Profile/Capsule-oriented evidence; no Context Graph                      | Queryable Context Graph and diffs                    |
+| Tools/Effects                | Advisory workspace-stage Effects                                         | Tool-level gateway, permissions and Effect Ledger    |
+| Checkpoint                   | Git digest/delta boundary evidence                                       | Multi-layer restorable safe-point Checkpoint         |
+| Replay/Fork                  | Not implemented                                                          | Playback, cached replay, resample, execution fork    |
+| Handoff                      | Codex-to-Qoder Capsule                                                   | Debug-aware cross-Harness continuation               |
+| Failure attribution          | Bounded classifications                                                  | Evidence graph and discriminating probes             |
+| Planner                      | User-selected route                                                      | Capability, quota and outcome-aware planning         |
+| Verification                 | Command verifier and Receipt                                             | Branch comparison, extensible evaluators and Receipt |
 
 The strongest current evidence remains the same-host Codex-to-Qoder Workbench
-run in the [evidence index](../evidence/README.md). It does not establish the
-unimplemented target capabilities above.
+run in the [evidence index](../evidence/README.md). The Iteration 2 source is
+implemented, but the integrated Codex/Qoder/Claude Workbench record is still
+pending. Neither the existing record nor implementation alone establishes the
+unimplemented Iteration 3+ capabilities above.
 
 ## Integration and claim boundaries
 

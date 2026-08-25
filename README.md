@@ -1,5 +1,7 @@
 # MissionBraid
 
+**English** | [简体中文](README.zh-CN.md)
+
 **One Mission. Multiple Runtimes. Debuggable execution.**
 
 MissionBraid is a local-first **Agent Runtime Workbench** for developers who
@@ -12,12 +14,14 @@ configure → plan → run → observe → debug → fork → hand off → compa
 ```
 
 > **Status:** pre-alpha, local-first, and run from source. The repository
-> already implements a real Codex-to-Qoder Mission, durable state, workspace
-> baseline/checkpoint evidence (digest and delta, not a restorable snapshot),
-> bounded handoff, independent verification, and an Outcome Receipt. Live
-> event normalization, debugger controls, execution forks, adaptive planning,
-> and broader Harness execution are the accepted target architecture, not
-> current claims.
+> already implements a real Codex-to-Qoder Mission and the Iteration 2 code
+> paths for Codex, Qoder, and Claude Code execution; a root Branch; Runtime
+> Profile Definition, Catalog Observation, immutable Snapshot, and Attempt
+> Binding; source-scoped Event IR with sanitized native artifacts; and durable
+> command/outbox recovery. The integrated real three-Harness Workbench proof is
+> still pending, so Iteration 2 is not yet claimed complete. Live Context Graph
+> debugging, tool gates, executable forks, adaptive planning, and the other
+> Iteration 3+ capabilities remain target architecture.
 
 ![MissionBraid local Workbench overview](docs/assets/missionbraid-workbench-overview.png)
 
@@ -25,13 +29,13 @@ configure → plan → run → observe → debug → fork → hand off → compa
 
 ## The product in one view
 
-|                   | MissionBraid                                                                                                                                                                                                           |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| User problem      | Native coding agents are powerful but fragmented and opaque. Developers lose execution state when switching tools and often debug only after an expensive run has failed.                                              |
-| Product           | One Workbench to configure Runtime Profiles, run a durable Mission, inspect context and tools live, pause at supported boundaries, fork from a checkpoint, switch Harnesses, compare branches, and verify the outcome. |
-| Core abstraction  | A **Mission** owns intent, execution branches, evidence, effects, and completion. A Harness is a replaceable Runtime.                                                                                                  |
-| Implemented today | Local Workbench, Mission Kernel, Codex/Qoder adapters, append-only events, workspace checkpoint evidence, Handoff Capsule, verifier, and Outcome Receipt.                                                              |
-| Delivery plan     | **10 major product iterations in total. Iteration 1 is implemented; nine remain.**                                                                                                                                     |
+|                   | MissionBraid                                                                                                                                                                                                                                                                                                        |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| User problem      | Native coding agents are powerful but fragmented and opaque. Developers lose execution state when switching tools and often debug only after an expensive run has failed.                                                                                                                                           |
+| Product           | One Workbench to configure Runtime Profiles, run a durable Mission, inspect context and tools live, pause at supported boundaries, fork from a checkpoint, switch Harnesses, compare branches, and verify the outcome.                                                                                              |
+| Core abstraction  | A **Mission** owns intent, execution branches, evidence, effects, and completion. A Harness is a replaceable Runtime.                                                                                                                                                                                               |
+| Implemented today | Bilingual local Workbench, Mission Kernel, Codex/Qoder/Claude Code execution adapters, root Branch, resolved Runtime Profiles and bindings, source-scoped Event IR with sanitized native artifacts, durable command/outbox recovery, workspace checkpoint evidence, Handoff Capsule, verifier, and Outcome Receipt. |
+| Delivery plan     | **10 major product iterations in total. Iteration 1 is complete; Iteration 2 is implemented in source but remains open until its real three-Harness Workbench proof; Iterations 3–10 are planned.**                                                                                                                 |
 
 ## Why this exists
 
@@ -190,10 +194,20 @@ The reasoning behind these choices is collected in
 
 The implemented foundation already provides:
 
-- a local Workbench and CLI;
+- a local CLI and a bilingual Workbench with persisted English/Chinese
+  selection;
 - versioned Missions and immutable Outcome Contracts;
 - append-only, hash-linked SQLite events with rebuildable projections;
-- direct Codex and Qoder process adapters;
+- direct Codex, Qoder, and Claude Code process adapters;
+- a default root Branch for every new Mission;
+- separate Runtime Profile Definitions, timestamped Catalog Observations,
+  immutable effective Snapshots, and Mission-specific Attempt Bindings;
+- explicit Adapter capability declarations and honest unknown/unsupported
+  Runtime fields;
+- source-scoped normalized Runtime events linked to sanitized,
+  content-addressed native-format artifacts;
+- a durable command/outbox path whose accepted execution intent survives an
+  application restart;
 - fixed discovery entries for additional target Harnesses;
 - pre-Attempt baselines and workspace checkpoint evidence (digest/delta, not a
   restorable snapshot);
@@ -202,36 +216,38 @@ The implemented foundation already provides:
 - out-of-process verification and hash-bound Outcome Receipts;
 - restart restoration and recovery of interrupted Missions.
 
-The current public evidence proves one same-host Codex-to-Qoder path. It does
-not prove automatic optimal routing, universal tool interception, arbitrary
+The current public evidence proves one same-host Codex-to-Qoder path. The
+Iteration 2 implementation is present in source, but its integrated real
+Codex/Qoder/Claude Workbench record is still pending. Current evidence does not
+prove automatic optimal routing, universal tool interception, arbitrary
 Harness compatibility, production isolation, or third-party adoption.
 
 ## Runtime support today
 
-| Runtime or provider | Discovery support           | Executes Attempts | Current evidence                             |
-| ------------------- | --------------------------- | ----------------: | -------------------------------------------- |
-| Codex               | Probe/catalog implemented   |               Yes | Recovery and Codex-to-Qoder Mission          |
-| Qoder               | Probe/catalog implemented   |               Yes | Capsule acknowledgement and continuation     |
-| Claude Code         | Probe/catalog implemented   |                No | Discovery support only                       |
-| OpenCode            | Probe/catalog implemented   |                No | Discovery support only                       |
-| Hermes              | Probe/catalog implemented   |                No | Discovery support only                       |
-| DeepSeek Harness    | Bootstrap/catalog signal    |                No | Discovery support only                       |
-| Kandev v0.91.0      | Separate compatibility path |                No | Public task/worktree/process interfaces only |
+| Runtime or provider | Discovery support           | Executes Attempts | Current evidence                                      |
+| ------------------- | --------------------------- | ----------------: | ----------------------------------------------------- |
+| Codex               | Probe/catalog implemented   |               Yes | Published recovery and Codex-to-Qoder Mission         |
+| Qoder               | Probe/catalog implemented   |               Yes | Published Capsule acknowledgement and continuation    |
+| Claude Code         | Probe/catalog implemented   |               Yes | Adapter implemented; integrated Mission proof pending |
+| OpenCode            | Probe/catalog implemented   |                No | Discovery support only                                |
+| Hermes              | Probe/catalog implemented   |                No | Discovery support only                                |
+| DeepSeek Harness    | Bootstrap/catalog signal    |                No | Discovery support only                                |
+| Kandev v0.91.0      | Separate compatibility path |                No | Public task/worktree/process interfaces only          |
 
 ## Ten product iterations
 
-| Iteration | User-visible result                                                                           | Status              |
-| --------: | --------------------------------------------------------------------------------------------- | ------------------- |
-|         1 | A Mission survives interruption, crosses Codex → Qoder, and closes with a verified Receipt    | Implemented locally |
-|         2 | Runtime Profiles and native events become observable through a unified Event IR               | Next                |
-|         3 | Developers inspect a live execution, context assembly, tool flow, and workspace changes       | Planned             |
-|         4 | Tool calls can stop at supported pre/post boundaries and be changed before continuation       | Planned             |
-|         5 | Composite checkpoints support honest playback, replay, and executable branches                | Planned             |
-|         6 | A reproducible planner selects, replans, and hands a Mission across Harnesses                 | Planned             |
-|         7 | Failures are attributed to observable model/context/tool/Harness/environment evidence         | Planned             |
-|         8 | Multi-Agent work becomes a durable Mission graph with revision-aware coordination             | Planned             |
-|         9 | Branch comparison, regression cases, evaluation, and Outcome Receipts form an Incident Studio | Planned             |
-|        10 | External developers install, extend, and reproduce the complete Runtime Workbench             | Planned             |
+| Iteration | User-visible result                                                                           | Status                          |
+| --------: | --------------------------------------------------------------------------------------------- | ------------------------------- |
+|         1 | A Mission survives interruption, crosses Codex → Qoder, and closes with a verified Receipt    | Implemented locally             |
+|         2 | Runtime Profiles and native events become observable through a unified Event IR               | Implemented; real proof pending |
+|         3 | Developers inspect a live execution, context assembly, tool flow, and workspace changes       | Planned                         |
+|         4 | Tool calls can stop at supported pre/post boundaries and be changed before continuation       | Planned                         |
+|         5 | Composite checkpoints support honest playback, replay, and executable branches                | Planned                         |
+|         6 | A reproducible planner selects, replans, and hands a Mission across Harnesses                 | Planned                         |
+|         7 | Failures are attributed to observable model/context/tool/Harness/environment evidence         | Planned                         |
+|         8 | Multi-Agent work becomes a durable Mission graph with revision-aware coordination             | Planned                         |
+|         9 | Branch comparison, regression cases, evaluation, and Outcome Receipts form an Incident Studio | Planned                         |
+|        10 | External developers install, extend, and reproduce the complete Runtime Workbench             | Planned                         |
 
 Each iteration ends in one real Workbench workflow, not an isolated schema,
 adapter, or test suite. See the [detailed roadmap](docs/roadmap.md).
@@ -257,6 +273,10 @@ node dist/src/cli.js app --state-dir "$MISSIONBRAID_DEMO_ROOT/state" --port 4317
 
 Open `http://127.0.0.1:4317`. Select locally available model and reasoning
 settings, then enter:
+
+The Workbench follows the browser language on first use. Use the `EN | 中文`
+control beside the wordmark to switch; the choice is stored only in that
+browser.
 
 **Title**
 
@@ -291,9 +311,10 @@ binds one clean public-clone run to:
 - a 26-event verified Receipt;
 - restoration of the same Mission and Receipt after restart.
 
-All current records are local and same-host. The
-[evidence index](evidence/README.md) keeps demonstrated results separate from
-target architecture.
+All current records are local and same-host. The Iteration 2 same-host record
+will be added only after the normal Workbench completes and restores a real
+Codex/Qoder/Claude Mission. The [evidence index](evidence/README.md) keeps that
+pending proof separate from implemented source and target architecture.
 
 ## Documentation
 

@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -18,6 +19,8 @@ import {
   MissionStore,
   StaleFencingTokenError,
   WorkspaceLeaseConflictError,
+  canonicalJson,
+  computeEventHash,
   hashPayload,
 } from './store.js';
 
@@ -275,6 +278,193 @@ describe('MissionStore', () => {
     reopened.close();
   });
 
+  it('commits command intent with its outbox row and recovers it after reopen', () => {
+    const directory = temporaryDirectory();
+    const databasePath = join(directory, 'kernel.sqlite');
+    let currentMs = Date.parse('2026-08-24T00:00:00.000Z');
+    const now = () => new Date(currentMs);
+    const first = new MissionStore(databasePath, { now });
+    const fixture = entities('command-restart');
+    const lease = first.acquireWorkspaceLease(fixture.mission.workspaceKey, 'runner-command', {
+      ttlMs: 60_000,
+    });
+    first.createMission(fixture.creation, lease);
+    const head = first.getMission(fixture.mission.missionId)!.headHash;
+    const accepted = first.acceptCommand(
+      {
+        commandId: 'command-restart-1',
+        eventId: 'event-command-restart-1',
+        missionId: fixture.mission.missionId,
+        action: 'resume',
+        idempotencyKey: 'ui-submit-1',
+        expectedHeadHash: head,
+        occurredAt: '2026-08-24T00:00:01.000Z',
+      },
+      lease,
+    );
+    expect(accepted).toMatchObject({ status: 'pending', dispatchCount: 0 });
+    expect(first.listEvents(fixture.mission.missionId).at(-1)?.type).toBe('command.accepted');
+    first.close();
+
+    currentMs += 1_000;
+    const reopened = new MissionStore(databasePath, { now });
+    expect(reopened.getCommand(accepted.commandId)).toMatchObject({
+      commandId: accepted.commandId,
+      status: 'pending',
+      branchId: fixture.mission.rootBranchId,
+    });
+    const claimed = reopened.claimNextCommand('supervisor-a', { claimTtlMs: 30_000 });
+    expect(claimed).toMatchObject({ commandId: accepted.commandId, status: 'dispatching' });
+    expect(claimed?.dispatchCount).toBe(1);
+    reopened.recordCommandStatus(
+      accepted.commandId,
+      'completed',
+      'event-command-completed',
+      lease,
+      'Mission succeeded',
+    );
+    expect(reopened.getCommand(accepted.commandId)?.status).toBe('completed');
+    expect(reopened.verifyEventChain(fixture.mission.missionId).valid).toBe(true);
+    reopened.close();
+  });
+
+  it('rolls back command intent when the outbox insert conflicts', () => {
+    const fixture = createFixture();
+    fixture.store.createMission(fixture.creation, fixture.fence);
+    const firstHead = fixture.store.getMission(fixture.mission.missionId)!.headHash;
+    fixture.store.acceptCommand(
+      {
+        commandId: 'command-shared',
+        eventId: 'event-command-first',
+        missionId: fixture.mission.missionId,
+        action: 'resume',
+        idempotencyKey: 'submit-first',
+        expectedHeadHash: firstHead,
+        occurredAt: '2026-08-24T00:00:01.000Z',
+      },
+      fixture.fence,
+    );
+    const before = fixture.store.listEvents(fixture.mission.missionId);
+    const nextHead = fixture.store.getMission(fixture.mission.missionId)!.headHash;
+
+    expect(() =>
+      fixture.store.acceptCommand(
+        {
+          commandId: 'command-shared',
+          eventId: 'event-command-conflict',
+          missionId: fixture.mission.missionId,
+          action: 'verify',
+          idempotencyKey: 'submit-second',
+          expectedHeadHash: nextHead,
+          occurredAt: '2026-08-24T00:00:02.000Z',
+        },
+        fixture.fence,
+      ),
+    ).toThrow();
+    expect(fixture.store.listEvents(fixture.mission.missionId)).toEqual(before);
+    expect(fixture.store.listCommands(fixture.mission.missionId)).toHaveLength(1);
+    expect(fixture.store.verifyEventChain(fixture.mission.missionId).valid).toBe(true);
+    fixture.store.close();
+  });
+
+  it('migrates a schema-v1 Mission without inventing root Branch history', () => {
+    const directory = temporaryDirectory();
+    const databasePath = join(directory, 'kernel.sqlite');
+    const fixture = entities('legacy-schema-v1');
+    const { rootBranchId: _rootBranchId, ...legacyMission } = fixture.mission;
+    const payload = {
+      mission: legacyMission,
+      contract: fixture.contract,
+      profile: fixture.profile,
+    };
+    const payloadJson = canonicalJson(payload);
+    const payloadHash = hashPayload(payload);
+    const recordedAt = '2026-08-24T00:00:00.000Z';
+    const eventHash = computeEventHash({
+      schemaVersion: DOMAIN_SCHEMA_VERSION,
+      eventId: 'event-legacy-schema-v1',
+      missionId: fixture.mission.missionId,
+      attemptId: null,
+      seq: 1,
+      type: 'mission.created',
+      occurredAt: fixture.mission.createdAt,
+      recordedAt,
+      payloadHash,
+      prevHash: null,
+    });
+    const legacy = new DatabaseSync(databasePath);
+    legacy.exec(`
+      CREATE TABLE mission_events (
+        schema_version INTEGER NOT NULL, event_id TEXT PRIMARY KEY, mission_id TEXT NOT NULL,
+        attempt_id TEXT, seq INTEGER NOT NULL, event_type TEXT NOT NULL, occurred_at TEXT NOT NULL,
+        recorded_at TEXT NOT NULL, payload_json TEXT NOT NULL, payload_hash TEXT NOT NULL,
+        prev_hash TEXT, event_hash TEXT NOT NULL, UNIQUE (mission_id, seq)
+      ) STRICT;
+      CREATE TABLE missions (
+        mission_id TEXT PRIMARY KEY, workspace_key TEXT NOT NULL, title TEXT NOT NULL,
+        status TEXT NOT NULL, contract_json TEXT NOT NULL, profile_json TEXT NOT NULL,
+        receipt_json TEXT, last_seq INTEGER NOT NULL, head_hash TEXT NOT NULL,
+        created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+      ) STRICT;
+      CREATE TABLE workspace_leases (
+        workspace_key TEXT PRIMARY KEY, owner_id TEXT NOT NULL, fencing_token INTEGER NOT NULL,
+        acquired_at_ms INTEGER NOT NULL, lease_until_ms INTEGER NOT NULL
+      ) STRICT;
+      PRAGMA user_version = 1;
+    `);
+    legacy
+      .prepare(
+        `INSERT INTO mission_events VALUES (?, ?, ?, NULL, 1, 'mission.created', ?, ?, ?, ?, NULL, ?)`,
+      )
+      .run(
+        DOMAIN_SCHEMA_VERSION,
+        'event-legacy-schema-v1',
+        fixture.mission.missionId,
+        fixture.mission.createdAt,
+        recordedAt,
+        payloadJson,
+        payloadHash,
+        eventHash,
+      );
+    legacy
+      .prepare(`INSERT INTO missions VALUES (?, ?, ?, 'pending', ?, ?, NULL, 1, ?, ?, ?)`)
+      .run(
+        fixture.mission.missionId,
+        fixture.mission.workspaceKey,
+        fixture.mission.title,
+        canonicalJson(fixture.contract),
+        canonicalJson(fixture.profile),
+        eventHash,
+        fixture.mission.createdAt,
+        recordedAt,
+      );
+    legacy.close();
+
+    const migrated = new MissionStore(databasePath);
+    expect(migrated.getMission(fixture.mission.missionId)).toMatchObject({
+      missionId: fixture.mission.missionId,
+      status: 'pending',
+    });
+    expect(migrated.getMission(fixture.mission.missionId)?.rootBranchId).toBeUndefined();
+    expect(migrated.verifyEventChain(fixture.mission.missionId).valid).toBe(true);
+    const lease = migrated.acquireWorkspaceLease(fixture.mission.workspaceKey, 'legacy-runner');
+    expect(() =>
+      migrated.acceptCommand(
+        {
+          commandId: 'command-legacy',
+          eventId: 'event-command-legacy',
+          missionId: fixture.mission.missionId,
+          action: 'resume',
+          idempotencyKey: 'legacy-submit',
+          expectedHeadHash: eventHash,
+          occurredAt: '2026-08-24T00:00:01.000Z',
+        },
+        lease,
+      ),
+    ).toThrow(/no Branch identity/);
+    migrated.close();
+  });
+
   it('serializes workspace ownership and rejects writes from an old fencing token', () => {
     let currentMs = Date.parse('2026-08-24T00:00:00.000Z');
     const now = () => new Date(currentMs);
@@ -516,6 +706,7 @@ function entities(workspaceKey: string): {
     workspaceKey,
     contractId: contract.contractId,
     initialProfileId: profile.profileId,
+    rootBranchId: `branch-root-${workspaceKey}`,
     status: 'pending',
     createdAt: '2026-08-24T00:00:00.000Z',
   };

@@ -18,6 +18,7 @@ export interface CapsuleAttemptRefV1 {
   readonly attemptId: string;
   readonly stageId: string;
   readonly profileId: string;
+  readonly bindingId: string;
 }
 
 export interface CapsuleCheckpointV1 {
@@ -32,6 +33,7 @@ export interface CapsuleRemainingCriterionV1 {
 
 export interface CanonicalCapsuleInputV1 {
   readonly missionId: string;
+  readonly branchId: string;
   readonly contractId: string;
   readonly contractSummary: string;
   readonly constraints: readonly string[];
@@ -138,6 +140,7 @@ function normalizeAttemptRef(value: CapsuleAttemptRefV1, path: string): CapsuleA
     attemptId: requireIdentifier(value.attemptId, `${path}.attemptId`),
     stageId: requireIdentifier(value.stageId, `${path}.stageId`),
     profileId: requireIdentifier(value.profileId, `${path}.profileId`),
+    bindingId: requireIdentifier(value.bindingId, `${path}.bindingId`),
   };
 }
 
@@ -169,6 +172,7 @@ function canonicalCapsulePayload(
   return {
     schemaVersion: CAPSULE_SCHEMA_VERSION,
     missionId: requireIdentifier(input.missionId, 'missionId'),
+    branchId: requireIdentifier(input.branchId, 'branchId'),
     contractId: requireIdentifier(input.contractId, 'contractId'),
     contractSummary: requireNonEmpty(input.contractSummary, 'contractSummary'),
     constraints,

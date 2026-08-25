@@ -20,6 +20,7 @@ import {
 function capsuleInput(): CanonicalCapsuleInputV1 {
   return {
     missionId: 'mission-e1',
+    branchId: 'branch-root-e1',
     contractId: 'contract-e1',
     contractSummary: 'Finish the crash-tolerant Effect Ledger and pass the original verifiers.',
     constraints: [
@@ -30,11 +31,13 @@ function capsuleInput(): CanonicalCapsuleInputV1 {
       attemptId: 'attempt-codex',
       stageId: 'stage-ledger-core',
       profileId: 'profile-codex',
+      bindingId: 'binding-codex',
     },
     target: {
       attemptId: 'attempt-qoder',
       stageId: 'stage-ledger-cli',
       profileId: 'profile-qoder',
+      bindingId: 'binding-qoder',
     },
     checkpoint: {
       checkpointId: 'checkpoint-after-core',
@@ -52,6 +55,7 @@ function outputLine(line: string, value?: unknown): RuntimeOutputLine {
   return {
     runtime: 'qoder',
     sequence: 1,
+    streamSequence: 1,
     stream: 'stdout',
     line,
     receivedAt: '2026-08-24T00:00:00.000Z',

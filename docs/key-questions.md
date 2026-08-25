@@ -1,8 +1,10 @@
 # Key Product and Technical Questions
 
 > **Status:** these answers define the accepted target architecture. “Today”
-> refers only to the current pre-alpha Codex/Qoder vertical slice; “target”
-> describes capabilities still scheduled in the ten-iteration roadmap.
+> includes the verified pre-alpha Codex/Qoder vertical slice and the Iteration 2
+> implementation now present in source. The integrated real
+> Codex/Qoder/Claude Workbench proof remains pending; “target” describes later
+> capabilities still scheduled in the ten-iteration roadmap.
 
 ## 1. Why build a Workbench instead of another Agent launcher?
 
@@ -206,17 +208,27 @@ task/worktree/process behavior. It does not prove a Kandev-backed Mission.
 
 Implemented today:
 
-- local Workbench and Mission Kernel;
-- Codex and Qoder execution;
-- durable events and restart restoration;
+- bilingual local Workbench and Mission Kernel;
+- Codex, Qoder, and Claude Code execution Adapters;
+- a default root Branch for new Missions, without Fork semantics yet;
+- Runtime Profile Definition, Catalog Observation, immutable effective
+  Snapshot, and Attempt Binding;
+- source-scoped Event IR linked to sanitized, content-addressed native
+  artifacts;
+- durable events plus command/outbox dispatch and restart restoration;
 - workspace baseline/checkpoint evidence (digest/delta, not a restorable
   snapshot) and Handoff Capsule;
 - independent verifier and Outcome Receipt;
 - one same-host public-clone Codex-to-Qoder evidence path.
 
+The first six items above describe implementation. They do not yet prove the
+Iteration 2 user result: one real Mission executed through the normal Workbench
+across Codex, Qoder, and Claude Code, restored after restart, and retained with
+source-linked Event IR, native artifacts, and a Receipt.
+
 Not implemented today:
 
-- complete live Event IR and Context Graph;
+- live Event IR transport, the Context Graph, and context diffs;
 - pre-tool gating and interactive debugger;
 - composite executable fork/replay;
 - adaptive Profile planning;

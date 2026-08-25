@@ -6,6 +6,7 @@ import type {
   AdapterRunRequest,
   ProcessOutputLine,
   RuntimeAdapter,
+  RuntimeAdapterCapabilities,
   RuntimeDetection,
   RuntimeInvocation,
   RuntimeOutputLine,
@@ -29,6 +30,50 @@ export interface CodexAdapterOptions {
   readonly command?: string;
   readonly probeTimeoutMs?: number;
 }
+
+export const CODEX_ADAPTER_CAPABILITIES = {
+  observe: { status: 'supported', control: 'native', detail: 'Codex JSONL events are preserved.' },
+  context_capture: {
+    status: 'unknown',
+    control: 'unknown',
+    detail: 'Complete effective context is not exposed.',
+  },
+  steer: {
+    status: 'unsupported',
+    control: 'none',
+    detail: 'The one-shot adapter has no live steering channel.',
+  },
+  interrupt: {
+    status: 'supported',
+    control: 'controller',
+    detail: 'The controller owns and can terminate the process.',
+  },
+  pre_tool_gate: {
+    status: 'unsupported',
+    control: 'none',
+    detail: 'Tool dispatch is not mediated by this adapter.',
+  },
+  resume: {
+    status: 'unsupported',
+    control: 'none',
+    detail: 'This adapter launches ephemeral Codex sessions.',
+  },
+  native_fork: {
+    status: 'unsupported',
+    control: 'none',
+    detail: 'Native session fork is not exposed.',
+  },
+  workspace_restore: {
+    status: 'unsupported',
+    control: 'none',
+    detail: 'Workspace restore belongs to the controller.',
+  },
+  external_effect_control: {
+    status: 'unknown',
+    control: 'unknown',
+    detail: 'External effects are not controlled at this boundary.',
+  },
+} as const satisfies RuntimeAdapterCapabilities;
 
 function requireNonEmpty(value: string, name: string): void {
   if (value.trim().length === 0) {
@@ -129,6 +174,7 @@ export function buildCodexInvocation(
 
 export class CodexAdapter implements RuntimeAdapter<CodexRunRequest> {
   readonly runtime = 'codex' as const;
+  readonly capabilities = CODEX_ADAPTER_CAPABILITIES;
   readonly command: string;
   readonly probeTimeoutMs: number;
 

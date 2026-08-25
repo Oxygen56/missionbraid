@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -138,16 +139,25 @@ async function execute(
   parsed: ParsedArguments,
   signal: AbortSignal,
 ): Promise<MissionExecutionResult> {
+  let missionId: string;
+  let action: 'resume' | 'verify';
   switch (parsed.command) {
-    case 'run':
-      return await engine.run(parsed.subject!, {
+    case 'run': {
+      const created = await engine.create(parsed.subject!, {
         ...(parsed.workspace === undefined ? {} : { workspace: parsed.workspace }),
-        signal,
       });
+      missionId = created.missionId;
+      action = 'resume';
+      break;
+    }
     case 'resume':
-      return await engine.resume(parsed.subject!, { signal });
+      missionId = parsed.subject!;
+      action = 'resume';
+      break;
     case 'verify':
-      return await engine.verify(parsed.subject!, { signal });
+      missionId = parsed.subject!;
+      action = 'verify';
+      break;
     case 'status':
       throw new Error('status is handled before execution');
     case 'list':
@@ -155,6 +165,19 @@ async function execute(
     case 'create':
       throw new Error('create is handled before execution');
   }
+  const active = engine
+    .commands(missionId)
+    .find((command) => command.status === 'pending' || command.status === 'dispatching');
+  const command =
+    active ?? (await engine.acceptCommand(missionId, action, `cli:${action}:${randomUUID()}`));
+  if (command.status === 'pending') {
+    engine.claimCommand(command.commandId, `cli-${String(process.pid)}-${randomUUID()}`);
+  } else if (command.status === 'dispatching') {
+    throw new Error(
+      `Mission ${missionId} already has a command claimed by another controller (${command.commandId})`,
+    );
+  }
+  return await engine.executeCommand(command.commandId, signal);
 }
 
 function publicResult(result: MissionExecutionResult): Record<string, unknown> {

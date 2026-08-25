@@ -79,6 +79,84 @@ describe('createMissionDraft', () => {
     ]);
   });
 
+  it('creates a loadable Claude Code Mission with its native effort and permission names', () => {
+    const root = mkdtempSync(join(tmpdir(), 'missionbraid-draft-claude-'));
+    roots.push(root);
+    const workspace = join(root, 'workspace');
+    mkdirSync(workspace);
+    const input = validInput(workspace);
+
+    const draft = createMissionDraft({
+      ...input,
+      stages: [
+        {
+          stageId: 'claude-primary',
+          harness: 'claude',
+          model: 'deepseek-v4-pro',
+          reasoningEffort: 'medium',
+          permissionMode: 'dontAsk',
+          injectionBudgetTokens: 1_600,
+        },
+      ],
+    });
+
+    expect(draft.document.attemptPlan[0]).toMatchObject({
+      stageId: 'claude-primary',
+      profile: {
+        harness: 'claude',
+        model: 'deepseek-v4-pro',
+        reasoningEffort: 'medium',
+        permissionMode: 'dontAsk',
+      },
+      onFailure: 'stop',
+    });
+    expect(draft.document.attemptPlan[0]?.instruction).toContain('Claude Code');
+
+    const source = join(root, 'mission.yaml');
+    writeFileSync(source, draft.yaml, 'utf8');
+    expect(loadMissionSpec(source).attemptPlan[0]?.profile.harness).toBe('claude');
+  });
+
+  it('creates one ordered Codex-to-Qoder-to-Claude Mission for the unified Runtime path', () => {
+    const root = mkdtempSync(join(tmpdir(), 'missionbraid-draft-three-runtime-'));
+    roots.push(root);
+    const workspace = join(root, 'workspace');
+    mkdirSync(workspace);
+    const input = validInput(workspace);
+
+    const draft = createMissionDraft({
+      ...input,
+      stages: [
+        ...input.stages,
+        {
+          stageId: 'claude-finish',
+          harness: 'claude',
+          model: 'deepseek-v4-pro',
+          reasoningEffort: 'medium',
+          permissionMode: 'dontAsk',
+          injectionBudgetTokens: 1_600,
+        },
+      ],
+    });
+
+    expect(draft.document.attemptPlan.map((stage) => stage.profile.harness)).toEqual([
+      'codex',
+      'qoder',
+      'claude',
+    ]);
+    expect(draft.document.attemptPlan.map((stage) => stage.onFailure)).toEqual([
+      'handoff',
+      'handoff',
+      'stop',
+    ]);
+    expect(draft.document.attemptPlan[1]?.instruction).toContain('Handoff Capsule');
+    expect(draft.document.attemptPlan[2]?.instruction).toContain('Handoff Capsule');
+
+    const source = join(root, 'mission.yaml');
+    writeFileSync(source, draft.yaml, 'utf8');
+    expect(loadMissionSpec(source).attemptPlan).toHaveLength(3);
+  });
+
   it.each([
     ['relative workspace', { workspace: 'relative/workspace' }],
     ['blank objective', { objective: '   ' }],
@@ -86,14 +164,23 @@ describe('createMissionDraft', () => {
     [
       'too many stages',
       {
-        stages: [stage('one', 'codex'), stage('two', 'qoder'), stage('three', 'codex')],
+        stages: [
+          stage('one', 'codex'),
+          stage('two', 'qoder'),
+          stage('three', 'claude'),
+          stage('four', 'codex'),
+        ],
       },
     ],
     ['duplicate stage ids', { stages: [stage('duplicate', 'codex'), stage('duplicate', 'qoder')] }],
-    ['unsupported harness', { stages: [{ ...stage('one', 'codex'), harness: 'claude' }] }],
+    ['unsupported harness', { stages: [{ ...stage('one', 'codex'), harness: 'opencode' }] }],
     [
       'wrong permission mode',
       { stages: [{ ...stage('one', 'codex'), permissionMode: 'bypass_permissions' }] },
+    ],
+    [
+      'wrong Claude permission mode',
+      { stages: [{ ...stage('one', 'claude'), permissionMode: 'dont_ask' }] },
     ],
     [
       'shell verifier',
@@ -175,7 +262,7 @@ function validInput(workspace: string) {
   };
 }
 
-function stage(stageId: string, harness: 'codex' | 'qoder') {
+function stage(stageId: string, harness: 'codex' | 'qoder' | 'claude') {
   return {
     stageId,
     harness,

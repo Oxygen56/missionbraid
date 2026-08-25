@@ -67,6 +67,7 @@ setTimeout(() => {
       { stream: 'stderr', line: 'warning' },
     ]);
     expect(events.map((event) => event.sequence)).toEqual([1, 2, 3]);
+    expect(events.map((event) => event.streamSequence)).toEqual([1, 2, 1]);
     expect(result.pid).toEqual(expect.any(Number));
     expect(result.exitCode).toBe(7);
     expect(result.signal).toBeNull();

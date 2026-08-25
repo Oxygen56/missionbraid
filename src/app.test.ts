@@ -6,7 +6,12 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { startMissionBraidApp, type AppEngine } from './app.js';
-import { DOMAIN_SCHEMA_VERSION, type MissionProjectionV1 } from './domain.js';
+import {
+  DOMAIN_SCHEMA_VERSION,
+  type MissionCommandActionV1,
+  type MissionCommandV1,
+  type MissionProjectionV1,
+} from './domain.js';
 import type {
   MissionCreationResult,
   MissionExecutionResult,
@@ -43,7 +48,7 @@ describe('MissionBraid local app', () => {
         runtimes: RuntimeCatalogEntry[];
         providers: Array<{ id: string; status: string }>;
       };
-      expect(runtimeBody.runtimes.map((entry) => entry.id)).toEqual(['codex', 'qoder']);
+      expect(runtimeBody.runtimes.map((entry) => entry.id)).toEqual(['codex', 'qoder', 'claude']);
       expect(runtimeBody.providers).toContainEqual(
         expect.objectContaining({ id: 'kandev', status: 'compatibility-only' }),
       );
@@ -113,6 +118,56 @@ describe('MissionBraid local app', () => {
     }
   });
 
+  it('accepts one ordered Codex-to-Qoder-to-Claude Workbench route', async () => {
+    const fixture = await createWorkspace();
+    const state = new FakeEngineState();
+    const app = await startMissionBraidApp({
+      stateDir: fixture.stateDir,
+      port: 0,
+      engineFactory: () => new FakeEngine(state),
+      discoverRuntimes: async () => readyCatalog(),
+    });
+    try {
+      const response = await fetch(`${app.url}/api/v1/missions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(threeRuntimeMissionInput(fixture.workspace)),
+      });
+      expect(response.status).toBe(202);
+      expect(await response.json()).toMatchObject({
+        missionId: 'mission-app-1',
+        commandId: 'command-app-1',
+      });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('serves a hash-verified sanitized native artifact through the Workbench API', async () => {
+    const fixture = await createWorkspace();
+    const state = new FakeEngineState();
+    const sha256 = 'a'.repeat(64);
+    state.artifacts.set(`artifact-${sha256}`, {
+      artifactId: `artifact-${sha256}`,
+      sha256,
+      mediaType: 'application/json',
+      content: '{"type":"assistant"}\n',
+    });
+    const app = await startMissionBraidApp({
+      stateDir: fixture.stateDir,
+      port: 0,
+      engineFactory: () => new FakeEngine(state),
+      discoverRuntimes: async () => readyCatalog(),
+    });
+    try {
+      const response = await fetch(`${app.url}/api/v1/artifacts/artifact-${sha256}`);
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual(state.artifacts.get(`artifact-${sha256}`));
+    } finally {
+      await app.close();
+    }
+  });
+
   it('projects persisted running work as interrupted and lets the same Mission resume', async () => {
     const fixture = await createWorkspace();
     const state = new FakeEngineState();
@@ -149,6 +204,63 @@ describe('MissionBraid local app', () => {
       expect(state.resumeCalls).toBe(1);
     } finally {
       await app.close();
+    }
+  });
+
+  it('automatically resumes an accepted command after the Workbench restarts', async () => {
+    const fixture = await createWorkspace();
+    const state = new FakeEngineState();
+    let releaseExecution: (() => void) | undefined;
+    let markExecutionStarted: (() => void) | undefined;
+    state.executionGate = new Promise<void>((resolveGate) => {
+      releaseExecution = resolveGate;
+    });
+    const executionStarted = new Promise<void>((resolveStarted) => {
+      markExecutionStarted = resolveStarted;
+    });
+    state.onExecuteStarted = () => markExecutionStarted?.();
+
+    const first = await startMissionBraidApp({
+      stateDir: fixture.stateDir,
+      port: 0,
+      engineFactory: () => new FakeEngine(state),
+      discoverRuntimes: async () => readyCatalog(),
+    });
+    const createResponse = await fetch(`${first.url}/api/v1/missions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(missionInput(fixture.workspace)),
+    });
+    expect(createResponse.status).toBe(202);
+    const created = (await createResponse.json()) as { missionId: string; commandId: string };
+    await executionStarted;
+    const close = first.close();
+    releaseExecution?.();
+    await close;
+    expect(state.commands.get(created.commandId)?.status).toBe('pending');
+    expect(state.resumeCalls).toBe(0);
+
+    delete state.executionGate;
+    delete state.onExecuteStarted;
+    const restarted = await startMissionBraidApp({
+      stateDir: fixture.stateDir,
+      port: 0,
+      engineFactory: () => new FakeEngine(state),
+      discoverRuntimes: async () => readyCatalog(),
+    });
+    try {
+      const detail = await waitFor(async () => {
+        const response = await fetch(`${restarted.url}/api/v1/missions/${created.missionId}`);
+        const body = (await response.json()) as {
+          operation: { phase: string } | null;
+          mission: { status: string };
+        };
+        return body.operation?.phase === 'completed' ? body : undefined;
+      });
+      expect(detail.mission.status).toBe('succeeded');
+      expect(state.resumeCalls).toBe(1);
+    } finally {
+      await restarted.close();
     }
   });
 
@@ -194,8 +306,15 @@ describe('MissionBraid local app', () => {
 class FakeEngineState {
   readonly missions = new Map<string, MissionProjectionV1>();
   readonly timelines = new Map<string, MissionTimelineEntry[]>();
+  readonly commands = new Map<string, MissionCommandV1>();
+  readonly artifacts = new Map<
+    string,
+    { artifactId: string; sha256: string; mediaType: 'application/json'; content: string }
+  >();
   createGate?: Promise<void>;
   onCreateStarted?: () => void;
+  executionGate?: Promise<void>;
+  onExecuteStarted?: () => void;
   resumeCalls = 0;
 }
 
@@ -232,6 +351,89 @@ class FakeEngine implements AppEngine {
     return { missionId, status: 'succeeded' };
   }
 
+  async acceptCommand(
+    missionId: string,
+    action: MissionCommandActionV1,
+    idempotencyKey = `fake-${String(this.#state.commands.size + 1)}`,
+  ): Promise<MissionCommandV1> {
+    const mission = this.#require(missionId);
+    const commandId = `command-app-${String(this.#state.commands.size + 1)}`;
+    const command: MissionCommandV1 = {
+      commandId,
+      missionId,
+      branchId: mission.rootBranchId ?? `branch-root-${missionId}`,
+      action,
+      idempotencyKey,
+      expectedHeadHash: mission.headHash,
+      status: 'pending',
+      acceptedAt: mission.updatedAt,
+      updatedAt: mission.updatedAt,
+      dispatchCount: 0,
+    };
+    this.#state.commands.set(commandId, command);
+    return command;
+  }
+
+  claimNextCommand(): MissionCommandV1 | undefined {
+    const command = [...this.#state.commands.values()].find(
+      (candidate) => candidate.status === 'pending',
+    );
+    if (command === undefined) return undefined;
+    const claimed = {
+      ...command,
+      status: 'dispatching' as const,
+      dispatchCount: command.dispatchCount + 1,
+    };
+    this.#state.commands.set(command.commandId, claimed);
+    return claimed;
+  }
+
+  renewCommandClaim(commandId: string): MissionCommandV1 {
+    const command = this.command(commandId);
+    if (command === undefined) throw new Error(`Unknown command ${commandId}`);
+    return command;
+  }
+
+  async executeCommand(commandId: string, signal?: AbortSignal): Promise<MissionExecutionResult> {
+    const command = this.command(commandId);
+    if (command === undefined) throw new Error(`Unknown command ${commandId}`);
+    this.#state.onExecuteStarted?.();
+    await this.#state.executionGate;
+    if (signal?.aborted === true) {
+      this.#state.commands.set(commandId, {
+        ...command,
+        status: 'pending',
+        updatedAt: '2026-08-24T03:00:01.000Z',
+      });
+      return { missionId: command.missionId, status: this.#require(command.missionId).status };
+    }
+    const result =
+      command.action === 'verify'
+        ? await this.verify(command.missionId)
+        : await this.resume(command.missionId);
+    const completed = {
+      ...command,
+      status: 'completed' as const,
+      updatedAt: '2026-08-24T03:00:01.000Z',
+    };
+    this.#state.commands.set(commandId, completed);
+    return result;
+  }
+
+  command(commandId: string): MissionCommandV1 | undefined {
+    return this.#state.commands.get(commandId);
+  }
+
+  commands(missionId?: string): MissionCommandV1[] {
+    return [...this.#state.commands.values()].filter(
+      (command) => missionId === undefined || command.missionId === missionId,
+    );
+  }
+
+  async artifact(artifactId: string) {
+    return this.#state.artifacts.get(artifactId);
+  }
+
   status(missionId: string): MissionStatusView {
     return {
       mission: this.#require(missionId),
@@ -265,6 +467,7 @@ function projection(missionId: string, status: MissionProjectionV1['status']): M
     schemaVersion: DOMAIN_SCHEMA_VERSION,
     missionId,
     workspaceKey: 'workspace-app-fixture',
+    rootBranchId: `branch-root-${missionId}`,
     title: 'App fixture Mission',
     status,
     contract: {
@@ -324,7 +527,36 @@ function readyCatalog(): RuntimeCatalogEntry[] {
       capabilities: ['workspace'],
       checkedAt: '2026-08-24T03:00:00.000Z',
     },
+    {
+      id: 'claude',
+      displayName: 'Claude Code',
+      status: 'ready-supported',
+      support: 'supported',
+      path: '/opt/bin/claude',
+      version: '2.1.245',
+      reason: 'Ready.',
+      capabilities: ['workspace'],
+      checkedAt: '2026-08-24T03:00:00.000Z',
+    },
   ];
+}
+
+function threeRuntimeMissionInput(workspace: string): Record<string, unknown> {
+  const input = missionInput(workspace);
+  return {
+    ...input,
+    stages: [
+      ...(input.stages as unknown[]),
+      {
+        stageId: 'claude-continuation',
+        harness: 'claude',
+        model: 'deepseek-v4-pro',
+        reasoningEffort: 'medium',
+        permissionMode: 'bypassPermissions',
+        injectionBudgetTokens: 1_600,
+      },
+    ],
+  };
 }
 
 function missionInput(workspace: string): Record<string, unknown> {

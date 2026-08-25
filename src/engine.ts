@@ -1,9 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { realpathSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, realpathSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { homedir } from 'node:os';
 
 import { CodexAdapter, type CodexSandbox } from './adapters/codex.js';
+import { ClaudeAdapter, type ClaudePermissionMode } from './adapters/claude.js';
 import { QoderAdapter, type QoderPermissionMode } from './adapters/qoder.js';
 import type { RuntimeDetection, RuntimeOutputLine, RuntimeRunResult } from './adapters/types.js';
 import {
@@ -15,16 +17,23 @@ import {
 import {
   DOMAIN_SCHEMA_VERSION,
   type ContractV1,
+  type AdapterCapabilitiesV1,
+  type AttemptBindingV1,
   type EffectV1,
   type EventV1,
   type JsonValue,
   type MissionProjectionV1,
+  type MissionCommandActionV1,
+  type MissionCommandV1,
   type ProfileV1,
   type ReceiptEffectResultV1,
   type ReceiptV1,
+  type RuntimeCatalogObservationV1,
+  type RuntimeProfileDefinitionV1,
   type StoredEventV1,
   type WorkspaceFenceV1,
 } from './domain.js';
+import { NativeArtifactStore, type NativeArtifactContent } from './artifact-store.js';
 import {
   PROVENANCE_SCHEMA_VERSION,
   type ProvenanceManifestV1,
@@ -37,8 +46,14 @@ import {
   restoreMissionSpecSnapshot,
   type AttemptStageSpecV1,
   type MissionSpecV1,
+  type SupportedHarnessV1,
 } from './spec.js';
 import { hashPayload, MissionStore } from './store.js';
+import {
+  nativeEventIdentityIds,
+  nativeParentCorrelationIds,
+  normalizeRuntimeOutput,
+} from './runtime-events.js';
 import { runCommandVerifier, type CommandVerificationResultV1 } from './verifier.js';
 import {
   createStageWorkspaceDelta,
@@ -54,6 +69,7 @@ export interface MissionEngineOptions {
   readonly stateDir: string;
   readonly codexAdapter?: CodexAdapter;
   readonly qoderAdapter?: QoderAdapter;
+  readonly claudeAdapter?: ClaudeAdapter;
   readonly now?: () => Date;
   readonly id?: () => string;
 }
@@ -130,15 +146,19 @@ interface SpecSnapshotProvenance {
 interface AttemptPlanRecord {
   readonly attemptId: string;
   readonly stageId: string;
-  readonly harness: 'codex' | 'qoder';
+  readonly harness: SupportedHarnessV1;
   readonly profileId: string;
+  readonly branchId: string;
+  readonly bindingId: string;
 }
 
 interface AttemptBaselineRecord {
   readonly attemptId: string;
   readonly stageId: string;
-  readonly harness: 'codex' | 'qoder';
+  readonly harness: SupportedHarnessV1;
   readonly profileId: string;
+  readonly branchId: string;
+  readonly bindingId: string;
   readonly snapshot: GitWorkspaceSnapshotV1;
 }
 
@@ -147,8 +167,10 @@ interface CheckpointRecord {
   readonly missionId: string;
   readonly attemptId: string;
   readonly stageId: string;
-  readonly harness: 'codex' | 'qoder';
+  readonly harness: SupportedHarnessV1;
   readonly profileId: string;
+  readonly branchId: string;
+  readonly bindingId: string;
   readonly status: 'succeeded' | 'handed_off' | 'failed';
   readonly delta: StageWorkspaceDeltaV1;
   readonly origin?: 'runtime-completion' | 'controller-recovery';
@@ -173,6 +195,8 @@ export class MissionEngine {
   readonly #store: MissionStore;
   readonly #codex: CodexAdapter;
   readonly #qoder: QoderAdapter;
+  readonly #claude: ClaudeAdapter;
+  readonly #artifacts: NativeArtifactStore;
   readonly #now: () => Date;
   readonly #id: () => string;
 
@@ -182,6 +206,8 @@ export class MissionEngine {
     this.#id = options.id ?? randomUUID;
     this.#codex = options.codexAdapter ?? new CodexAdapter();
     this.#qoder = options.qoderAdapter ?? new QoderAdapter();
+    this.#claude = options.claudeAdapter ?? new ClaudeAdapter();
+    this.#artifacts = new NativeArtifactStore(this.#stateDir);
     this.#store = new MissionStore(join(this.#stateDir, 'kernel.sqlite'), { now: this.#now });
   }
 
@@ -197,10 +223,7 @@ export class MissionEngine {
       missionFile,
       options.workspace === undefined ? {} : { workspace: options.workspace },
     );
-    return await this.resume(
-      created.missionId,
-      options.signal === undefined ? {} : { signal: options.signal },
-    );
+    return await this.#submitAndExecute(created.missionId, 'resume', options.signal);
   }
 
   async create(
@@ -215,12 +238,13 @@ export class MissionEngine {
     assertControlStateIsolation(this.#stateDir, spec.workspace);
     const specSnapshot = createMissionSpecSnapshot(spec);
     const missionId = `mission-${this.#id()}`;
+    const rootBranchId = `branch-root-${this.#id()}`;
     const workspaceKey = `workspace-${hashPayload(spec.workspace).slice(0, 32)}`;
     const ownerId = `runner-${this.#id()}`;
     return await this.#withLease(workspaceKey, ownerId, async (fence) => {
       const contract = createContract(spec, this.#now());
       const detection = await this.#detect(spec.attemptPlan[0]?.profile.harness ?? 'codex');
-      const profile = createProfile(spec.attemptPlan[0]!, detection);
+      const profile = createProfile(spec.attemptPlan[0]!, detection, spec.workspace);
       const createdAt = this.#now().toISOString();
       const createdEvent: EventV1 = {
         schemaVersion: DOMAIN_SCHEMA_VERSION,
@@ -236,6 +260,7 @@ export class MissionEngine {
             workspaceKey,
             contractId: contract.contractId,
             initialProfileId: profile.profileId,
+            rootBranchId,
             status: 'pending',
             createdAt,
           },
@@ -243,6 +268,40 @@ export class MissionEngine {
           profile,
         },
       };
+      const branchEvent: EventV1 = {
+        schemaVersion: DOMAIN_SCHEMA_VERSION,
+        eventId: `event-${this.#id()}`,
+        missionId,
+        occurredAt: createdAt,
+        type: 'branch.created',
+        payload: {
+          branch: {
+            schemaVersion: DOMAIN_SCHEMA_VERSION,
+            branchId: rootBranchId,
+            missionId,
+            status: 'active',
+            createdAt,
+          },
+        },
+      };
+      const catalogEvent: EventV1 = {
+        schemaVersion: DOMAIN_SCHEMA_VERSION,
+        eventId: `event-${this.#id()}`,
+        missionId,
+        occurredAt: detection.checkedAt,
+        type: 'runtime.catalog_observed',
+        payload: { observation: requireCatalogObservation(profile) },
+      };
+      const definitionEvents = uniqueProfileDefinitions(spec).map(
+        (definition): EventV1 => ({
+          schemaVersion: DOMAIN_SCHEMA_VERSION,
+          eventId: `event-${this.#id()}`,
+          missionId,
+          occurredAt: createdAt,
+          type: 'profile.definition_recorded',
+          payload: { definition },
+        }),
+      );
       const specSnapshotEvent: EventV1 = {
         schemaVersion: DOMAIN_SCHEMA_VERSION,
         eventId: `event-${this.#id()}`,
@@ -258,7 +317,10 @@ export class MissionEngine {
           } as unknown as JsonValue,
         },
       };
-      this.#store.appendEvents([createdEvent, specSnapshotEvent], fence);
+      this.#store.appendEvents(
+        [createdEvent, branchEvent, catalogEvent, ...definitionEvents, specSnapshotEvent],
+        fence,
+      );
       return { missionId, status: 'pending' };
     });
   }
@@ -267,29 +329,144 @@ export class MissionEngine {
     missionId: string,
     options: Omit<ExecuteMissionOptions, 'workspace'> = {},
   ): Promise<MissionExecutionResult> {
-    const mission = this.#requireMission(missionId);
-    const spec = this.#requireSpecSnapshot(missionId);
-    assertControlStateIsolation(this.#stateDir, spec.workspace);
-    const ownerId = `runner-${this.#id()}`;
-    return await this.#withLease(mission.workspaceKey, ownerId, async (fence) => {
-      await this.#closeDanglingAttempts(missionId, spec, fence);
-      return await this.#execute(missionId, spec, fence, options.signal);
-    });
+    return await this.#submitAndExecute(missionId, 'resume', options.signal);
   }
 
   async verify(
     missionId: string,
     options: Omit<ExecuteMissionOptions, 'workspace'> = {},
   ): Promise<MissionExecutionResult> {
+    return await this.#submitAndExecute(missionId, 'verify', options.signal);
+  }
+
+  async #submitAndExecute(
+    missionId: string,
+    action: MissionCommandActionV1,
+    signal?: AbortSignal,
+  ): Promise<MissionExecutionResult> {
+    this.#requireMission(missionId);
+    const active = this.#store
+      .listCommands(missionId)
+      .find((command) => command.status === 'pending' || command.status === 'dispatching');
+    if (active !== undefined && active.action !== action) {
+      throw new MissionExecutionError(
+        `Mission ${missionId} already has pending ${active.action} command ${active.commandId}`,
+      );
+    }
+    const command =
+      active ?? (await this.acceptCommand(missionId, action, `engine:${action}:${this.#id()}`));
+    this.#store.claimCommand(command.commandId, `direct-${this.#id()}`);
+    return await this.executeCommand(command.commandId, signal);
+  }
+
+  async acceptCommand(
+    missionId: string,
+    action: MissionCommandActionV1,
+    idempotencyKey = `command-${this.#id()}`,
+  ): Promise<MissionCommandV1> {
     const mission = this.#requireMission(missionId);
-    const spec = this.#requireSpecSnapshot(missionId);
+    const ownerId = `command-acceptor-${this.#id()}`;
+    return await this.#withLease(mission.workspaceKey, ownerId, async (fence) => {
+      const current = this.#requireMission(missionId);
+      const commandId = `command-${this.#id()}`;
+      return this.#store.acceptCommand(
+        {
+          commandId,
+          eventId: `event-${this.#id()}`,
+          missionId,
+          action,
+          idempotencyKey,
+          expectedHeadHash: current.headHash,
+          occurredAt: this.#now().toISOString(),
+        },
+        fence,
+      );
+    });
+  }
+
+  claimNextCommand(ownerId: string): MissionCommandV1 | undefined {
+    return this.#store.claimNextCommand(ownerId);
+  }
+
+  claimCommand(commandId: string, ownerId: string): MissionCommandV1 {
+    return this.#store.claimCommand(commandId, ownerId);
+  }
+
+  renewCommandClaim(commandId: string, ownerId: string): MissionCommandV1 {
+    return this.#store.renewCommandClaim(commandId, ownerId);
+  }
+
+  command(commandId: string): MissionCommandV1 | undefined {
+    return this.#store.getCommand(commandId);
+  }
+
+  commands(missionId?: string): MissionCommandV1[] {
+    return this.#store.listCommands(missionId);
+  }
+
+  async artifact(artifactId: string): Promise<NativeArtifactContent | undefined> {
+    return await this.#artifacts.get(artifactId);
+  }
+
+  async executeCommand(commandId: string, signal?: AbortSignal): Promise<MissionExecutionResult> {
+    const command = this.#store.getCommand(commandId);
+    if (command === undefined) throw new MissionExecutionError(`Unknown command ${commandId}`);
+    if (command.status === 'completed') {
+      const mission = this.#requireMission(command.missionId);
+      return {
+        missionId: command.missionId,
+        status: mission.status,
+        ...(mission.receipt === undefined ? {} : { receipt: mission.receipt }),
+      };
+    }
+    if (command.status !== 'dispatching') {
+      throw new MissionExecutionError(`Command ${commandId} is not claimed for dispatch`);
+    }
+    const mission = this.#requireMission(command.missionId);
+    const spec = this.#requireSpecSnapshot(command.missionId);
     assertControlStateIsolation(this.#stateDir, spec.workspace);
-    const ownerId = `runner-${this.#id()}`;
-    return await this.#withLease(
-      mission.workspaceKey,
-      ownerId,
-      async (fence) => await this.#verifyAndReceipt(missionId, spec, fence, options.signal),
-    );
+    const ownerId = `command-runner-${this.#id()}`;
+    return await this.#withLease(mission.workspaceKey, ownerId, async (fence) => {
+      this.#store.recordCommandStatus(commandId, 'dispatching', `event-${this.#id()}`, fence);
+      try {
+        const result =
+          command.action === 'resume'
+            ? await (async () => {
+                await this.#closeDanglingAttempts(command.missionId, spec, fence);
+                return await this.#execute(command.missionId, spec, fence, signal);
+              })()
+            : await this.#verifyAndReceipt(command.missionId, spec, fence, signal);
+        if (signal?.aborted === true) {
+          this.#store.recordCommandStatus(
+            commandId,
+            'pending',
+            `event-${this.#id()}`,
+            fence,
+            'Controller stopped after preserving the current Attempt evidence',
+          );
+          return result;
+        }
+        this.#store.recordCommandStatus(
+          commandId,
+          'completed',
+          `event-${this.#id()}`,
+          fence,
+          `Mission ${result.status}`,
+        );
+        return result;
+      } catch (error) {
+        this.#store.recordCommandStatus(
+          commandId,
+          signal?.aborted === true ? 'pending' : 'failed',
+          `event-${this.#id()}`,
+          fence,
+          error instanceof MissionExecutionError
+            ? error.message
+            : `Execution failed with ${error instanceof Error ? error.name : 'unknown error'}`,
+        );
+        throw error;
+      }
+    });
   }
 
   status(missionId: string): MissionStatusView {
@@ -386,13 +563,31 @@ export class MissionEngine {
     signal?: AbortSignal,
   ): Promise<'progressed' | 'waiting'> {
     const detection = await this.#detect(stage.profile.harness);
-    if (!detection.available) {
-      this.#setWaiting(missionId, `Runtime ${stage.profile.harness} is not installed`, fence);
+    if (!detection.available || !detection.responsive || detection.status !== 'ready') {
+      this.#setWaiting(
+        missionId,
+        detection.available
+          ? `Runtime ${stage.profile.harness} is installed but unavailable`
+          : `Runtime ${stage.profile.harness} is not installed`,
+        fence,
+      );
       return 'waiting';
     }
 
-    const profile = createProfile(stage, detection);
+    const profile = createProfile(stage, detection, spec.workspace);
     const mission = this.#requireMission(missionId);
+    const branchId = requireRootBranch(mission);
+    this.#append(
+      {
+        schemaVersion: DOMAIN_SCHEMA_VERSION,
+        eventId: `event-${this.#id()}`,
+        missionId,
+        occurredAt: detection.checkedAt,
+        type: 'runtime.catalog_observed',
+        payload: { observation: requireCatalogObservation(profile) },
+      },
+      fence,
+    );
     if (mission.activeProfile.profileId !== profile.profileId) {
       this.#append(
         {
@@ -431,12 +626,15 @@ export class MissionEngine {
       return 'waiting';
     }
     const attemptId = `attempt-${this.#id()}`;
+    const bindingId = `binding-${this.#id()}`;
     const effectId = `effect-${attemptId}`;
     const plan: AttemptPlanRecord = {
       attemptId,
       stageId: stage.stageId,
       harness: stage.profile.harness,
       profileId: profile.profileId,
+      branchId,
+      bindingId,
     };
 
     let capsule: CanonicalCapsuleV1 | undefined;
@@ -445,6 +643,7 @@ export class MissionEngine {
     if (previousCheckpoint !== undefined) {
       capsule = createCanonicalCapsule({
         missionId,
+        branchId,
         contractId: mission.contract.contractId,
         contractSummary: mission.contract.objective,
         constraints: spec.constraints,
@@ -452,8 +651,9 @@ export class MissionEngine {
           attemptId: previousCheckpoint.attemptId,
           stageId: previousCheckpoint.stageId,
           profileId: previousCheckpoint.profileId,
+          bindingId: previousCheckpoint.bindingId,
         },
-        target: { attemptId, stageId: stage.stageId, profileId: profile.profileId },
+        target: { attemptId, stageId: stage.stageId, profileId: profile.profileId, bindingId },
         checkpoint: {
           checkpointId: previousCheckpoint.checkpointId,
           workspaceDigest: previousCheckpoint.delta.afterWorkspaceDigest,
@@ -498,7 +698,23 @@ export class MissionEngine {
       stageId: stage.stageId,
       harness: stage.profile.harness,
       profileId: profile.profileId,
+      branchId,
+      bindingId,
       snapshot: before,
+    };
+    const binding: AttemptBindingV1 = {
+      schemaVersion: DOMAIN_SCHEMA_VERSION,
+      bindingId,
+      missionId,
+      attemptId,
+      branchId,
+      contractId: mission.contract.contractId,
+      profileId: profile.profileId,
+      workspaceKey: mission.workspaceKey,
+      planNodeId: stage.stageId,
+      authority: 'workspace',
+      injectionBudgetTokens: stage.profile.injectionBudgetTokens,
+      boundAt: this.#now().toISOString(),
     };
     const effect: EffectV1 = {
       schemaVersion: DOMAIN_SCHEMA_VERSION,
@@ -508,11 +724,21 @@ export class MissionEngine {
       kind: 'workspace.stage_mutation',
       resourceKey: `workspace-stage:${stage.stageId}`,
       controlLevel: 'advisory',
+      scope: 'branch_local_workspace',
       status: 'intended',
       evidenceRefs: [],
       createdAt: this.#now().toISOString(),
     };
     const preparationEvents: EventV1[] = [
+      {
+        schemaVersion: DOMAIN_SCHEMA_VERSION,
+        eventId: `event-${this.#id()}`,
+        missionId,
+        attemptId,
+        occurredAt: binding.boundAt,
+        type: 'attempt.bound',
+        payload: { binding },
+      },
       {
         schemaVersion: DOMAIN_SCHEMA_VERSION,
         eventId: `event-${this.#id()}`,
@@ -572,6 +798,7 @@ export class MissionEngine {
             schemaVersion: DOMAIN_SCHEMA_VERSION,
             attemptId,
             missionId,
+            branchId,
             profileId: profile.profileId,
             stageId: stage.stageId,
             status: 'running',
@@ -591,10 +818,59 @@ export class MissionEngine {
     let acknowledgementBeforeMutation = capsule === undefined;
     let acknowledgementId: string | undefined;
     let runtimeFailure: RuntimeFailureObservation | undefined;
+    const runtimeEventIdByNativeIdentity = new Map<string, string>();
+    const reportedProfiles = new Set<string>();
     const onOutput = async (line: RuntimeOutputLine): Promise<void> => {
+      const artifact = await this.#artifacts.putLine(line.line);
+      const causalParentIds = nativeParentCorrelationIds(line.value).flatMap((parentId) => {
+        const runtimeEventId = runtimeEventIdByNativeIdentity.get(parentId);
+        return runtimeEventId === undefined ? [] : [runtimeEventId];
+      });
+      const runtimeEvent = normalizeRuntimeOutput(
+        line,
+        {
+          missionId,
+          branchId,
+          attemptId,
+          bindingId,
+          planNodeId: stage.stageId,
+          sourceProtocol: runtimeProtocol(stage.profile.harness),
+          ...(causalParentIds.length === 0 ? {} : { causalParentIds }),
+        },
+        artifact,
+      );
+      this.#append(
+        {
+          schemaVersion: DOMAIN_SCHEMA_VERSION,
+          eventId: runtimeEvent.runtimeEventId,
+          missionId,
+          attemptId,
+          occurredAt: runtimeEvent.observedAt,
+          type: 'runtime.event',
+          payload: { event: runtimeEvent },
+        },
+        fence,
+      );
+      for (const nativeIdentity of nativeEventIdentityIds(line.value)) {
+        runtimeEventIdByNativeIdentity.set(nativeIdentity, runtimeEvent.runtimeEventId);
+      }
       outputHash.update(`${line.stream}\0${line.line}\n`, 'utf8');
       outputLines += 1;
       runtimeFailure ??= classifyRuntimeOutputFailure(line);
+      const report = reportedEffectiveProfile(line.value, profile);
+      if (report !== undefined) {
+        const reportDigest = hashPayload(report);
+        if (!reportedProfiles.has(reportDigest)) {
+          reportedProfiles.add(reportDigest);
+          this.#observe(
+            missionId,
+            'runtime.effective_profile_reported',
+            { ...report, sourceRuntimeEventId: runtimeEvent.runtimeEventId },
+            fence,
+            attemptId,
+          );
+        }
+      }
       if (capsule === undefined || acknowledged) return;
       const candidate = extractAndValidateAcknowledgement(line, capsule);
       if (!candidate.ok) return;
@@ -616,7 +892,7 @@ export class MissionEngine {
       );
     };
     const prompt = createAttemptPrompt(spec, stage, mission.contract, projectedCapsuleText);
-    const runtimeResult = await this.#runRuntime(stage, {
+    const runtimeResult = await this.#runRuntime(stage, profile, {
       workspace: spec.workspace,
       prompt,
       ...(signal === undefined ? {} : { signal }),
@@ -656,6 +932,8 @@ export class MissionEngine {
       stageId: stage.stageId,
       harness: stage.profile.harness,
       profileId: profile.profileId,
+      branchId,
+      bindingId,
       status: checkpointStatus,
       delta,
       origin: 'runtime-completion',
@@ -823,6 +1101,7 @@ export class MissionEngine {
       receiptId: `receipt-${this.#id()}`,
       missionId,
       contractId: projection.contract.contractId,
+      ...(projection.rootBranchId === undefined ? {} : { rootBranchId: projection.rootBranchId }),
       outcome: verifiedOutcome ? 'verified' : 'rejected',
       verifications: spec.acceptanceCriteria.map((criterion, index) => {
         const result = results[index]!;
@@ -874,6 +1153,7 @@ export class MissionEngine {
 
   async #runRuntime(
     stage: AttemptStageSpecV1,
+    profile: ProfileV1,
     request: {
       readonly workspace: string;
       readonly prompt: string;
@@ -882,32 +1162,47 @@ export class MissionEngine {
       readonly onOutput: (line: RuntimeOutputLine) => Promise<void>;
     },
   ): Promise<RuntimeRunResult> {
-    const model = stage.profile.model === 'default' ? undefined : stage.profile.model;
+    const model = profile.model === 'default' ? undefined : profile.model;
     if (stage.profile.harness === 'codex') {
       return await this.#codex.run({
         ...request,
         ...(model === undefined ? {} : { model }),
-        ...(stage.profile.reasoningEffort === undefined
+        ...(profile.reasoningEffort === undefined
           ? {}
-          : { reasoningEffort: stage.profile.reasoningEffort }),
-        sandbox: codexSandbox(stage.profile.permissionMode),
+          : { reasoningEffort: profile.reasoningEffort }),
+        sandbox: codexSandbox(profile.permissionMode),
         ephemeral: true,
       });
     }
-    return await this.#qoder.run({
+    if (stage.profile.harness === 'qoder') {
+      return await this.#qoder.run({
+        ...request,
+        ...(model === undefined ? {} : { model }),
+        ...(profile.reasoningEffort === undefined
+          ? {}
+          : { reasoningEffort: profile.reasoningEffort }),
+        permissionMode: qoderPermission(profile.permissionMode),
+        maxTurns: 80,
+        noSessionPersistence: true,
+      });
+    }
+    return await this.#claude.run({
       ...request,
       ...(model === undefined ? {} : { model }),
-      ...(stage.profile.reasoningEffort === undefined
+      ...(profile.reasoningEffort === undefined
         ? {}
-        : { reasoningEffort: stage.profile.reasoningEffort }),
-      permissionMode: qoderPermission(stage.profile.permissionMode),
+        : { reasoningEffort: profile.reasoningEffort }),
+      permissionMode: claudePermission(profile.permissionMode),
       maxTurns: 80,
       noSessionPersistence: true,
+      includeHookEvents: true,
     });
   }
 
-  async #detect(harness: 'codex' | 'qoder'): Promise<RuntimeDetection> {
-    return harness === 'codex' ? await this.#codex.detect() : await this.#qoder.detect();
+  async #detect(harness: SupportedHarnessV1): Promise<RuntimeDetection> {
+    if (harness === 'codex') return await this.#codex.detect();
+    if (harness === 'qoder') return await this.#qoder.detect();
+    return await this.#claude.detect();
   }
 
   async #closeDanglingAttempts(
@@ -974,6 +1269,8 @@ export class MissionEngine {
           stageId: plan.stageId,
           harness: plan.harness,
           profileId: plan.profileId,
+          branchId: plan.branchId,
+          bindingId: plan.bindingId,
           status:
             delta.changedPaths.length > 0 && stage.onFailure === 'handoff'
               ? 'handed_off'
@@ -1043,6 +1340,9 @@ export class MissionEngine {
       stageId: checkpoint.stageId,
       harness: checkpoint.harness,
       attemptId: checkpoint.attemptId,
+      branchId: checkpoint.branchId,
+      bindingId: checkpoint.bindingId,
+      profileId: checkpoint.profileId,
       status: checkpoint.status,
       origin: checkpoint.origin ?? 'runtime-completion',
       beforeWorkspaceDigest: checkpoint.delta.beforeWorkspaceDigest,
@@ -1056,6 +1356,7 @@ export class MissionEngine {
     const manifest: ProvenanceManifestV1 = {
       schemaVersion: PROVENANCE_SCHEMA_VERSION,
       missionId,
+      rootBranchId: requireRootBranch(this.#requireMission(missionId)),
       stages,
     };
     await writeProvenanceManifest(this.#provenanceFile(missionId), manifest);
@@ -1232,6 +1533,7 @@ function timelineEntry(
         data: {
           title: event.payload.mission.title,
           contractId: event.payload.contract.contractId,
+          profile: event.payload.profile as unknown as JsonValue,
         },
       };
     case 'mission.status_changed':
@@ -1245,6 +1547,35 @@ function timelineEntry(
           ...(event.payload.reason === undefined ? {} : { reason: event.payload.reason }),
         },
       };
+    case 'branch.created':
+      return {
+        ...base,
+        category: 'mission',
+        kind: event.type,
+        label: 'Root Branch created',
+        data: {
+          branchId: event.payload.branch.branchId,
+          parentBranchId: event.payload.branch.parentBranchId ?? null,
+        },
+      };
+    case 'runtime.catalog_observed':
+      return {
+        ...base,
+        category: 'profile',
+        kind: event.type,
+        label: `${event.payload.observation.harness} Runtime observed`,
+        harness: event.payload.observation.harness,
+        data: event.payload.observation as unknown as JsonValue,
+      };
+    case 'profile.definition_recorded':
+      return {
+        ...base,
+        category: 'profile',
+        kind: event.type,
+        label: `${event.payload.definition.harness} Profile Definition recorded`,
+        harness: event.payload.definition.harness,
+        data: event.payload.definition as unknown as JsonValue,
+      };
     case 'profile.selected':
       return {
         ...base,
@@ -1256,6 +1587,7 @@ function timelineEntry(
           profileId: event.payload.profile.profileId,
           model: event.payload.profile.model,
           reason: event.payload.reason,
+          profile: event.payload.profile as unknown as JsonValue,
         },
       };
     case 'attempt.started':
@@ -1269,6 +1601,14 @@ function timelineEntry(
           stageId: event.payload.attempt.stageId ?? null,
           profileId: event.payload.attempt.profileId,
         },
+      };
+    case 'attempt.bound':
+      return {
+        ...base,
+        category: 'attempt',
+        kind: event.type,
+        label: 'Attempt bound to Runtime Profile',
+        data: event.payload.binding as unknown as JsonValue,
       };
     case 'attempt.finished':
       return {
@@ -1317,6 +1657,31 @@ function timelineEntry(
           unresolvedItems: [...(event.payload.receipt.unresolvedItems ?? [])],
         },
       };
+    case 'runtime.event':
+      return {
+        ...base,
+        category: 'runtime',
+        kind: event.type,
+        label: `${event.payload.event.sourceHarness} · ${event.payload.event.semanticKind} · source #${String(event.payload.event.sourceSequence)}`,
+        harness: event.payload.event.sourceHarness,
+        data: event.payload.event as unknown as JsonValue,
+      };
+    case 'command.accepted':
+      return {
+        ...base,
+        category: 'mission',
+        kind: event.type,
+        label: `Command ${event.payload.command.action} accepted`,
+        data: event.payload.command as unknown as JsonValue,
+      };
+    case 'command.status_changed':
+      return {
+        ...base,
+        category: 'mission',
+        kind: event.type,
+        label: `Command ${event.payload.status}`,
+        data: event.payload as unknown as JsonValue,
+      };
     case 'runtime.observation': {
       if (event.payload.kind === 'mission.spec_snapshot' || event.payload.kind === 'attempt.plan') {
         return undefined;
@@ -1356,19 +1721,145 @@ function observationLabel(kind: string): string {
   return labels[kind] ?? kind;
 }
 
-function createProfile(stage: AttemptStageSpecV1, detection: RuntimeDetection): ProfileV1 {
+function profileDefinition(stage: AttemptStageSpecV1): RuntimeProfileDefinitionV1 {
   const configuration = {
     harness: stage.profile.harness,
-    model: stage.profile.model,
-    reasoningEffort: stage.profile.reasoningEffort ?? null,
-    permissionMode: stage.profile.permissionMode ?? null,
+    requestedModel: stage.profile.model,
+    requestedReasoningEffort: stage.profile.reasoningEffort ?? null,
+    permissionCeiling: stage.profile.permissionMode ?? null,
     injectionBudgetTokens: stage.profile.injectionBudgetTokens,
-    runtimeVersion: detection.version,
   };
-  const digest = hashPayload(configuration);
+  return {
+    definitionId: `profile-definition-${hashPayload(configuration).slice(0, 28)}`,
+    harness: stage.profile.harness,
+    requestedModel: stage.profile.model,
+    ...(stage.profile.reasoningEffort === undefined
+      ? {}
+      : { requestedReasoningEffort: stage.profile.reasoningEffort }),
+    ...(stage.profile.permissionMode === undefined
+      ? {}
+      : { permissionCeiling: stage.profile.permissionMode }),
+    injectionBudgetTokens: stage.profile.injectionBudgetTokens,
+  };
+}
+
+function uniqueProfileDefinitions(spec: MissionSpecV1): RuntimeProfileDefinitionV1[] {
+  const definitions = new Map<string, RuntimeProfileDefinitionV1>();
+  for (const stage of spec.attemptPlan) {
+    const definition = profileDefinition(stage);
+    definitions.set(definition.definitionId, definition);
+  }
+  return [...definitions.values()];
+}
+
+function createProfile(
+  stage: AttemptStageSpecV1,
+  detection: RuntimeDetection,
+  workspace: string,
+): ProfileV1 {
+  const definition = profileDefinition(stage);
+  const permissionMode = resolvedPermission(stage.profile.harness, stage.profile.permissionMode);
+  const catalogObservation: RuntimeCatalogObservationV1 = {
+    observationId: `catalog-${hashPayload({ ...detection, checkedAt: detection.checkedAt }).slice(0, 28)}`,
+    harness: stage.profile.harness,
+    executablePath: detection.executablePath,
+    availability:
+      detection.status === 'ready' ? 'ready' : detection.available ? 'unavailable' : 'missing',
+    version: detection.version,
+    authentication: {
+      status: 'unknown',
+      reason: 'A version probe does not prove authenticated model access',
+    },
+    quota: { status: 'unknown', reason: 'Harness did not expose quota during inventory' },
+    cost: { status: 'unknown', reason: 'Harness did not expose price during inventory' },
+    observedAt: detection.checkedAt,
+  };
+  const instructions = discoverFiles(workspace, [
+    'AGENTS.md',
+    'AGENTS.override.md',
+    'CLAUDE.md',
+    '.claude/CLAUDE.md',
+  ]);
+  const skillManifests = discoverSkillManifests(workspace, stage.profile.harness);
+  const mcpFiles = discoverPresence(workspace, ['.mcp.json', '.claude/mcp.json', 'opencode.json']);
+  const effective = {
+    model:
+      stage.profile.model === 'default'
+        ? ({
+            status: 'unknown',
+            reason: 'Harness resolves its configured default at launch',
+          } as const)
+        : ({ status: 'known', value: stage.profile.model, source: 'Profile Definition' } as const),
+    reasoningEffort:
+      stage.profile.reasoningEffort === undefined
+        ? ({ status: 'unknown', reason: 'Harness default reasoning was requested' } as const)
+        : ({
+            status: 'known',
+            value: stage.profile.reasoningEffort,
+            source: 'Profile Definition',
+          } as const),
+    instructions:
+      instructions.length === 0
+        ? ({
+            status: 'unknown',
+            reason: 'No project instruction file was discovered before launch',
+          } as const)
+        : ({
+            status: 'partial',
+            value: instructions,
+            source: 'workspace instruction discovery',
+            reason:
+              'Discovered files are evidence, but the Harness may merge user or nested instructions',
+          } as const),
+    skills:
+      skillManifests.length === 0
+        ? ({
+            status: 'unknown',
+            reason: 'No configured Skill directory was exposed before launch',
+          } as const)
+        : ({
+            status: 'partial',
+            value: skillManifests,
+            source: 'non-secret Skill directory discovery',
+            reason: 'Discovery does not prove which Skills the Harness activates for this turn',
+          } as const),
+    mcpServers:
+      mcpFiles.length === 0
+        ? ({ status: 'unknown', reason: 'No project MCP manifest was discovered' } as const)
+        : ({
+            status: 'partial',
+            value: mcpFiles,
+            source: 'workspace MCP manifest presence',
+            reason: 'Manifest presence does not prove connection or expose secret configuration',
+          } as const),
+    tools: {
+      status: 'unknown',
+      reason: 'Native init events may expose tools after launch; the snapshot does not guess',
+    } as const,
+    permissions: { status: 'known', value: permissionMode, source: 'resolved invocation' } as const,
+    contextWindowTokens: {
+      status: 'unknown',
+      reason: 'Harness did not expose an effective context limit before launch',
+    } as const,
+    session: { status: 'unknown', reason: 'Native session is created at dispatch time' } as const,
+    availability: {
+      status: 'known',
+      value: catalogObservation.availability,
+      source: catalogObservation.observationId,
+    } as const,
+    quota: catalogObservation.quota,
+    cost: catalogObservation.cost,
+  };
+  const snapshotConfiguration = {
+    definition,
+    catalogObservation,
+    effective,
+    adapterCapabilities: adapterCapabilities(stage.profile.harness),
+  };
+  const digest = hashPayload(snapshotConfiguration);
   return {
     schemaVersion: DOMAIN_SCHEMA_VERSION,
-    profileId: `profile-${digest.slice(0, 28)}`,
+    profileId: `profile-snapshot-${digest.slice(0, 28)}`,
     harness: stage.profile.harness,
     model: stage.profile.model,
     ...(stage.profile.reasoningEffort === undefined
@@ -1376,12 +1867,108 @@ function createProfile(stage: AttemptStageSpecV1, detection: RuntimeDetection): 
       : { reasoningEffort: stage.profile.reasoningEffort }),
     ...(detection.version === null ? {} : { runtimeVersion: detection.version }),
     injectionBudgetTokens: stage.profile.injectionBudgetTokens,
-    ...(stage.profile.permissionMode === undefined
-      ? {}
-      : { permissionMode: stage.profile.permissionMode }),
-    capabilities: ['workspace-read', 'workspace-write', 'command-execution'],
+    permissionMode,
+    capabilities: resolvedProfileCapabilities(stage.profile.harness, permissionMode),
     configurationDigest: digest,
+    definition,
+    catalogObservation,
+    effective,
+    adapterCapabilities: adapterCapabilities(stage.profile.harness),
+    resolvedAt: detection.checkedAt,
   };
+}
+
+function discoverFiles(workspace: string, candidates: readonly string[]): JsonValue[] {
+  const discovered: JsonValue[] = [];
+  for (const candidate of candidates) {
+    const file = resolve(workspace, candidate);
+    if (!existsSync(file)) continue;
+    try {
+      const content = readFileSync(file);
+      discovered.push({
+        path: candidate,
+        sha256: createHash('sha256').update(content).digest('hex'),
+        byteLength: content.byteLength,
+      });
+    } catch {
+      discovered.push({ path: candidate, status: 'unreadable' });
+    }
+  }
+  return discovered;
+}
+
+function discoverPresence(workspace: string, candidates: readonly string[]): JsonValue[] {
+  return candidates
+    .filter((candidate) => existsSync(resolve(workspace, candidate)))
+    .map((candidate) => ({ path: candidate, present: true }));
+}
+
+function discoverSkillManifests(workspace: string, harness: SupportedHarnessV1): JsonValue[] {
+  const projectCandidates = ['.agents/skills', '.codex/skills', '.claude/skills'];
+  const userCandidates = [
+    resolve(homedir(), '.agents/skills'),
+    ...(harness === 'codex' ? [resolve(homedir(), '.codex/skills')] : []),
+    ...(harness === 'claude' ? [resolve(homedir(), '.claude/skills')] : []),
+    ...(harness === 'qoder' ? [resolve(homedir(), '.qoder/skills')] : []),
+  ];
+  const directories = [
+    ...projectCandidates.map((path) => ({
+      scope: 'project',
+      path,
+      absolute: resolve(workspace, path),
+    })),
+    ...userCandidates.map((absolute) => ({ scope: 'user', path: absolute, absolute })),
+  ];
+  return directories.flatMap((directory) => {
+    try {
+      const names = readdirSync(directory.absolute, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory() || entry.name.endsWith('.md'))
+        .map((entry) => entry.name)
+        .sort();
+      return names.length === 0
+        ? []
+        : [{ scope: directory.scope, path: directory.path, names } as JsonValue];
+    } catch {
+      return [];
+    }
+  });
+}
+
+function adapterCapabilities(harness: SupportedHarnessV1): AdapterCapabilitiesV1 {
+  void harness;
+  return {
+    observe: 'native',
+    contextCapture: 'unknown',
+    steer: 'unsupported',
+    interrupt: 'process-only',
+    preToolGate: 'unsupported',
+    resume: 'unsupported',
+    nativeFork: 'unsupported',
+    workspaceRestore: 'unsupported',
+    externalEffectControl: 'unknown',
+  };
+}
+
+function resolvedProfileCapabilities(
+  harness: SupportedHarnessV1,
+  permissionMode: string,
+): string[] {
+  const capabilities = ['workspace-read', 'command-execution'];
+  const workspaceWrite =
+    (harness === 'codex' &&
+      (permissionMode === 'workspace-write' || permissionMode === 'danger-full-access')) ||
+    (harness === 'qoder' &&
+      ['auto', 'bypass_permissions', 'accept_edits'].includes(permissionMode)) ||
+    (harness === 'claude' && ['acceptEdits', 'auto', 'bypassPermissions'].includes(permissionMode));
+  if (workspaceWrite) capabilities.push('workspace-write');
+  return capabilities;
+}
+
+function requireCatalogObservation(profile: ProfileV1): RuntimeCatalogObservationV1 {
+  if (profile.catalogObservation === undefined) {
+    throw new MissionExecutionError(`Profile ${profile.profileId} has no Catalog Observation`);
+  }
+  return profile.catalogObservation;
 }
 
 function createAttemptPrompt(
@@ -1523,8 +2110,10 @@ function reconstructExecutionState(events: readonly StoredEventV1[]): ExecutionS
       if (
         typeof data.attemptId === 'string' &&
         typeof data.stageId === 'string' &&
-        (data.harness === 'codex' || data.harness === 'qoder') &&
-        typeof data.profileId === 'string'
+        (data.harness === 'codex' || data.harness === 'qoder' || data.harness === 'claude') &&
+        typeof data.profileId === 'string' &&
+        ((typeof data.branchId === 'string' && typeof data.bindingId === 'string') ||
+          (data.branchId === undefined && data.bindingId === undefined))
       ) {
         plans.set(data.attemptId, data as unknown as AttemptPlanRecord);
       }
@@ -1620,6 +2209,12 @@ function codexSandbox(value: string | undefined): CodexSandbox {
   throw new MissionExecutionError(`Unsupported Codex permission mode ${value}`);
 }
 
+function resolvedPermission(harness: SupportedHarnessV1, value: string | undefined): string {
+  if (harness === 'codex') return codexSandbox(value);
+  if (harness === 'qoder') return qoderPermission(value);
+  return claudePermission(value);
+}
+
 function qoderPermission(value: string | undefined): QoderPermissionMode {
   if (value === undefined) return 'dont_ask';
   if (
@@ -1633,6 +2228,156 @@ function qoderPermission(value: string | undefined): QoderPermissionMode {
     return value;
   }
   throw new MissionExecutionError(`Unsupported Qoder permission mode ${value}`);
+}
+
+function claudePermission(value: string | undefined): ClaudePermissionMode {
+  if (value === undefined || value === 'default') return 'dontAsk';
+  if (
+    value === 'acceptEdits' ||
+    value === 'auto' ||
+    value === 'bypassPermissions' ||
+    value === 'manual' ||
+    value === 'dontAsk' ||
+    value === 'plan'
+  ) {
+    return value;
+  }
+  throw new MissionExecutionError(`Unsupported Claude permission mode ${value}`);
+}
+
+function runtimeProtocol(harness: SupportedHarnessV1): RuntimeRunResult['outputProtocol'] {
+  if (harness === 'codex') return 'codex-jsonl';
+  if (harness === 'qoder') return 'qoder-stream-json';
+  return 'claude-stream-json';
+}
+
+function requireRootBranch(mission: MissionProjectionV1): string {
+  if (mission.rootBranchId === undefined) {
+    throw new MissionExecutionError(
+      `Mission ${mission.missionId} predates Branch identity and cannot execute as Iteration 2`,
+    );
+  }
+  return mission.rootBranchId;
+}
+
+function reportedEffectiveProfile(
+  value: unknown,
+  profile: ProfileV1,
+): Record<string, JsonValue> | undefined {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  const message =
+    record.message !== null && typeof record.message === 'object' && !Array.isArray(record.message)
+      ? (record.message as Record<string, unknown>)
+      : undefined;
+  const observedModel = firstString(record.model, message?.model);
+  const permissionMode = firstString(record.permissionMode, record.permission_mode);
+  const sessionId = firstString(record.session_id, record.sessionId);
+  const tools = namedRuntimeMembers(record.tools);
+  const skills = namedRuntimeMembers(record.skills);
+  const slashCommands = namedRuntimeMembers(record.slash_commands, record.slashCommands);
+  const mcpServers = namedRuntimeMembers(record.mcp_servers, record.mcpServers);
+  const runtimeVersion = firstString(
+    record.claude_code_version,
+    record.runtime_version,
+    record.runtimeVersion,
+  );
+  const contextWindowTokens = reportedContextWindow(record, observedModel);
+  const costUsd = typeof record.total_cost_usd === 'number' ? record.total_cost_usd : undefined;
+  if (
+    observedModel === undefined &&
+    permissionMode === undefined &&
+    sessionId === undefined &&
+    tools === undefined &&
+    skills === undefined &&
+    slashCommands === undefined &&
+    mcpServers === undefined &&
+    runtimeVersion === undefined &&
+    contextWindowTokens === undefined &&
+    costUsd === undefined
+  ) {
+    return undefined;
+  }
+  return {
+    requestedModel: profile.model,
+    observedModel: observedModel ?? null,
+    modelOverride:
+      observedModel === undefined || profile.model === 'default'
+        ? false
+        : observedModel !== profile.model,
+    permissionMode: permissionMode ?? null,
+    sessionId: sessionId ?? null,
+    tools: tools ?? null,
+    skills: skills ?? null,
+    slashCommands: slashCommands ?? null,
+    mcpServers: mcpServers ?? null,
+    runtimeVersion: runtimeVersion ?? null,
+    contextWindowTokens: contextWindowTokens ?? null,
+    costUsd: costUsd ?? null,
+  };
+}
+
+function namedRuntimeMembers(...values: readonly unknown[]): string[] | undefined {
+  for (const value of values) {
+    if (!Array.isArray(value)) continue;
+    const names = value.flatMap((member) => {
+      if (typeof member === 'string' && member.length > 0) return [member];
+      if (member === null || typeof member !== 'object' || Array.isArray(member)) return [];
+      const record = member as Record<string, unknown>;
+      const name = firstString(record.name, record.id, record.command);
+      const status = firstString(record.status, record.state);
+      return name === undefined ? [] : [status === undefined ? name : `${name} (${status})`];
+    });
+    return [...new Set(names)].sort();
+  }
+  return undefined;
+}
+
+function reportedContextWindow(
+  record: Record<string, unknown>,
+  observedModel: string | undefined,
+): number | undefined {
+  const direct = firstFiniteNumber(
+    record.context_window,
+    record.contextWindow,
+    record.context_window_tokens,
+    record.contextWindowTokens,
+  );
+  if (direct !== undefined) return direct;
+  if (
+    record.modelUsage === null ||
+    typeof record.modelUsage !== 'object' ||
+    Array.isArray(record.modelUsage)
+  ) {
+    return undefined;
+  }
+  const usages = record.modelUsage as Record<string, unknown>;
+  const candidates = [
+    ...(observedModel === undefined ? [] : [usages[observedModel]]),
+    ...Object.values(usages),
+  ];
+  for (const candidate of candidates) {
+    if (candidate === null || typeof candidate !== 'object' || Array.isArray(candidate)) continue;
+    const usage = candidate as Record<string, unknown>;
+    const contextWindow = firstFiniteNumber(
+      usage.contextWindow,
+      usage.context_window,
+      usage.contextWindowTokens,
+      usage.context_window_tokens,
+    );
+    if (contextWindow !== undefined) return contextWindow;
+  }
+  return undefined;
+}
+
+function firstFiniteNumber(...values: readonly unknown[]): number | undefined {
+  return values.find(
+    (value): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0,
+  );
+}
+
+function firstString(...values: readonly unknown[]): string | undefined {
+  return values.find((value): value is string => typeof value === 'string' && value.length > 0);
 }
 
 function processExists(pid: number): boolean {

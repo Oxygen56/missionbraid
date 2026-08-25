@@ -23,6 +23,20 @@ It does **not** prove automatic routing, arbitrary Harness compatibility,
 third-party reproduction, hostile-Runtime isolation, production readiness, or
 adoption.
 
+## Iteration 2 proof pending
+
+Iteration 2 is implemented in source, including Codex/Qoder/Claude Code
+execution Adapters, the root Branch, the four-part Runtime Profile model,
+source-scoped Event IR with sanitized native artifacts, durable command/outbox
+recovery, and the bilingual Workbench.
+
+No Iteration 2 evidence record is linked yet. A same-host record will be added
+only after one Mission runs through the normal Workbench with real Codex,
+Qoder, and Claude Code Attempts; preserves source sequence, Mission ingest
+sequence, causal parents, and native artifact references; reaches a Receipt;
+and restores the same result after application restart. Until then, the
+accurate evidence level is **implemented, real proof pending**.
+
 ## Evidence catalog
 
 | Record                                                                                          | Evidence level                                    | What it establishes                                                                                                      | What it does not establish                                                             |
@@ -60,5 +74,7 @@ successful path as inevitable.
 All current records are local and same-host. Clean-clone runs isolate repository
 revision, Mission state, and target workspace, but may reuse authenticated
 Runtime installations, user-level instructions, Skills, MCP configuration, and
-other host state. The next evidence upgrade is a third-party or cross-host
-reproduction under a documented Runtime Profile boundary.
+other host state. The next product-shaped record is the pending Iteration 2
+same-host run described above. The next evidence-level upgrade remains a
+third-party or cross-host reproduction under a documented Runtime Profile
+boundary.

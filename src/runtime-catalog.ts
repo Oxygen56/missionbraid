@@ -1,9 +1,10 @@
 import { access } from 'node:fs/promises';
 
-import { CodexAdapter } from './adapters/codex.js';
+import { CLAUDE_ADAPTER_CAPABILITIES, ClaudeAdapter } from './adapters/claude.js';
+import { CODEX_ADAPTER_CAPABILITIES, CodexAdapter } from './adapters/codex.js';
 import { resolveExecutable, runProcess } from './adapters/process-runner.js';
-import { QoderAdapter } from './adapters/qoder.js';
-import type { RuntimeDetection } from './adapters/types.js';
+import { QODER_ADAPTER_CAPABILITIES, QoderAdapter } from './adapters/qoder.js';
+import type { RuntimeAdapterCapabilities, RuntimeDetection } from './adapters/types.js';
 
 const DEFAULT_PROBE_TIMEOUT_MS = 2_000;
 const SUPPORTED_RUNTIME_PROBE_TIMEOUT_MS = 5_000;
@@ -35,6 +36,8 @@ export interface RuntimeCatalogEntry {
   readonly version: string | null;
   readonly reason: string;
   readonly capabilities: readonly string[];
+  /** Structured adapter claims. Omitted for discovered runtimes with no adapter. */
+  readonly capabilityDeclarations?: RuntimeAdapterCapabilities;
   readonly checkedAt: string;
 }
 
@@ -57,6 +60,7 @@ export interface CommandVersionProbeOptions {
 export interface RuntimeCatalogOptions {
   readonly codexAdapter?: Pick<CodexAdapter, 'detect'>;
   readonly qoderAdapter?: Pick<QoderAdapter, 'detect'>;
+  readonly claudeAdapter?: Pick<ClaudeAdapter, 'detect'>;
   readonly commandProbe?: CommandProbe;
   readonly pathExists?: (path: string) => Promise<boolean>;
   readonly deepSeekWrapperPaths?: readonly string[];
@@ -64,26 +68,13 @@ export interface RuntimeCatalogOptions {
 }
 
 interface UnsupportedRuntimeDefinition {
-  readonly id: Extract<RuntimeCatalogId, 'claude' | 'opencode' | 'hermes'>;
+  readonly id: Extract<RuntimeCatalogId, 'opencode' | 'hermes'>;
   readonly displayName: string;
   readonly command: string;
   readonly capabilities: readonly string[];
 }
 
 const UNSUPPORTED_RUNTIME_DEFINITIONS: readonly UnsupportedRuntimeDefinition[] = [
-  {
-    id: 'claude',
-    displayName: 'Claude Code',
-    command: 'claude',
-    capabilities: [
-      'non-interactive',
-      'stream-json-events',
-      'model-selection',
-      'reasoning-effort',
-      'session-resume',
-      'session-fork',
-    ],
-  },
   {
     id: 'opencode',
     displayName: 'OpenCode',
@@ -114,6 +105,15 @@ const SUPPORTED_CAPABILITIES = {
     'workspace',
     'model-selection',
     'reasoning-effort',
+  ],
+  claude: [
+    'non-interactive',
+    'stream-json-events',
+    'hook-events',
+    'workspace',
+    'model-selection',
+    'reasoning-effort',
+    'controller-interrupt',
   ],
 } as const;
 
@@ -203,10 +203,14 @@ export async function discoverRuntimeCatalog(
   const qoderAdapter =
     options.qoderAdapter ??
     new QoderAdapter({ probeTimeoutMs: SUPPORTED_RUNTIME_PROBE_TIMEOUT_MS });
+  const claudeAdapter =
+    options.claudeAdapter ??
+    new ClaudeAdapter({ probeTimeoutMs: SUPPORTED_RUNTIME_PROBE_TIMEOUT_MS });
 
-  const [codex, qoder, unsupported, dsh] = await Promise.all([
+  const [codex, qoder, claude, unsupported, dsh] = await Promise.all([
     codexAdapter.detect(),
     qoderAdapter.detect(),
+    claudeAdapter.detect(),
     Promise.all(
       UNSUPPORTED_RUNTIME_DEFINITIONS.map(async (definition) => ({
         definition,
@@ -220,19 +224,42 @@ export async function discoverRuntimeCatalog(
     dsh.path === null ? await firstExistingPath(wrapperPaths, pathExists) : null;
 
   return [
-    supportedEntry('codex', 'Codex', codex, SUPPORTED_CAPABILITIES.codex, checkedAt),
-    supportedEntry('qoder', 'Qoder', qoder, SUPPORTED_CAPABILITIES.qoder, checkedAt),
+    supportedEntry(
+      'codex',
+      'Codex',
+      codex,
+      SUPPORTED_CAPABILITIES.codex,
+      checkedAt,
+      CODEX_ADAPTER_CAPABILITIES,
+    ),
+    supportedEntry(
+      'qoder',
+      'Qoder',
+      qoder,
+      SUPPORTED_CAPABILITIES.qoder,
+      checkedAt,
+      QODER_ADAPTER_CAPABILITIES,
+    ),
+    supportedEntry(
+      'claude',
+      'Claude Code',
+      claude,
+      SUPPORTED_CAPABILITIES.claude,
+      checkedAt,
+      CLAUDE_ADAPTER_CAPABILITIES,
+    ),
     ...unsupported.map(({ definition, probe }) => unsupportedEntry(definition, probe, checkedAt)),
     deepSeekEntry(dsh, deepSeekWrapperPath, checkedAt),
   ];
 }
 
 function supportedEntry(
-  id: Extract<RuntimeCatalogId, 'codex' | 'qoder'>,
+  id: Extract<RuntimeCatalogId, 'codex' | 'qoder' | 'claude'>,
   displayName: string,
   detection: RuntimeDetection,
   capabilities: readonly string[],
   checkedAt: string,
+  capabilityDeclarations?: RuntimeAdapterCapabilities,
 ): RuntimeCatalogEntry {
   const ready = detection.status === 'ready' && detection.responsive;
   const missing = detection.status === 'missing' || detection.executablePath === null;
@@ -249,6 +276,7 @@ function supportedEntry(
         ? 'Supported adapter command was not found.'
         : `Supported adapter is installed but its version probe reported ${detection.status}.`,
     capabilities,
+    ...(capabilityDeclarations === undefined ? {} : { capabilityDeclarations }),
     checkedAt,
   };
 }

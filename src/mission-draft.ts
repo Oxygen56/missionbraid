@@ -6,6 +6,7 @@ import {
   MISSION_SPEC_VERSION,
   type AttemptProfileSpecV1,
   type AttemptStageSpecV1,
+  type SupportedHarnessV1,
 } from './spec.js';
 
 const ROOT_FIELDS = new Set([
@@ -51,6 +52,15 @@ const QODER_PERMISSION_MODES = new Set([
   'accept_edits',
   'dont_ask',
 ]);
+const CLAUDE_PERMISSION_MODES = new Set([
+  'default',
+  'acceptEdits',
+  'auto',
+  'bypassPermissions',
+  'manual',
+  'dontAsk',
+  'plan',
+]);
 
 export interface MissionDraftVerifierInput {
   readonly executable: string;
@@ -60,7 +70,7 @@ export interface MissionDraftVerifierInput {
 
 export interface MissionDraftStageInput {
   readonly stageId: string;
-  readonly harness: 'codex' | 'qoder';
+  readonly harness: SupportedHarnessV1;
   readonly model: string;
   readonly reasoningEffort?: string;
   readonly permissionMode?: string;
@@ -128,8 +138,10 @@ export function createMissionDraft(input: unknown): MissionDraftOutput {
         );
   const verifier = parseVerifier(root.verifier, workspace);
   const stageRecords = requireArray(root.stages, 'input.stages');
-  if (stageRecords.length < 1 || stageRecords.length > 2) {
-    throw new MissionDraftError('input.stages must contain one or two ordered Runtime Profiles');
+  if (stageRecords.length < 1 || stageRecords.length > 3) {
+    throw new MissionDraftError(
+      'input.stages must contain between one and three ordered Runtime Profiles',
+    );
   }
   const parsedStages = stageRecords.map((stage, index) => parseStage(stage, index));
   assertUniqueStageIds(parsedStages);
@@ -249,8 +261,10 @@ function defaultStageInstruction(stages: readonly ParsedStage[], index: number):
     : `Continue the same Mission with ${displayHarness(current.profile.harness)} from the existing workspace and controller-provided Handoff Capsule, preserve accepted prior work, and leave the workspace ready for the declared verifier.`;
 }
 
-function displayHarness(harness: 'codex' | 'qoder'): string {
-  return harness === 'codex' ? 'Codex' : 'Qoder';
+function displayHarness(harness: SupportedHarnessV1): string {
+  if (harness === 'codex') return 'Codex';
+  if (harness === 'qoder') return 'Qoder';
+  return 'Claude Code';
 }
 
 function requireStrictRecord(
@@ -305,16 +319,21 @@ function requirePositiveInteger(value: unknown, path: string): number {
   return value;
 }
 
-function requireHarness(value: unknown, path: string): 'codex' | 'qoder' {
-  if (value !== 'codex' && value !== 'qoder') {
-    throw new MissionDraftError(`${path} must be codex or qoder`);
+function requireHarness(value: unknown, path: string): SupportedHarnessV1 {
+  if (value !== 'codex' && value !== 'qoder' && value !== 'claude') {
+    throw new MissionDraftError(`${path} must be codex, qoder, or claude`);
   }
   return value;
 }
 
-function requirePermissionMode(value: unknown, harness: 'codex' | 'qoder', path: string): string {
+function requirePermissionMode(value: unknown, harness: SupportedHarnessV1, path: string): string {
   const permissionMode = requireNonEmptyString(value, path);
-  const supported = harness === 'codex' ? CODEX_PERMISSION_MODES : QODER_PERMISSION_MODES;
+  const supported =
+    harness === 'codex'
+      ? CODEX_PERMISSION_MODES
+      : harness === 'qoder'
+        ? QODER_PERMISSION_MODES
+        : CLAUDE_PERMISSION_MODES;
   if (!supported.has(permissionMode)) {
     throw new MissionDraftError(`${path} is not supported by ${displayHarness(harness)}`);
   }

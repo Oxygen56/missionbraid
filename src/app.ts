@@ -5,6 +5,7 @@ import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 import { APP_CSS, APP_HTML, APP_JAVASCRIPT } from './app-page.js';
+import type { NativeArtifactContent } from './artifact-store.js';
 import {
   MissionEngine,
   type ExecuteMissionOptions,
@@ -13,9 +14,9 @@ import {
   type MissionStatusView,
   type MissionTimelineEntry,
 } from './engine.js';
-import { createMissionDraft } from './mission-draft.js';
+import { createMissionDraft, MissionDraftError } from './mission-draft.js';
 import { discoverRuntimeCatalog, type RuntimeCatalogEntry } from './runtime-catalog.js';
-import type { MissionProjectionV1 } from './domain.js';
+import type { MissionCommandActionV1, MissionCommandV1, MissionProjectionV1 } from './domain.js';
 import { snapshotGitWorkspace } from './workspace.js';
 
 const DEFAULT_HOST = '127.0.0.1';
@@ -35,6 +36,17 @@ export interface AppEngine {
     missionId: string,
     options?: Omit<ExecuteMissionOptions, 'workspace'>,
   ): Promise<MissionExecutionResult>;
+  acceptCommand(
+    missionId: string,
+    action: MissionCommandActionV1,
+    idempotencyKey?: string,
+  ): Promise<MissionCommandV1>;
+  claimNextCommand(ownerId: string): MissionCommandV1 | undefined;
+  renewCommandClaim(commandId: string, ownerId: string): MissionCommandV1;
+  executeCommand(commandId: string, signal?: AbortSignal): Promise<MissionExecutionResult>;
+  command(commandId: string): MissionCommandV1 | undefined;
+  commands(missionId?: string): MissionCommandV1[];
+  artifact(artifactId: string): Promise<NativeArtifactContent | undefined>;
   status(missionId: string): MissionStatusView;
   timeline(missionId: string): MissionTimelineEntry[];
   list(): MissionProjectionV1[];
@@ -60,9 +72,10 @@ export interface MissionBraidApp {
 }
 
 type OperationAction = 'run' | 'resume' | 'verify';
-type OperationPhase = 'running' | 'completed' | 'failed' | 'interrupted';
+type OperationPhase = 'queued' | 'running' | 'completed' | 'failed' | 'interrupted';
 
 interface OperationView {
+  readonly commandId?: string;
   readonly action: OperationAction;
   readonly phase: OperationPhase;
   readonly startedAt: string;
@@ -72,6 +85,7 @@ interface OperationView {
 }
 
 interface RunningOperation {
+  readonly commandId: string;
   view: OperationView;
   readonly controller: AbortController;
   promise: Promise<void>;
@@ -97,37 +111,58 @@ export async function startMissionBraidApp(
   const now = options.now ?? (() => new Date());
   const id = options.id ?? randomUUID;
   const operations = new Map<string, RunningOperation>();
+  const supervisorId = `supervisor-${id()}`;
   let closing = false;
+  let draining = false;
+  let supervisorTimer: NodeJS.Timeout | undefined;
 
-  const launchOperation = (missionId: string, action: OperationAction): OperationView => {
-    if (closing) throw new AppHttpError(503, 'MissionBraid app is stopping.');
-    const existing = operations.get(missionId);
-    if (existing?.view.phase === 'running') {
-      throw new AppHttpError(409, `Mission ${missionId} already has a running operation.`);
+  const launchCommand = (command: MissionCommandV1, action: OperationAction): OperationView => {
+    if (closing) {
+      return {
+        commandId: command.commandId,
+        action,
+        phase: 'queued',
+        startedAt: command.acceptedAt,
+      };
     }
     const controller = new AbortController();
     const operation: RunningOperation = {
+      commandId: command.commandId,
       controller,
       view: {
+        commandId: command.commandId,
         action,
         phase: 'running',
         startedAt: now().toISOString(),
       },
       promise: Promise.resolve(),
     };
-    operations.set(missionId, operation);
+    operations.set(command.missionId, operation);
     operation.promise = (async () => {
       const engine = engineFactory(stateDir);
+      const heartbeat = setInterval(() => {
+        if (closing) return;
+        const renewal = engineFactory(stateDir);
+        try {
+          renewal.renewCommandClaim(command.commandId, supervisorId);
+        } catch {
+          controller.abort();
+        } finally {
+          renewal.close();
+        }
+      }, 10_000);
+      heartbeat.unref();
       try {
-        const result =
-          action === 'verify'
-            ? await engine.verify(missionId, { signal: controller.signal })
-            : await engine.resume(missionId, { signal: controller.signal });
+        const result = await engine.executeCommand(command.commandId, controller.signal);
+        const durable = engine.command(command.commandId);
         operation.view = {
           ...operation.view,
-          phase: 'completed',
+          phase: durable?.status === 'pending' ? 'interrupted' : 'completed',
           endedAt: now().toISOString(),
           resultStatus: result.status,
+          ...(durable?.status === 'pending'
+            ? { error: 'The controller stopped; the durable command remains queued.' }
+            : {}),
         };
       } catch (error) {
         operation.view = {
@@ -137,10 +172,50 @@ export async function startMissionBraidApp(
           error: error instanceof Error ? error.message : String(error),
         };
       } finally {
+        clearInterval(heartbeat);
         engine.close();
+        if (!closing) void drainCommands();
       }
     })();
     return operation.view;
+  };
+
+  const queueView = (command: MissionCommandV1, action: OperationAction): OperationView => {
+    const operation: RunningOperation = {
+      commandId: command.commandId,
+      controller: new AbortController(),
+      view: {
+        commandId: command.commandId,
+        action,
+        phase: 'queued',
+        startedAt: command.acceptedAt,
+      },
+      promise: Promise.resolve(),
+    };
+    operations.set(command.missionId, operation);
+    return operation.view;
+  };
+
+  const drainCommands = async (): Promise<void> => {
+    if (closing || draining) return;
+    if ([...operations.values()].some((operation) => operation.view.phase === 'running')) return;
+    draining = true;
+    try {
+      const engine = engineFactory(stateDir);
+      let command: MissionCommandV1 | undefined;
+      try {
+        command = engine.claimNextCommand(supervisorId);
+      } finally {
+        engine.close();
+      }
+      if (command !== undefined && !closing) {
+        const existing = operations.get(command.missionId);
+        const action = existing?.view.action ?? (command.action === 'verify' ? 'verify' : 'resume');
+        launchCommand(command, action);
+      }
+    } finally {
+      draining = false;
+    }
   };
 
   const handler = async (request: IncomingMessage, response: ServerResponse): Promise<void> => {
@@ -181,7 +256,11 @@ export async function startMissionBraidApp(
         sendJson(response, 200, {
           missions: engine.list().map((mission) => ({
             ...mission,
-            operation: operationView(mission, operations.get(mission.missionId)),
+            operation: operationView(
+              mission,
+              operations.get(mission.missionId),
+              engine.commands(mission.missionId).at(-1),
+            ),
           })),
         });
       } finally {
@@ -189,9 +268,35 @@ export async function startMissionBraidApp(
       }
       return;
     }
+    const artifactId = matchArtifactId(url.pathname);
+    if (artifactId !== undefined && request.method === 'GET') {
+      const engine = engineFactory(stateDir);
+      try {
+        const artifact = await engine.artifact(artifactId);
+        if (artifact === undefined) {
+          throw new AppHttpError(404, 'ARTIFACT_NOT_FOUND', 'Native artifact not found.', {
+            artifactId,
+          });
+        }
+        sendJson(response, 200, artifact);
+      } finally {
+        engine.close();
+      }
+      return;
+    }
     if (request.method === 'POST' && url.pathname === '/api/v1/missions') {
-      if (closing) throw new AppHttpError(503, 'MissionBraid app is stopping.');
-      const draft = createMissionDraft(await readJson(request));
+      if (closing) throw new AppHttpError(503, 'APP_STOPPING', 'MissionBraid app is stopping.');
+      let draft: ReturnType<typeof createMissionDraft>;
+      try {
+        draft = createMissionDraft(await readJson(request));
+      } catch (error) {
+        if (error instanceof MissionDraftError) {
+          throw new AppHttpError(400, 'INVALID_MISSION_DRAFT', error.message, {
+            detail: error.message,
+          });
+        }
+        throw error;
+      }
       snapshotGitWorkspace(draft.document.workspace);
       const runtimes = await discoverRuntimes();
       for (const stage of draft.document.attemptPlan) {
@@ -199,7 +304,9 @@ export async function startMissionBraidApp(
         if (runtime?.status !== 'ready-supported') {
           throw new AppHttpError(
             409,
+            'RUNTIME_NOT_READY',
             `${stage.profile.harness} is not ready for Mission execution: ${runtime?.reason ?? 'not discovered'}`,
+            { runtime: stage.profile.harness, reason: runtime?.reason ?? 'not discovered' },
           );
         }
       }
@@ -212,21 +319,56 @@ export async function startMissionBraidApp(
       await writeFile(missionFile, draft.yaml, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
       const engine = engineFactory(stateDir);
       let created: MissionCreationResult;
+      let command: MissionCommandV1;
       try {
         created = await engine.create(missionFile);
+        if (closing) {
+          throw new AppHttpError(503, 'APP_STOPPING', 'MissionBraid app is stopping.');
+        }
+        command = await engine.acceptCommand(created.missionId, 'resume', `create:${missionFile}`);
       } finally {
         engine.close();
       }
-      const operation = launchOperation(created.missionId, 'run');
-      sendJson(response, 202, { ...created, operation });
+      const operation = queueView(command, 'run');
+      void drainCommands();
+      sendJson(response, 202, { ...created, commandId: command.commandId, operation });
       return;
     }
 
     const missionAction = matchMissionAction(url.pathname);
     if (missionAction !== undefined && request.method === 'POST') {
-      if (closing) throw new AppHttpError(503, 'MissionBraid app is stopping.');
-      const operation = launchOperation(missionAction.missionId, missionAction.action);
-      sendJson(response, 202, { missionId: missionAction.missionId, operation });
+      if (closing) throw new AppHttpError(503, 'APP_STOPPING', 'MissionBraid app is stopping.');
+      const engine = engineFactory(stateDir);
+      let command: MissionCommandV1;
+      try {
+        const active = engine
+          .commands(missionAction.missionId)
+          .find(
+            (candidate) => candidate.status === 'pending' || candidate.status === 'dispatching',
+          );
+        if (active !== undefined) {
+          throw new AppHttpError(
+            409,
+            'MISSION_ALREADY_RUNNING',
+            `Mission ${missionAction.missionId} already has an accepted command.`,
+            { missionId: missionAction.missionId, commandId: active.commandId },
+          );
+        }
+        command = await engine.acceptCommand(
+          missionAction.missionId,
+          missionAction.action,
+          `${missionAction.action}:${id()}`,
+        );
+      } finally {
+        engine.close();
+      }
+      const operation = queueView(command, missionAction.action);
+      void drainCommands();
+      sendJson(response, 202, {
+        missionId: missionAction.missionId,
+        commandId: command.commandId,
+        operation,
+      });
       return;
     }
     const missionId = matchMissionId(url.pathname);
@@ -237,14 +379,18 @@ export async function startMissionBraidApp(
         sendJson(response, 200, {
           ...status,
           timeline: engine.timeline(missionId),
-          operation: operationView(status.mission, operations.get(missionId)),
+          operation: operationView(
+            status.mission,
+            operations.get(missionId),
+            engine.commands(missionId).at(-1),
+          ),
         });
       } finally {
         engine.close();
       }
       return;
     }
-    throw new AppHttpError(404, 'Route not found.');
+    throw new AppHttpError(404, 'ROUTE_NOT_FOUND', 'Route not found.');
   };
 
   const server = createServer((request, response) => {
@@ -256,11 +402,18 @@ export async function startMissionBraidApp(
       const status = error instanceof AppHttpError ? error.status : 500;
       sendJson(response, status, {
         error: status === 500 ? 'InternalServerError' : 'RequestError',
+        code: error instanceof AppHttpError ? error.code : 'INTERNAL_SERVER_ERROR',
+        ...(error instanceof AppHttpError && error.params !== undefined
+          ? { params: error.params }
+          : {}),
         message: error instanceof Error ? error.message : String(error),
       });
     });
   });
   const actualPort = await listen(server, port, host);
+  supervisorTimer = setInterval(() => void drainCommands(), 1_000);
+  supervisorTimer.unref();
+  void drainCommands();
 
   return {
     host,
@@ -270,6 +423,7 @@ export async function startMissionBraidApp(
     close: async () => {
       if (closing) return;
       closing = true;
+      if (supervisorTimer !== undefined) clearInterval(supervisorTimer);
       for (const operation of operations.values()) {
         if (operation.view.phase === 'running') operation.controller.abort();
       }
@@ -282,8 +436,37 @@ export async function startMissionBraidApp(
 function operationView(
   mission: MissionProjectionV1,
   operation: RunningOperation | undefined,
+  command: MissionCommandV1 | undefined,
 ): OperationView | null {
   if (operation !== undefined) return operation.view;
+  if (command !== undefined) {
+    const action = command.action === 'verify' ? 'verify' : 'resume';
+    if (command.status === 'pending') {
+      return {
+        commandId: command.commandId,
+        action,
+        phase: 'queued',
+        startedAt: command.acceptedAt,
+      };
+    }
+    if (command.status === 'dispatching') {
+      return {
+        commandId: command.commandId,
+        action,
+        phase: 'interrupted',
+        startedAt: command.acceptedAt,
+        error: 'The durable command is waiting for its previous controller claim to expire.',
+      };
+    }
+    return {
+      commandId: command.commandId,
+      action,
+      phase: command.status === 'completed' ? 'completed' : 'failed',
+      startedAt: command.acceptedAt,
+      endedAt: command.updatedAt,
+      ...(command.lastError === undefined ? {} : { error: command.lastError }),
+    };
+  }
   if (mission.status !== 'running' && mission.status !== 'verifying') return null;
   return {
     action: 'resume',
@@ -295,17 +478,26 @@ function operationView(
 
 class AppHttpError extends Error {
   readonly status: number;
+  readonly code: string;
+  readonly params: Readonly<Record<string, string>> | undefined;
 
-  constructor(status: number, message: string) {
+  constructor(
+    status: number,
+    code: string,
+    message = code,
+    params?: Readonly<Record<string, string>>,
+  ) {
     super(message);
     this.status = status;
+    this.code = code;
+    this.params = params;
   }
 }
 
 async function readJson(request: IncomingMessage): Promise<unknown> {
   const contentType = request.headers['content-type'] ?? '';
   if (!contentType.toLowerCase().startsWith('application/json')) {
-    throw new AppHttpError(415, 'Content-Type must be application/json.');
+    throw new AppHttpError(415, 'INVALID_CONTENT_TYPE', 'Content-Type must be application/json.');
   }
   const chunks: Buffer[] = [];
   let total = 0;
@@ -313,20 +505,25 @@ async function readJson(request: IncomingMessage): Promise<unknown> {
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     total += buffer.byteLength;
     if (total > MAX_REQUEST_BYTES) {
-      throw new AppHttpError(413, 'Request body is too large.');
+      throw new AppHttpError(413, 'REQUEST_TOO_LARGE', 'Request body is too large.');
     }
     chunks.push(buffer);
   }
   try {
     return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
   } catch {
-    throw new AppHttpError(400, 'Request body must be valid JSON.');
+    throw new AppHttpError(400, 'INVALID_JSON', 'Request body must be valid JSON.');
   }
 }
 
 function matchMissionId(pathname: string): string | undefined {
   const match = pathname.match(/^\/api\/v1\/missions\/([^/]+)$/);
   return match?.[1] === undefined ? undefined : decodeURIComponent(match[1]);
+}
+
+function matchArtifactId(pathname: string): string | undefined {
+  const match = pathname.match(/^\/api\/v1\/artifacts\/(artifact-[a-f0-9]{64})$/);
+  return match?.[1];
 }
 
 function matchMissionAction(

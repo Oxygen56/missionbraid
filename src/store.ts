@@ -10,6 +10,9 @@ import {
   type EffectV1,
   type EventV1,
   type MissionProjectionV1,
+  type MissionCommandActionV1,
+  type MissionCommandStatusV1,
+  type MissionCommandV1,
   type MissionStatusV1,
   type ProfileV1,
   type ReceiptV1,
@@ -19,7 +22,7 @@ import {
   type WorkspaceLeaseV1,
 } from './domain.js';
 
-const STORE_SCHEMA_VERSION = 1;
+const STORE_SCHEMA_VERSION = 2;
 const DEFAULT_LEASE_TTL_MS = 30_000;
 
 type SqlRow = Record<string, unknown>;
@@ -27,6 +30,7 @@ type SqlRow = Record<string, unknown>;
 interface MissionRow extends SqlRow {
   mission_id: string;
   workspace_key: string;
+  root_branch_id: string | null;
   title: string;
   status: MissionStatusV1;
   contract_json: string;
@@ -36,6 +40,22 @@ interface MissionRow extends SqlRow {
   head_hash: string;
   created_at: string;
   updated_at: string;
+}
+
+interface CommandRow extends SqlRow {
+  command_id: string;
+  mission_id: string;
+  branch_id: string;
+  action: MissionCommandActionV1;
+  idempotency_key: string;
+  expected_head_hash: string;
+  status: MissionCommandStatusV1;
+  claim_owner: string | null;
+  claim_until_ms: number | null;
+  dispatch_count: number;
+  accepted_at: string;
+  updated_at: string;
+  last_error: string | null;
 }
 
 interface EventRow extends SqlRow {
@@ -79,6 +99,20 @@ export interface MissionStoreOptions {
 
 export interface AcquireLeaseOptions {
   readonly ttlMs?: number;
+}
+
+export interface AcceptMissionCommandInput {
+  readonly commandId: string;
+  readonly eventId: string;
+  readonly missionId: string;
+  readonly action: MissionCommandActionV1;
+  readonly idempotencyKey: string;
+  readonly expectedHeadHash: Sha256;
+  readonly occurredAt: string;
+}
+
+export interface ClaimMissionCommandOptions {
+  readonly claimTtlMs?: number;
 }
 
 /**
@@ -368,7 +402,7 @@ export class MissionStore {
   getMission(missionId: string): MissionProjectionV1 | undefined {
     const row = this.#database
       .prepare(
-        `SELECT mission_id, workspace_key, title, status, contract_json, profile_json,
+        `SELECT mission_id, workspace_key, root_branch_id, title, status, contract_json, profile_json,
                 receipt_json, last_seq, head_hash, created_at, updated_at
            FROM missions
           WHERE mission_id = ?`,
@@ -380,7 +414,7 @@ export class MissionStore {
   listMissions(): MissionProjectionV1[] {
     const rows = this.#database
       .prepare(
-        `SELECT mission_id, workspace_key, title, status, contract_json, profile_json,
+        `SELECT mission_id, workspace_key, root_branch_id, title, status, contract_json, profile_json,
                 receipt_json, last_seq, head_hash, created_at, updated_at
            FROM missions
           ORDER BY created_at ASC, mission_id ASC`,
@@ -404,6 +438,348 @@ export class MissionStore {
       )
       .all(missionId) as unknown as EventRow[];
     return rows.map(eventFromRow);
+  }
+
+  /** Commit the authoritative command intent and its dispatch row together. */
+  acceptCommand(input: AcceptMissionCommandInput, fence: WorkspaceFenceV1): MissionCommandV1 {
+    assertIdentifier('commandId', input.commandId);
+    assertIdentifier('idempotencyKey', input.idempotencyKey);
+    const now = this.#now();
+    return this.#transaction(() => {
+      this.#assertFence(fence, now.getTime());
+      const mission = this.getMission(input.missionId);
+      if (mission === undefined) {
+        throw new MissionInvariantError(`Mission ${input.missionId} does not exist`);
+      }
+      if (mission.workspaceKey !== fence.workspaceKey) {
+        throw new MissionInvariantError('Command fence does not own the Mission workspace');
+      }
+      if (mission.rootBranchId === undefined) {
+        throw new MissionInvariantError(
+          'Legacy Mission has no Branch identity and cannot queue commands',
+        );
+      }
+      const existing = this.#database
+        .prepare(
+          `SELECT command_id, mission_id, branch_id, action, idempotency_key,
+                  expected_head_hash, status, claim_owner, claim_until_ms, dispatch_count,
+                  accepted_at, updated_at, last_error
+             FROM mission_commands
+            WHERE mission_id = ? AND idempotency_key = ?`,
+        )
+        .get(input.missionId, input.idempotencyKey) as CommandRow | undefined;
+      if (existing !== undefined) {
+        const command = commandFromRow(existing);
+        if (
+          command.commandId !== input.commandId ||
+          command.action !== input.action ||
+          command.expectedHeadHash !== input.expectedHeadHash
+        ) {
+          throw new EventIdentityConflictError(
+            `Command idempotency key ${input.idempotencyKey} was reused for different intent`,
+          );
+        }
+        return command;
+      }
+      if (mission.headHash !== input.expectedHeadHash) {
+        throw new MissionInvariantError('Command expectedHeadHash is stale');
+      }
+
+      const acceptedAt = input.occurredAt;
+      const command: MissionCommandV1 = {
+        commandId: input.commandId,
+        missionId: input.missionId,
+        branchId: mission.rootBranchId,
+        action: input.action,
+        idempotencyKey: input.idempotencyKey,
+        expectedHeadHash: input.expectedHeadHash,
+        status: 'pending',
+        acceptedAt,
+        updatedAt: acceptedAt,
+        dispatchCount: 0,
+      };
+      const event: EventV1 = {
+        schemaVersion: DOMAIN_SCHEMA_VERSION,
+        eventId: input.eventId,
+        missionId: input.missionId,
+        occurredAt: input.occurredAt,
+        type: 'command.accepted',
+        payload: { command },
+      };
+      assertEventEnvelope(event);
+      assertNoCredentialMaterial(event.payload);
+      const canonicalPayload = canonicalJson(event.payload);
+      const appended = this.#appendEventInTransaction(
+        event,
+        canonicalPayload,
+        sha256(canonicalPayload),
+        fence,
+        now,
+      );
+      this.#database
+        .prepare(
+          `INSERT INTO mission_commands (
+             command_id, mission_id, branch_id, action, idempotency_key, expected_head_hash,
+             status, claim_owner, claim_until_ms, dispatch_count, accepted_at, updated_at, last_error
+           ) VALUES (?, ?, ?, ?, ?, ?, 'pending', NULL, NULL, 0, ?, ?, NULL)`,
+        )
+        .run(
+          command.commandId,
+          command.missionId,
+          command.branchId,
+          command.action,
+          command.idempotencyKey,
+          command.expectedHeadHash,
+          command.acceptedAt,
+          appended.event.recordedAt,
+        );
+      return { ...command, updatedAt: appended.event.recordedAt };
+    });
+  }
+
+  getCommand(commandId: string): MissionCommandV1 | undefined {
+    const row = this.#database
+      .prepare(
+        `SELECT command_id, mission_id, branch_id, action, idempotency_key,
+                expected_head_hash, status, claim_owner, claim_until_ms, dispatch_count,
+                accepted_at, updated_at, last_error
+           FROM mission_commands
+          WHERE command_id = ?`,
+      )
+      .get(commandId) as CommandRow | undefined;
+    return row === undefined ? undefined : commandFromRow(row);
+  }
+
+  listCommands(missionId?: string): MissionCommandV1[] {
+    const rows = (missionId === undefined
+      ? this.#database
+          .prepare(
+            `SELECT command_id, mission_id, branch_id, action, idempotency_key,
+                      expected_head_hash, status, claim_owner, claim_until_ms, dispatch_count,
+                      accepted_at, updated_at, last_error
+                 FROM mission_commands ORDER BY accepted_at ASC, command_id ASC`,
+          )
+          .all()
+      : this.#database
+          .prepare(
+            `SELECT command_id, mission_id, branch_id, action, idempotency_key,
+                      expected_head_hash, status, claim_owner, claim_until_ms, dispatch_count,
+                      accepted_at, updated_at, last_error
+                 FROM mission_commands WHERE mission_id = ?
+                 ORDER BY accepted_at ASC, command_id ASC`,
+          )
+          .all(missionId)) as unknown as CommandRow[];
+    return rows.map(commandFromRow);
+  }
+
+  claimNextCommand(
+    ownerId: string,
+    options: ClaimMissionCommandOptions = {},
+  ): MissionCommandV1 | undefined {
+    assertIdentifier('ownerId', ownerId);
+    const ttlMs = assertTtl(options.claimTtlMs ?? DEFAULT_LEASE_TTL_MS);
+    const now = this.#now();
+    return this.#transaction(() => {
+      const row = this.#database
+        .prepare(
+          `SELECT command_id, mission_id, branch_id, action, idempotency_key,
+                  expected_head_hash, status, claim_owner, claim_until_ms, dispatch_count,
+                  accepted_at, updated_at, last_error
+             FROM mission_commands
+            WHERE status = 'pending'
+               OR (status = 'dispatching' AND claim_until_ms <= ?)
+            ORDER BY accepted_at ASC, command_id ASC
+            LIMIT 1`,
+        )
+        .get(now.getTime()) as CommandRow | undefined;
+      if (row === undefined) return undefined;
+      const nextCount = row.dispatch_count + 1;
+      this.#database
+        .prepare(
+          `UPDATE mission_commands
+              SET status = 'dispatching', claim_owner = ?, claim_until_ms = ?,
+                  dispatch_count = ?, updated_at = ?, last_error = NULL
+            WHERE command_id = ?`,
+        )
+        .run(ownerId, now.getTime() + ttlMs, nextCount, now.toISOString(), row.command_id);
+      return commandFromRow({
+        ...row,
+        status: 'dispatching',
+        claim_owner: ownerId,
+        claim_until_ms: now.getTime() + ttlMs,
+        dispatch_count: nextCount,
+        updated_at: now.toISOString(),
+        last_error: null,
+      });
+    });
+  }
+
+  claimCommand(
+    commandId: string,
+    ownerId: string,
+    options: ClaimMissionCommandOptions = {},
+  ): MissionCommandV1 {
+    assertIdentifier('ownerId', ownerId);
+    const ttlMs = assertTtl(options.claimTtlMs ?? DEFAULT_LEASE_TTL_MS);
+    const now = this.#now();
+    return this.#transaction(() => {
+      const row = this.#database
+        .prepare(
+          `SELECT command_id, mission_id, branch_id, action, idempotency_key,
+                  expected_head_hash, status, claim_owner, claim_until_ms, dispatch_count,
+                  accepted_at, updated_at, last_error
+             FROM mission_commands WHERE command_id = ?`,
+        )
+        .get(commandId) as CommandRow | undefined;
+      if (row === undefined) throw new MissionInvariantError(`Unknown command ${commandId}`);
+      const claimable =
+        row.status === 'pending' ||
+        (row.status === 'dispatching' &&
+          row.claim_until_ms !== null &&
+          row.claim_until_ms <= now.getTime());
+      if (!claimable) {
+        throw new MissionInvariantError(`Command ${commandId} is not claimable`);
+      }
+      const nextCount = row.dispatch_count + 1;
+      this.#database
+        .prepare(
+          `UPDATE mission_commands
+              SET status = 'dispatching', claim_owner = ?, claim_until_ms = ?,
+                  dispatch_count = ?, updated_at = ?, last_error = NULL
+            WHERE command_id = ?`,
+        )
+        .run(ownerId, now.getTime() + ttlMs, nextCount, now.toISOString(), commandId);
+      return commandFromRow({
+        ...row,
+        status: 'dispatching',
+        claim_owner: ownerId,
+        claim_until_ms: now.getTime() + ttlMs,
+        dispatch_count: nextCount,
+        updated_at: now.toISOString(),
+        last_error: null,
+      });
+    });
+  }
+
+  renewCommandClaim(
+    commandId: string,
+    ownerId: string,
+    options: ClaimMissionCommandOptions = {},
+  ): MissionCommandV1 {
+    const ttlMs = assertTtl(options.claimTtlMs ?? DEFAULT_LEASE_TTL_MS);
+    const now = this.#now();
+    return this.#transaction(() => {
+      const row = this.#database
+        .prepare(
+          `SELECT command_id, mission_id, branch_id, action, idempotency_key,
+                  expected_head_hash, status, claim_owner, claim_until_ms, dispatch_count,
+                  accepted_at, updated_at, last_error
+             FROM mission_commands WHERE command_id = ?`,
+        )
+        .get(commandId) as CommandRow | undefined;
+      if (
+        row === undefined ||
+        row.status !== 'dispatching' ||
+        row.claim_owner !== ownerId ||
+        row.claim_until_ms === null ||
+        row.claim_until_ms <= now.getTime()
+      ) {
+        throw new MissionInvariantError(`Command claim ${commandId}/${ownerId} is stale`);
+      }
+      this.#database
+        .prepare(
+          `UPDATE mission_commands SET claim_until_ms = ?, updated_at = ? WHERE command_id = ?`,
+        )
+        .run(now.getTime() + ttlMs, now.toISOString(), commandId);
+      return commandFromRow({
+        ...row,
+        claim_until_ms: now.getTime() + ttlMs,
+        updated_at: now.toISOString(),
+      });
+    });
+  }
+
+  recordCommandStatus(
+    commandId: string,
+    status: MissionCommandStatusV1,
+    eventId: string,
+    fence: WorkspaceFenceV1,
+    detail?: string,
+  ): MissionCommandV1 {
+    const now = this.#now();
+    return this.#transaction(() => {
+      this.#assertFence(fence, now.getTime());
+      const row = this.#database
+        .prepare(
+          `SELECT command_id, mission_id, branch_id, action, idempotency_key,
+                  expected_head_hash, status, claim_owner, claim_until_ms, dispatch_count,
+                  accepted_at, updated_at, last_error
+             FROM mission_commands WHERE command_id = ?`,
+        )
+        .get(commandId) as CommandRow | undefined;
+      if (row === undefined) throw new MissionInvariantError(`Unknown command ${commandId}`);
+      const mission = this.getMission(row.mission_id);
+      if (mission === undefined || mission.workspaceKey !== fence.workspaceKey) {
+        throw new MissionInvariantError('Command fence does not own the Mission workspace');
+      }
+      if (row.status === 'completed' || row.status === 'failed') {
+        if (row.status !== status) {
+          throw new MissionInvariantError(`Command ${commandId} is already terminal`);
+        }
+        return commandFromRow(row);
+      }
+      const event: EventV1 = {
+        schemaVersion: DOMAIN_SCHEMA_VERSION,
+        eventId,
+        missionId: row.mission_id,
+        occurredAt: now.toISOString(),
+        type: 'command.status_changed',
+        payload: {
+          commandId,
+          status,
+          dispatchCount: row.dispatch_count,
+          ...(detail === undefined ? {} : { detail }),
+        },
+      };
+      assertNoCredentialMaterial(event.payload);
+      const canonicalPayload = canonicalJson(event.payload);
+      const appended = this.#appendEventInTransaction(
+        event,
+        canonicalPayload,
+        sha256(canonicalPayload),
+        fence,
+        now,
+      );
+      if (status === 'dispatching') {
+        this.#database
+          .prepare(
+            `UPDATE mission_commands SET updated_at = ?, last_error = NULL WHERE command_id = ?`,
+          )
+          .run(appended.event.recordedAt, commandId);
+      } else {
+        this.#database
+          .prepare(
+            `UPDATE mission_commands
+                SET status = ?, claim_owner = NULL, claim_until_ms = NULL,
+                    updated_at = ?, last_error = ?
+              WHERE command_id = ?`,
+          )
+          .run(
+            status,
+            appended.event.recordedAt,
+            status === 'failed' ? (detail ?? 'Command failed') : null,
+            commandId,
+          );
+      }
+      return commandFromRow({
+        ...row,
+        status,
+        claim_owner: status === 'dispatching' ? row.claim_owner : null,
+        claim_until_ms: status === 'dispatching' ? row.claim_until_ms : null,
+        updated_at: appended.event.recordedAt,
+        last_error: status === 'failed' ? (detail ?? 'Command failed') : null,
+      });
+    });
   }
 
   verifyEventChain(missionId: string): {
@@ -515,6 +891,7 @@ export class MissionStore {
       CREATE TABLE IF NOT EXISTS missions (
         mission_id TEXT PRIMARY KEY,
         workspace_key TEXT NOT NULL,
+        root_branch_id TEXT,
         title TEXT NOT NULL,
         status TEXT NOT NULL,
         contract_json TEXT NOT NULL,
@@ -533,9 +910,42 @@ export class MissionStore {
         acquired_at_ms INTEGER NOT NULL,
         lease_until_ms INTEGER NOT NULL
       ) STRICT;
+    `);
+
+    if (!this.#hasColumn('missions', 'root_branch_id')) {
+      this.#database.exec('ALTER TABLE missions ADD COLUMN root_branch_id TEXT;');
+    }
+    this.#database.exec(`
+      CREATE TABLE IF NOT EXISTS mission_commands (
+        command_id TEXT PRIMARY KEY,
+        mission_id TEXT NOT NULL,
+        branch_id TEXT NOT NULL,
+        action TEXT NOT NULL CHECK (action IN ('resume', 'verify')),
+        idempotency_key TEXT NOT NULL,
+        expected_head_hash TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('pending', 'dispatching', 'completed', 'failed')),
+        claim_owner TEXT,
+        claim_until_ms INTEGER,
+        dispatch_count INTEGER NOT NULL CHECK (dispatch_count >= 0),
+        accepted_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        last_error TEXT,
+        UNIQUE (mission_id, idempotency_key),
+        FOREIGN KEY (mission_id) REFERENCES missions (mission_id)
+      ) STRICT;
+
+      CREATE INDEX IF NOT EXISTS mission_commands_dispatch_idx
+        ON mission_commands (status, claim_until_ms, accepted_at);
 
       PRAGMA user_version = ${STORE_SCHEMA_VERSION};
     `);
+  }
+
+  #hasColumn(table: string, column: string): boolean {
+    const rows = this.#database.prepare(`PRAGMA table_info(${table})`).all() as unknown as Array<{
+      name: string;
+    }>;
+    return rows.some((row) => row.name === column);
   }
 
   #assertFence(fence: WorkspaceFenceV1, nowMs: number): LeaseRow {
@@ -577,6 +987,7 @@ export class MissionStore {
     if (mission.status !== 'pending') {
       throw new MissionInvariantError('A new mission must start in pending status');
     }
+    assertIdentifier('mission.rootBranchId', mission.rootBranchId);
   }
 
   #assertIdempotentReplay(
@@ -604,13 +1015,14 @@ export class MissionStore {
       this.#database
         .prepare(
           `INSERT INTO missions (
-             mission_id, workspace_key, title, status, contract_json, profile_json,
+             mission_id, workspace_key, root_branch_id, title, status, contract_json, profile_json,
              receipt_json, last_seq, head_hash, created_at, updated_at
-           ) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)`,
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)`,
         )
         .run(
           mission.missionId,
           mission.workspaceKey,
+          mission.rootBranchId,
           mission.title,
           mission.status,
           canonicalJson(contract),
@@ -644,7 +1056,38 @@ export class MissionStore {
         if (event.payload.attempt.missionId !== event.missionId) {
           throw new MissionInvariantError('Attempt belongs to a different mission');
         }
+        if (
+          current.rootBranchId !== undefined &&
+          event.payload.attempt.branchId !== current.rootBranchId
+        ) {
+          throw new MissionInvariantError('Iteration 2 Attempt must remain on the root Branch');
+        }
         status = 'running';
+        break;
+      case 'branch.created':
+        if (
+          event.payload.branch.missionId !== event.missionId ||
+          current.rootBranchId !== event.payload.branch.branchId
+        ) {
+          throw new MissionInvariantError('Root Branch identity does not match its Mission');
+        }
+        break;
+      case 'attempt.bound':
+        if (
+          event.payload.binding.missionId !== event.missionId ||
+          event.payload.binding.branchId !== current.rootBranchId
+        ) {
+          throw new MissionInvariantError('Attempt Binding does not match its Mission Branch');
+        }
+        break;
+      case 'runtime.event':
+        if (
+          event.payload.event.missionId !== event.missionId ||
+          event.payload.event.attemptId !== event.attemptId ||
+          event.payload.event.branchId !== current.rootBranchId
+        ) {
+          throw new MissionInvariantError('Runtime event identities do not match the Mission');
+        }
         break;
       case 'profile.selected':
         profile = event.payload.profile;
@@ -655,6 +1098,12 @@ export class MissionStore {
           event.payload.receipt.contractId !== current.contract.contractId
         ) {
           throw new MissionInvariantError('Receipt belongs to a different mission or contract');
+        }
+        if (
+          event.payload.receipt.rootBranchId !== undefined &&
+          event.payload.receipt.rootBranchId !== current.rootBranchId
+        ) {
+          throw new MissionInvariantError('Receipt belongs to a different Branch');
         }
         receipt = event.payload.receipt;
         this.#assertReceipt(current, receipt);
@@ -945,6 +1394,7 @@ function missionFromRow(row: MissionRow): MissionProjectionV1 {
     schemaVersion: DOMAIN_SCHEMA_VERSION,
     missionId: row.mission_id,
     workspaceKey: row.workspace_key,
+    ...(row.root_branch_id === null ? {} : { rootBranchId: row.root_branch_id }),
     title: row.title,
     status: row.status,
     contract: JSON.parse(row.contract_json) as ContractV1,
@@ -954,6 +1404,22 @@ function missionFromRow(row: MissionRow): MissionProjectionV1 {
     ...(row.receipt_json === null ? {} : { receipt: JSON.parse(row.receipt_json) as ReceiptV1 }),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+function commandFromRow(row: CommandRow): MissionCommandV1 {
+  return {
+    commandId: row.command_id,
+    missionId: row.mission_id,
+    branchId: row.branch_id,
+    action: row.action,
+    idempotencyKey: row.idempotency_key,
+    expectedHeadHash: row.expected_head_hash,
+    status: row.status,
+    acceptedAt: row.accepted_at,
+    updatedAt: row.updated_at,
+    dispatchCount: row.dispatch_count,
+    ...(row.last_error === null ? {} : { lastError: row.last_error }),
   };
 }
 

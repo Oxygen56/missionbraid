@@ -75,6 +75,52 @@ attemptPlan:
     ).toThrow(/Credential-like value/);
   });
 
+  it('loads and restores a Claude Code Runtime Profile without changing its native names', () => {
+    const root = mkdtempSync(join(tmpdir(), 'missionbraid-spec-claude-'));
+    roots.push(root);
+    const workspace = join(root, 'workspace');
+    mkdirSync(workspace);
+    const source = join(root, 'mission.yaml');
+    writeFileSync(
+      source,
+      `schemaVersion: missionbraid.dev/mission/v1
+title: Claude fixture
+objective: Complete it
+workspace: ${JSON.stringify(workspace)}
+acceptanceCriteria:
+  - id: tests
+    description: Tests pass
+    verifier:
+      kind: command
+      executable: node
+      args: [--test]
+      cwd: ${JSON.stringify(workspace)}
+      timeoutMs: 1000
+attemptPlan:
+  - stageId: claude-primary
+    profile:
+      harness: claude
+      model: deepseek-v4-pro
+      reasoningEffort: medium
+      permissionMode: dontAsk
+      injectionBudgetTokens: 8000
+    instruction: Implement the core
+`,
+    );
+
+    const spec = loadMissionSpec(source);
+    expect(spec.attemptPlan[0]?.profile).toEqual({
+      harness: 'claude',
+      model: 'deepseek-v4-pro',
+      reasoningEffort: 'medium',
+      permissionMode: 'dontAsk',
+      injectionBudgetTokens: 8000,
+    });
+    expect(restoreMissionSpecSnapshot(createMissionSpecSnapshot(spec), spec.sourceFile)).toEqual(
+      spec,
+    );
+  });
+
   it('rejects unknown variables and duplicate identities', () => {
     const root = mkdtempSync(join(tmpdir(), 'missionbraid-spec-invalid-'));
     roots.push(root);
