@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   buildClaudeInvocation,
+  capabilitiesForRequest,
   CLAUDE_ADAPTER_CAPABILITIES,
   ClaudeAdapter,
   createClaudeAdapter,
@@ -56,6 +57,7 @@ afterEach(async () => {
 describe('ClaudeAdapter', () => {
   it('constructs deterministic stream-json argv and keeps the prompt on stdin', async () => {
     const workspace = await disposableDirectory();
+    const settingsFile = join(workspace, 'missionbraid-hooks.json');
 
     const invocation = buildClaudeInvocation(
       {
@@ -67,6 +69,8 @@ describe('ClaudeAdapter', () => {
         maxTurns: 12,
         noSessionPersistence: true,
         includePartialMessages: true,
+        settingsFile,
+        tools: ['Read', 'Edit', 'Bash(git status)'],
       },
       '/opt/bin/claude',
     );
@@ -93,6 +97,10 @@ describe('ClaudeAdapter', () => {
         '--max-turns',
         '12',
         '--no-session-persistence',
+        '--settings',
+        settingsFile,
+        '--tools',
+        'Read,Edit,Bash(git status)',
       ],
       cwd: workspace,
       stdin: 'continue the mission',
@@ -116,6 +124,32 @@ describe('ClaudeAdapter', () => {
     expect(CLAUDE_ADAPTER_CAPABILITIES.context_capture.status).toBe('unknown');
     expect(CLAUDE_ADAPTER_CAPABILITIES.pre_tool_gate.status).toBe('unsupported');
     expect(CLAUDE_ADAPTER_CAPABILITIES.resume.status).toBe('unsupported');
+  });
+
+  it('only declares a pre-tool gate for a request with an explicitly verified Hook binding', async () => {
+    const workspace = await disposableDirectory();
+    const settingsFile = join(workspace, 'missionbraid-hooks.json');
+    const adapter = new ClaudeAdapter();
+
+    expect(
+      capabilitiesForRequest({
+        workspace,
+        prompt: 'inspect only',
+        settingsFile,
+        tools: ['Read', 'Edit'],
+      }).pre_tool_gate,
+    ).toMatchObject({ status: 'unsupported', control: 'none' });
+
+    expect(
+      adapter.capabilitiesForRequest({
+        workspace,
+        prompt: 'inspect only',
+        settingsFile,
+        tools: ['Read', 'Edit'],
+        verifiedHookGate: true,
+      }).pre_tool_gate,
+    ).toMatchObject({ status: 'supported', control: 'native' });
+    expect(adapter.capabilities.pre_tool_gate.status).toBe('unsupported');
   });
 
   it('detects a fake executable and its version', async () => {
@@ -194,5 +228,47 @@ describe('ClaudeAdapter', () => {
         maxTurns: 0,
       }),
     ).toThrow('Claude maxTurns must be a positive safe integer.');
+  });
+
+  it('rejects invalid settings, tools, and Hook capability assertions', async () => {
+    const workspace = await disposableDirectory();
+
+    expect(() =>
+      buildClaudeInvocation({
+        workspace,
+        prompt: 'fixture',
+        settingsFile: 'relative-settings.json',
+      }),
+    ).toThrow('Claude settingsFile must be an absolute path.');
+    expect(() =>
+      buildClaudeInvocation({
+        workspace,
+        prompt: 'fixture',
+        tools: [],
+      }),
+    ).toThrow('Claude tools must contain at least one tool.');
+    expect(() =>
+      buildClaudeInvocation({
+        workspace,
+        prompt: 'fixture',
+        tools: ['Read', '   '],
+      }),
+    ).toThrow('Claude tool must not be empty.');
+    expect(() =>
+      capabilitiesForRequest({
+        workspace,
+        prompt: 'fixture',
+        verifiedHookGate: true,
+      }),
+    ).toThrow('Claude verifiedHookGate requires settingsFile.');
+    expect(() =>
+      capabilitiesForRequest({
+        workspace,
+        prompt: 'fixture',
+        settingsFile: join(workspace, 'missionbraid-hooks.json'),
+        verifiedHookGate: true,
+        includeHookEvents: false,
+      }),
+    ).toThrow('Claude verifiedHookGate requires includeHookEvents.');
   });
 });

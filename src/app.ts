@@ -14,10 +14,12 @@ import {
   type MissionExecutionResult,
   type MissionStatusView,
   type MissionTimelineEntry,
+  type MissionToolGateView,
 } from './engine.js';
 import { createMissionDraft, MissionDraftError } from './mission-draft.js';
 import { discoverRuntimeCatalog, type RuntimeCatalogEntry } from './runtime-catalog.js';
 import type { MissionCommandActionV1, MissionCommandV1, MissionProjectionV1 } from './domain.js';
+import type { ToolDecisionIntentDraft, ToolDecisionIntentV1 } from './tool-gateway.js';
 import { snapshotGitWorkspace } from './workspace.js';
 
 const DEFAULT_HOST = '127.0.0.1';
@@ -49,6 +51,12 @@ export interface AppEngine {
   commands(missionId?: string): MissionCommandV1[];
   artifact(artifactId: string): Promise<NativeArtifactContent | undefined>;
   contextGraph(missionId: string): Promise<ContextGraphV1>;
+  pendingToolGates?(missionId: string): Promise<readonly MissionToolGateView[]>;
+  decideToolGate?(
+    missionId: string,
+    attemptId: string,
+    draft: ToolDecisionIntentDraft,
+  ): Promise<ToolDecisionIntentV1>;
   status(missionId: string): MissionStatusView;
   timeline(missionId: string): MissionTimelineEntry[];
   list(): MissionProjectionV1[];
@@ -394,15 +402,54 @@ export async function startMissionBraidApp(
       });
       return;
     }
+    const toolGateDecision = matchToolGateDecision(url.pathname);
+    if (toolGateDecision !== undefined && request.method === 'POST') {
+      const engine = engineFactory(stateDir);
+      try {
+        if (engine.decideToolGate === undefined) {
+          throw new AppHttpError(
+            501,
+            'TOOL_GATE_UNAVAILABLE',
+            'Tool Gate decisions are unavailable.',
+          );
+        }
+        const body = requireJsonRecord(await readJson(request));
+        const intent = await engine.decideToolGate(
+          toolGateDecision.missionId,
+          toolGateDecision.attemptId,
+          {
+            gateId: toolGateDecision.gateId,
+            expectedRequestSha256: requireJsonString(
+              body.expectedRequestSha256,
+              'expectedRequestSha256',
+            ),
+            decision: requireToolDecision(body.decision),
+            ...(body.reason === undefined
+              ? {}
+              : { reason: requireJsonString(body.reason, 'reason') }),
+            ...(body.updatedInput === undefined
+              ? {}
+              : { updatedInput: requireJsonObject(body.updatedInput, 'updatedInput') }),
+          },
+        );
+        sendJson(response, 202, { intent });
+      } finally {
+        engine.close();
+      }
+      return;
+    }
     const missionId = matchMissionId(url.pathname);
     if (missionId !== undefined && request.method === 'GET') {
       const engine = engineFactory(stateDir);
       try {
         const status = engine.status(missionId);
+        const toolGates =
+          engine.pendingToolGates === undefined ? [] : await engine.pendingToolGates(missionId);
         sendJson(response, 200, {
           ...status,
           timeline: engine.timeline(missionId),
           contextGraph: await engine.contextGraph(missionId),
+          toolGates,
           operation: operationView(
             status.mission,
             operations.get(missionId),
@@ -652,6 +699,59 @@ function matchMissionAction(
     return undefined;
   }
   return { missionId: decodeURIComponent(match[1]), action: match[2] };
+}
+
+function matchToolGateDecision(
+  pathname: string,
+): { readonly missionId: string; readonly attemptId: string; readonly gateId: string } | undefined {
+  const match = pathname.match(
+    /^\/api\/v1\/missions\/([^/]+)\/attempts\/([^/]+)\/tool-gates\/(gate-[a-f0-9]{32})\/decision$/,
+  );
+  if (match?.[1] === undefined || match[2] === undefined || match[3] === undefined)
+    return undefined;
+  return {
+    missionId: decodeURIComponent(match[1]),
+    attemptId: decodeURIComponent(match[2]),
+    gateId: match[3],
+  };
+}
+
+function requireJsonRecord(value: unknown): Record<string, unknown> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new AppHttpError(400, 'INVALID_TOOL_DECISION', 'Tool decision body must be an object.');
+  }
+  return value as Record<string, unknown>;
+}
+
+function requireJsonString(value: unknown, field: string): string {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new AppHttpError(400, 'INVALID_TOOL_DECISION', `${field} must be a non-empty string.`);
+  }
+  return value.trim();
+}
+
+function requireJsonObject(
+  value: unknown,
+  field: string,
+): { readonly [key: string]: import('./domain.js').JsonValue } {
+  const record = requireJsonRecord(value);
+  try {
+    JSON.stringify(record);
+  } catch {
+    throw new AppHttpError(400, 'INVALID_TOOL_DECISION', `${field} must be JSON-compatible.`);
+  }
+  return record as { readonly [key: string]: import('./domain.js').JsonValue };
+}
+
+function requireToolDecision(value: unknown): 'approve' | 'reject' | 'modify' {
+  if (value !== 'approve' && value !== 'reject' && value !== 'modify') {
+    throw new AppHttpError(
+      400,
+      'INVALID_TOOL_DECISION',
+      'decision must be approve, reject, or modify.',
+    );
+  }
+  return value;
 }
 
 function sendJson(response: ServerResponse, status: number, value: unknown): void {

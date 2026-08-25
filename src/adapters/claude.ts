@@ -34,6 +34,15 @@ export interface ClaudeRunRequest extends AdapterRunRequest {
   readonly noSessionPersistence?: boolean;
   readonly includeHookEvents?: boolean;
   readonly includePartialMessages?: boolean;
+  /** Absolute path to request-scoped Claude settings, including native Hooks. */
+  readonly settingsFile?: string;
+  /** Built-in Claude tools available to this request. */
+  readonly tools?: readonly string[];
+  /**
+   * Caller assertion that settingsFile contains a previously verified blocking
+   * Hook. Merely supplying settings or a tool allowlist is not gate evidence.
+   */
+  readonly verifiedHookGate?: boolean;
 }
 
 export interface ClaudeAdapterOptions {
@@ -71,7 +80,8 @@ export const CLAUDE_ADAPTER_CAPABILITIES = {
   pre_tool_gate: {
     status: 'unsupported',
     control: 'none',
-    detail: 'Hook events are observed, but this adapter does not mediate tool permission requests.',
+    detail:
+      'Ordinary requests only observe Hook events. Use request-scoped capabilities; only a bound, caller-verified blocking Hook may be declared enforced.',
   },
   resume: {
     status: 'unsupported',
@@ -113,12 +123,51 @@ function validateRequest(request: ClaudeRunRequest): void {
   if (request.reasoningEffort !== undefined) {
     requireNonEmpty(request.reasoningEffort, 'Claude reasoning effort');
   }
+  if (request.settingsFile !== undefined && !isAbsolute(request.settingsFile)) {
+    throw new TypeError('Claude settingsFile must be an absolute path.');
+  }
+  if (request.tools !== undefined) {
+    if (request.tools.length === 0) {
+      throw new TypeError('Claude tools must contain at least one tool.');
+    }
+    for (const tool of request.tools) {
+      requireNonEmpty(tool, 'Claude tool');
+    }
+  }
+  if (request.verifiedHookGate === true && request.settingsFile === undefined) {
+    throw new TypeError('Claude verifiedHookGate requires settingsFile.');
+  }
+  if (request.verifiedHookGate === true && request.includeHookEvents === false) {
+    throw new TypeError('Claude verifiedHookGate requires includeHookEvents.');
+  }
   if (
     request.maxTurns !== undefined &&
     (!Number.isSafeInteger(request.maxTurns) || request.maxTurns <= 0)
   ) {
     throw new TypeError('Claude maxTurns must be a positive safe integer.');
   }
+}
+
+/**
+ * Returns the capability boundary for one concrete request. The adapter-wide
+ * declaration intentionally remains weaker because most requests bind no
+ * blocking Hook.
+ */
+export function capabilitiesForRequest(request: ClaudeRunRequest): RuntimeAdapterCapabilities {
+  validateRequest(request);
+  if (request.verifiedHookGate !== true) {
+    return CLAUDE_ADAPTER_CAPABILITIES;
+  }
+
+  return {
+    ...CLAUDE_ADAPTER_CAPABILITIES,
+    pre_tool_gate: {
+      status: 'supported',
+      control: 'native',
+      detail:
+        'This request binds a caller-verified blocking Hook through its settings file; the claim is limited to Claude tool dispatch covered by that Hook.',
+    },
+  };
 }
 
 function parseVersion(lines: readonly string[]): string | null {
@@ -189,6 +238,12 @@ export function buildClaudeInvocation(
   }
   if (request.noSessionPersistence === true) {
     args.push('--no-session-persistence');
+  }
+  if (request.settingsFile !== undefined) {
+    args.push('--settings', request.settingsFile);
+  }
+  if (request.tools !== undefined) {
+    args.push('--tools', request.tools.join(','));
   }
 
   return {
@@ -284,6 +339,10 @@ export class ClaudeAdapter implements RuntimeAdapter<ClaudeRunRequest> {
 
   buildInvocation(request: ClaudeRunRequest): RuntimeInvocation {
     return buildClaudeInvocation(request, this.command);
+  }
+
+  capabilitiesForRequest(request: ClaudeRunRequest): RuntimeAdapterCapabilities {
+    return capabilitiesForRequest(request);
   }
 
   async run(request: ClaudeRunRequest): Promise<RuntimeRunResult> {

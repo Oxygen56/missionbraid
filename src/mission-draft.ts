@@ -26,6 +26,7 @@ const STAGE_FIELDS = new Set([
   'permissionMode',
   'injectionBudgetTokens',
   'instruction',
+  'breakpoint',
 ]);
 const SHELL_EXECUTABLES = new Set([
   'sh',
@@ -80,6 +81,7 @@ export interface MissionDraftStageInput {
    * It does not imply that MissionBraid selected or optimized that route.
    */
   readonly instruction?: string;
+  readonly breakpoint?: 'mutable-tools';
 }
 
 export interface MissionDraftInput {
@@ -151,6 +153,7 @@ export function createMissionDraft(input: unknown): MissionDraftOutput {
       stageId: stage.stageId,
       profile: stage.profile,
       instruction,
+      ...(stage.breakpoint === undefined ? {} : { breakpoint: stage.breakpoint }),
       onFailure: index === parsedStages.length - 1 ? 'stop' : 'handoff',
     };
   });
@@ -181,6 +184,7 @@ interface ParsedStage {
   readonly stageId: string;
   readonly profile: AttemptProfileSpecV1;
   readonly instruction?: string;
+  readonly breakpoint?: 'mutable-tools';
 }
 
 function parseVerifier(
@@ -219,6 +223,10 @@ function parseStage(value: unknown, index: number): ParsedStage {
     stage.instruction === undefined
       ? undefined
       : requireNonEmptyString(stage.instruction, `${path}.instruction`);
+  const breakpoint =
+    stage.breakpoint === undefined
+      ? undefined
+      : requireBreakpoint(stage.breakpoint, harness, `${path}.breakpoint`);
   return {
     stageId,
     profile: {
@@ -239,7 +247,22 @@ function parseStage(value: unknown, index: number): ParsedStage {
       ),
     },
     ...(instruction === undefined ? {} : { instruction }),
+    ...(breakpoint === undefined ? {} : { breakpoint }),
   };
+}
+
+function requireBreakpoint(
+  value: unknown,
+  harness: SupportedHarnessV1,
+  path: string,
+): 'mutable-tools' {
+  if (value !== 'mutable-tools') {
+    throw new MissionDraftError(`${path} must be mutable-tools`);
+  }
+  if (harness !== 'claude') {
+    throw new MissionDraftError(`${path} currently requires Claude Code`);
+  }
+  return value;
 }
 
 function defaultStageInstruction(stages: readonly ParsedStage[], index: number): string {

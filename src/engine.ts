@@ -15,6 +15,7 @@ import {
   type CanonicalCapsuleV1,
 } from './capsule.js';
 import { deriveContextGraph, type ContextGraphV1 } from './context-graph.js';
+import { createClaudeToolGateBinding, type ClaudeToolGateBindingV1 } from './claude-tool-gate.js';
 import {
   DOMAIN_SCHEMA_VERSION,
   type ContractV1,
@@ -64,6 +65,12 @@ import {
 } from './runtime-events.js';
 import { extractRuntimeSemanticFacts } from './runtime-semantics.js';
 import { runCommandVerifier, type CommandVerificationResultV1 } from './verifier.js';
+import {
+  ToolGateway,
+  type ToolDecisionIntentDraft,
+  type ToolDecisionIntentV1,
+  type ToolGateRequestV1,
+} from './tool-gateway.js';
 import {
   createStageWorkspaceDelta,
   snapshotGitWorkspace,
@@ -117,6 +124,11 @@ export interface MissionStatusView {
     readonly harness: string;
     readonly status: 'running' | 'succeeded' | 'failed' | 'abandoned';
   }[];
+}
+
+export interface MissionToolGateView extends ToolGateRequestV1 {
+  readonly controlLevel: 'enforced';
+  readonly scope: 'branch_local_workspace' | 'shared_resource' | 'mission_global_external';
 }
 
 export interface MissionTimelineEntry {
@@ -432,6 +444,37 @@ export class MissionEngine {
       )
     ).filter((artifact): artifact is NativeArtifactContent => artifact !== undefined);
     return deriveContextGraph({ timeline, nativeArtifacts });
+  }
+
+  async pendingToolGates(missionId: string): Promise<readonly MissionToolGateView[]> {
+    this.#requireMission(missionId);
+    const state = reconstructExecutionState(this.#store.listEvents(missionId));
+    const requests = await Promise.all(
+      [...state.plans.values()].map(async (plan) => {
+        const gateway = this.#toolGateway(missionId, plan.attemptId);
+        return await gateway.listPending();
+      }),
+    );
+    return requests.flat().map((request) => ({
+      ...request,
+      controlLevel: 'enforced',
+      scope: toolEffectScope(request.toolName),
+    }));
+  }
+
+  async decideToolGate(
+    missionId: string,
+    attemptId: string,
+    draft: ToolDecisionIntentDraft,
+  ): Promise<ToolDecisionIntentV1> {
+    this.#requireMission(missionId);
+    const state = reconstructExecutionState(this.#store.listEvents(missionId));
+    if (!state.plans.has(attemptId)) {
+      throw new MissionExecutionError(
+        `Attempt ${attemptId} does not belong to Mission ${missionId}`,
+      );
+    }
+    return await this.#toolGateway(missionId, attemptId).writeDecisionIntent(draft);
   }
 
   async executeCommand(commandId: string, signal?: AbortSignal): Promise<MissionExecutionResult> {
@@ -977,10 +1020,58 @@ export class MissionEngine {
       fence,
       attemptId,
     );
+    let toolGateway: ToolGateway | undefined;
+    let toolGateBinding: ClaudeToolGateBindingV1 | undefined;
+    let toolGatewayError: unknown;
+    const toolGatewayController = new AbortController();
+    let toolGatewayWatcher: Promise<void> | undefined;
+    if (stage.breakpoint === 'mutable-tools') {
+      toolGateway = this.#toolGateway(missionId, attemptId);
+      await toolGateway.initialize();
+      toolGateBinding = await createClaudeToolGateBinding({
+        stateDir: this.#stateDir,
+        gatewayRoot: this.#toolGatewayRoot(),
+        missionId,
+        attemptId,
+      });
+      this.#observe(
+        missionId,
+        'tool.gateway.armed',
+        {
+          attemptId,
+          matcher: toolGateBinding.matcher,
+          tools: [...toolGateBinding.tools],
+          settingsSha256: toolGateBinding.settingsSha256,
+          controlLevel: 'enforced',
+          capabilityFidelity: 'native',
+          parentProcess: 'continues-while-hook-blocks-tool-dispatch',
+          childProcesses: 'covered-only-when-dispatched-through-matched-Claude-tool',
+          inFlightRequests: 'not-revoked',
+          pendingTools: 'blocked-until-persisted-release',
+        },
+        fence,
+        attemptId,
+      );
+      toolGatewayWatcher = this.#watchToolGateway(
+        missionId,
+        attemptId,
+        toolGateway,
+        fence,
+        toolGatewayController.signal,
+      ).catch((error: unknown) => {
+        toolGatewayError = error;
+        toolGatewayController.abort();
+      });
+    }
+    const runtimeSignal =
+      signal === undefined
+        ? toolGatewayController.signal
+        : AbortSignal.any([signal, toolGatewayController.signal]);
     const runtimeResult = await this.#runRuntime(stage, profile, {
       workspace: spec.workspace,
       prompt,
-      ...(signal === undefined ? {} : { signal }),
+      signal: runtimeSignal,
+      ...(toolGateBinding === undefined ? {} : { toolGateBinding }),
       onStart: (pid) => {
         this.#observe(
           missionId,
@@ -992,6 +1083,19 @@ export class MissionEngine {
       },
       onOutput,
     });
+    if (toolGateway !== undefined) {
+      await this.#drainToolGateway(missionId, attemptId, toolGateway, fence);
+      toolGatewayController.abort();
+      await toolGatewayWatcher;
+      if (toolGatewayError !== undefined) {
+        throw new MissionExecutionError(
+          'The native Tool Gateway stopped before it could release a decision',
+          {
+            cause: toolGatewayError,
+          },
+        );
+      }
+    }
 
     if (capsule !== undefined) {
       const ordering = resolveCooperativeHandoffOrdering(
@@ -1278,6 +1382,7 @@ export class MissionEngine {
       readonly workspace: string;
       readonly prompt: string;
       readonly signal?: AbortSignal;
+      readonly toolGateBinding?: ClaudeToolGateBindingV1;
       readonly onStart: (pid: number) => void;
       readonly onOutput: (line: RuntimeOutputLine) => Promise<void>;
     },
@@ -1316,7 +1421,202 @@ export class MissionEngine {
       maxTurns: 80,
       noSessionPersistence: true,
       includeHookEvents: true,
+      ...(request.toolGateBinding === undefined
+        ? {}
+        : {
+            settingsFile: request.toolGateBinding.settingsFile,
+            tools: request.toolGateBinding.tools,
+            verifiedHookGate: true,
+          }),
     });
+  }
+
+  #toolGatewayRoot(): string {
+    return join(this.#stateDir, 'tool-gateway');
+  }
+
+  #toolGateway(missionId: string, attemptId: string): ToolGateway {
+    return new ToolGateway({
+      rootDir: this.#toolGatewayRoot(),
+      missionId,
+      attemptId,
+      now: this.#now,
+    });
+  }
+
+  async #watchToolGateway(
+    missionId: string,
+    attemptId: string,
+    gateway: ToolGateway,
+    fence: WorkspaceFenceV1,
+    signal: AbortSignal,
+  ): Promise<void> {
+    while (!signal.aborted) {
+      await this.#drainToolGateway(missionId, attemptId, gateway, fence);
+      await waitForGatewayPoll(signal, 25);
+    }
+  }
+
+  async #drainToolGateway(
+    missionId: string,
+    attemptId: string,
+    gateway: ToolGateway,
+    fence: WorkspaceFenceV1,
+  ): Promise<void> {
+    const existingEvents = this.#store.listEvents(missionId);
+    const requestedGateIds = observationIds(existingEvents, 'tool.gate.requested', 'gateId');
+    const decidedIntentIds = observationIds(
+      existingEvents,
+      'tool.gate.decided',
+      'decisionIntentId',
+    );
+    const observedResultIds = observationIds(existingEvents, 'tool.gate.result', 'resultId');
+    const recordedEffectIds = new Set(
+      existingEvents.flatMap((event) =>
+        event.type === 'effect.recorded' ? [event.payload.effect.effectId] : [],
+      ),
+    );
+    const pending = await gateway.listPending();
+    const requestByGateId = new Map(pending.map((request) => [request.gateId, request]));
+
+    for (const request of pending) {
+      if (requestedGateIds.has(request.gateId)) continue;
+      const scope = toolEffectScope(request.toolName);
+      const effect: EffectV1 = {
+        schemaVersion: DOMAIN_SCHEMA_VERSION,
+        effectId: request.effectId,
+        missionId,
+        attemptId,
+        kind: `tool.${request.toolName}`,
+        resourceKey: `tool-request:${request.requestSha256}`,
+        controlLevel: 'enforced',
+        scope,
+        status: 'intended',
+        evidenceRefs: [`tool-gate:${request.gateId}`],
+        createdAt: request.requestedAt,
+      };
+      const events: EventV1[] = [];
+      if (!recordedEffectIds.has(request.effectId)) {
+        events.push({
+          schemaVersion: DOMAIN_SCHEMA_VERSION,
+          eventId: `event-tool-effect-${request.gateId.slice('gate-'.length)}`,
+          missionId,
+          attemptId,
+          occurredAt: request.requestedAt,
+          type: 'effect.recorded',
+          payload: { effect },
+        });
+      }
+      events.push({
+        schemaVersion: DOMAIN_SCHEMA_VERSION,
+        eventId: `event-tool-request-${request.gateId.slice('gate-'.length)}`,
+        missionId,
+        attemptId,
+        occurredAt: request.requestedAt,
+        type: 'runtime.observation',
+        payload: {
+          kind: 'tool.gate.requested',
+          data: {
+            ...request,
+            controlLevel: 'enforced',
+            scope,
+            dispatchState: 'blocked-before-dispatch',
+          } as unknown as JsonValue,
+        },
+      });
+      this.#store.appendEvents(events, fence);
+    }
+
+    for (const intent of await gateway.readDecisionIntents()) {
+      if (decidedIntentIds.has(intent.decisionIntentId)) continue;
+      const request = requestByGateId.get(intent.gateId);
+      if (request === undefined) {
+        if ((await gateway.readRelease(intent.gateId)) !== undefined) continue;
+        throw new MissionExecutionError(
+          `Tool decision ${intent.decisionIntentId} has no pending request`,
+        );
+      }
+      const decisionEvent = this.#append(
+        {
+          schemaVersion: DOMAIN_SCHEMA_VERSION,
+          eventId: `event-tool-decision-${intent.decisionIntentId.slice('decision-intent-'.length)}`,
+          missionId,
+          attemptId,
+          occurredAt: intent.createdAt,
+          type: 'runtime.observation',
+          payload: {
+            kind: 'tool.gate.decided',
+            data: {
+              ...intent,
+              controlLevel: 'enforced',
+              dispatchState:
+                intent.decision === 'reject' ? 'blocked-and-skipped' : 'released-after-persist',
+            } as unknown as JsonValue,
+          },
+        },
+        fence,
+      );
+      this.#append(
+        {
+          schemaVersion: DOMAIN_SCHEMA_VERSION,
+          eventId: `event-tool-effect-decision-${intent.decisionIntentId.slice('decision-intent-'.length)}`,
+          missionId,
+          attemptId,
+          occurredAt: intent.createdAt,
+          type: 'effect.status_changed',
+          payload: {
+            effectId: intent.effectId,
+            status: intent.decision === 'reject' ? 'skipped' : 'dispatch_started',
+            evidenceRefs: [`event:${decisionEvent.eventId}`],
+          },
+        },
+        fence,
+      );
+      await gateway.writeRelease({
+        decisionIntentId: intent.decisionIntentId,
+        kernelDecisionEvent: {
+          eventId: decisionEvent.eventId,
+          seq: decisionEvent.seq,
+          hash: decisionEvent.hash,
+          recordedAt: decisionEvent.recordedAt,
+        },
+      });
+    }
+
+    for (const result of await gateway.listResults()) {
+      if (observedResultIds.has(result.resultId)) continue;
+      const resultEvent = this.#append(
+        {
+          schemaVersion: DOMAIN_SCHEMA_VERSION,
+          eventId: `event-${result.resultId}`,
+          missionId,
+          attemptId,
+          occurredAt: result.observedAt,
+          type: 'runtime.observation',
+          payload: {
+            kind: 'tool.gate.result',
+            data: result as unknown as JsonValue,
+          },
+        },
+        fence,
+      );
+      this.#append(
+        {
+          schemaVersion: DOMAIN_SCHEMA_VERSION,
+          eventId: `event-tool-effect-result-${result.resultId.slice('tool-result-'.length)}`,
+          missionId,
+          attemptId,
+          occurredAt: result.observedAt,
+          type: 'effect.status_changed',
+          payload: {
+            effectId: result.effectId,
+            status: result.outcome === 'succeeded' ? 'confirmed' : 'failed',
+            evidenceRefs: [`event:${resultEvent.eventId}`, `tool-result:${result.resultSha256}`],
+          },
+        },
+        fence,
+      );
+    }
   }
 
   async #detect(harness: SupportedHarnessV1): Promise<RuntimeDetection> {
@@ -1980,7 +2280,7 @@ function createProfile(
     definition,
     catalogObservation,
     effective,
-    adapterCapabilities: adapterCapabilities(stage.profile.harness),
+    adapterCapabilities: adapterCapabilities(stage),
   };
   const digest = hashPayload(snapshotConfiguration);
   return {
@@ -1994,12 +2294,12 @@ function createProfile(
     ...(detection.version === null ? {} : { runtimeVersion: detection.version }),
     injectionBudgetTokens: stage.profile.injectionBudgetTokens,
     permissionMode,
-    capabilities: resolvedProfileCapabilities(stage.profile.harness, permissionMode),
+    capabilities: resolvedProfileCapabilities(stage, permissionMode),
     configurationDigest: digest,
     definition,
     catalogObservation,
     effective,
-    adapterCapabilities: adapterCapabilities(stage.profile.harness),
+    adapterCapabilities: adapterCapabilities(stage),
     resolvedAt: detection.checkedAt,
   };
 }
@@ -2060,14 +2360,13 @@ function discoverSkillManifests(workspace: string, harness: SupportedHarnessV1):
   });
 }
 
-function adapterCapabilities(harness: SupportedHarnessV1): AdapterCapabilitiesV1 {
-  void harness;
+function adapterCapabilities(stage: AttemptStageSpecV1): AdapterCapabilitiesV1 {
   return {
     observe: 'native',
     contextCapture: 'unknown',
     steer: 'unsupported',
     interrupt: 'process-only',
-    preToolGate: 'unsupported',
+    preToolGate: stage.breakpoint === 'mutable-tools' ? 'native' : 'unsupported',
     resume: 'unsupported',
     nativeFork: 'unsupported',
     workspaceRestore: 'unsupported',
@@ -2075,10 +2374,8 @@ function adapterCapabilities(harness: SupportedHarnessV1): AdapterCapabilitiesV1
   };
 }
 
-function resolvedProfileCapabilities(
-  harness: SupportedHarnessV1,
-  permissionMode: string,
-): string[] {
+function resolvedProfileCapabilities(stage: AttemptStageSpecV1, permissionMode: string): string[] {
+  const harness = stage.profile.harness;
   const capabilities = ['workspace-read', 'command-execution'];
   const workspaceWrite =
     (harness === 'codex' &&
@@ -2087,6 +2384,7 @@ function resolvedProfileCapabilities(
       ['auto', 'bypass_permissions', 'accept_edits'].includes(permissionMode)) ||
     (harness === 'claude' && ['acceptEdits', 'auto', 'bypassPermissions'].includes(permissionMode));
   if (workspaceWrite) capabilities.push('workspace-write');
+  if (stage.breakpoint === 'mutable-tools') capabilities.push('pre-tool-gate:native');
   return capabilities;
 }
 
@@ -2208,7 +2506,9 @@ function reconstructExecutionState(events: readonly StoredEventV1[]): ExecutionS
     }
     if (event.type === 'effect.recorded') {
       const effect = event.payload.effect;
-      effectIdsByAttempt.set(effect.attemptId, effect.effectId);
+      if (effect.kind === 'workspace.stage_mutation') {
+        effectIdsByAttempt.set(effect.attemptId, effect.effectId);
+      }
       effects.set(effect.effectId, {
         effectId: effect.effectId,
         status: effect.status,
@@ -2273,6 +2573,44 @@ function reconstructExecutionState(events: readonly StoredEventV1[]): ExecutionS
     handoffIds,
     processByAttempt,
   };
+}
+
+function observationIds(
+  events: readonly StoredEventV1[],
+  kind: string,
+  field: string,
+): Set<string> {
+  return new Set(
+    events.flatMap((event) => {
+      if (event.type !== 'runtime.observation' || event.payload.kind !== kind) return [];
+      const data = isJsonObject(event.payload.data) ? event.payload.data : undefined;
+      const value = data?.[field];
+      return typeof value === 'string' ? [value] : [];
+    }),
+  );
+}
+
+function toolEffectScope(
+  toolName: string,
+): 'branch_local_workspace' | 'shared_resource' | 'mission_global_external' {
+  if (/^mcp__/i.test(toolName)) return 'mission_global_external';
+  if (/^(Write|Edit|NotebookEdit)$/i.test(toolName)) return 'branch_local_workspace';
+  return 'shared_resource';
+}
+
+async function waitForGatewayPoll(signal: AbortSignal, milliseconds: number): Promise<void> {
+  if (signal.aborted) return;
+  await new Promise<void>((resolveWait) => {
+    const timeout = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolveWait();
+    }, milliseconds);
+    const onAbort = (): void => {
+      clearTimeout(timeout);
+      resolveWait();
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
 }
 
 function checkpointIdentity(attemptId: string, delta: StageWorkspaceDeltaV1): string {

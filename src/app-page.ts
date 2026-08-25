@@ -321,6 +321,15 @@ export const APP_HTML = String.raw`<!doctype html>
                       <option value="max">max</option>
                     </select>
                   </label>
+                  <label class="tool-gate-toggle">
+                    <input id="claude-tool-gate" type="checkbox" />
+                    <span>
+                      <strong data-i18n="form.toolGateLabel">Pause mutable tools</strong>
+                      <small data-i18n="form.toolGateHint">
+                        Review Write, Edit, Bash, and MCP calls before Claude dispatches them.
+                      </small>
+                    </span>
+                  </label>
                 </section>
               </div>
             </details>
@@ -1833,6 +1842,97 @@ h3 {
   font-size: 0.72rem;
 }
 
+.tool-gate-toggle {
+  display: flex;
+  gap: 0.55rem;
+  align-items: start;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--line);
+  cursor: pointer;
+}
+
+.tool-gate-toggle input {
+  width: 1rem;
+  height: 1rem;
+  margin: 0.1rem 0 0;
+  padding: 0;
+}
+
+.tool-gate-toggle span {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.tool-gate-toggle strong {
+  font-size: 0.7rem;
+}
+
+.tool-gate-toggle small {
+  color: var(--muted);
+  font-size: 0.62rem;
+  line-height: 1.35;
+}
+
+.tool-gates {
+  padding: 15px;
+  border: 1px solid rgba(243, 107, 61, 0.45);
+  border-radius: 11px;
+  background: var(--wash-orange);
+}
+
+.tool-gates-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.tool-gate-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid rgba(243, 107, 61, 0.3);
+  border-radius: 9px;
+  background: var(--white);
+}
+
+.tool-gate-card textarea {
+  width: 100%;
+  min-height: 92px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 8px;
+  background: #f7f9fc;
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  line-height: 1.45;
+}
+
+.tool-gate-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.tool-gate-actions button {
+  padding: 7px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: var(--white);
+  font-size: 0.65rem;
+  font-weight: 750;
+}
+
+.tool-gate-actions .approve {
+  border-color: var(--teal);
+  color: var(--teal);
+}
+
+.tool-gate-actions .reject {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
 .route-thread-codex {
   color: #9cb3ff;
 }
@@ -2181,6 +2281,10 @@ const KIND_LABEL_KEYS = {
   'effect.status_changed': 'event.effect.status_changed',
   'runtime.process_started': 'event.runtime.process_started',
   'runtime.process_finished': 'event.runtime.process_finished',
+  'tool.gateway.armed': 'event.tool.gateway.armed',
+  'tool.gate.requested': 'event.tool.gate.requested',
+  'tool.gate.decided': 'event.tool.gate.decided',
+  'tool.gate.result': 'event.tool.gate.result',
   'runtime.event': 'event.runtime.event',
   'runtime.effective_profile_reported': 'event.runtime.effective_profile_reported',
   'command.accepted': 'event.command.accepted',
@@ -3497,6 +3601,97 @@ function timelineFromDetail(detail) {
   return [];
 }
 
+function renderToolGates(value, missionId) {
+  const gates = Array.isArray(value) ? value : [];
+  if (gates.length === 0) return null;
+  const section = createElement('section', 'tool-gates');
+  section.append(
+    createElement('p', 'eyebrow', t('toolGate.eyebrow')),
+    createElement('h3', '', t('toolGate.heading')),
+    createElement('p', 'profile-editor-note', t('toolGate.description')),
+  );
+  const list = createElement('div', 'tool-gates-list');
+  gates.forEach(function (gate) {
+    const card = createElement('article', 'tool-gate-card');
+    card.dataset.gateId = gate.gateId || '';
+    const title = createElement(
+      'strong',
+      '',
+      t('toolGate.requestTitle', { tool: gate.toolName || t('common.unknown') }),
+    );
+    const boundary = createElement(
+      'small',
+      '',
+      t('toolGate.boundary', {
+        scope: gate.scope || t('common.unknown'),
+        control: gate.controlLevel || t('common.unknown'),
+      }),
+    );
+    const editor = document.createElement('textarea');
+    editor.setAttribute('aria-label', t('toolGate.inputAria'));
+    editor.value = JSON.stringify(gate.toolInput || {}, null, 2);
+    const status = createElement('div', 'form-status', '');
+    const actions = createElement('div', 'tool-gate-actions');
+    const approve = createElement('button', 'approve', t('toolGate.approve'));
+    const modify = createElement('button', '', t('toolGate.applyEdited'));
+    const reject = createElement('button', 'reject', t('toolGate.reject'));
+    approve.dataset.toolGateDecision = 'approve';
+    modify.dataset.toolGateDecision = 'modify';
+    reject.dataset.toolGateDecision = 'reject';
+    [approve, modify, reject].forEach(function (button) {
+      button.type = 'button';
+    });
+    function setBusy(busy) {
+      [approve, modify, reject].forEach(function (button) {
+        button.disabled = busy;
+      });
+    }
+    async function decide(decision) {
+      setBusy(true);
+      status.textContent = t('toolGate.saving');
+      try {
+        let updatedInput;
+        if (decision === 'modify') {
+          updatedInput = JSON.parse(editor.value);
+          if (!updatedInput || typeof updatedInput !== 'object' || Array.isArray(updatedInput)) {
+            throw new Error(t('toolGate.invalidInput'));
+          }
+        }
+        await requestJson(
+          '/api/v1/missions/' +
+            encodeURIComponent(missionId) +
+            '/attempts/' +
+            encodeURIComponent(gate.attemptId) +
+            '/tool-gates/' +
+            encodeURIComponent(gate.gateId) +
+            '/decision',
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              expectedRequestSha256: gate.requestSha256,
+              decision: decision,
+              ...(updatedInput ? { updatedInput: updatedInput } : {}),
+            }),
+          },
+        );
+        status.textContent = t('toolGate.saved');
+        await loadDetail(missionId, { quiet: true });
+      } catch (error) {
+        status.textContent = error instanceof Error ? error.message : t('toolGate.failed');
+        setBusy(false);
+      }
+    }
+    approve.addEventListener('click', function () { void decide('approve'); });
+    modify.addEventListener('click', function () { void decide('modify'); });
+    reject.addEventListener('click', function () { void decide('reject'); });
+    actions.append(approve, modify, reject);
+    card.append(title, boundary, editor, actions, status);
+    list.append(card);
+  });
+  section.append(list);
+  return section;
+}
+
 function renderDetail() {
   if (!state.detail) {
     replaceWithMessage(elements.missionDetail, 'empty-note', t('mission.detailLoading'));
@@ -3636,8 +3831,10 @@ function renderDetail() {
   }
   const receipt = receiptFromDetail(detail, mission);
   if (receipt) timelineSection.append(renderReceipt(receipt));
+  content.append(hero);
+  const toolGates = renderToolGates(detail.toolGates, missionId);
+  if (toolGates) content.append(toolGates);
   content.append(
-    hero,
     renderRuntimeIntelligence(mission, timeline),
     renderContextGraph(detail.contextGraph),
     timelineSection,
@@ -3805,6 +4002,9 @@ function routeStages(route) {
     reasoningEffort: claudeReasoning,
     permissionMode: 'bypassPermissions',
     injectionBudgetTokens: 1600,
+    ...(elements.form.querySelector('#claude-tool-gate')?.checked
+      ? { breakpoint: 'mutable-tools' }
+      : {}),
   };
   if (route === 'codex') return [codex];
   if (route === 'qoder') {
@@ -3828,6 +4028,7 @@ function routeStages(route) {
         reasoningEffort: claude.reasoningEffort,
         permissionMode: claude.permissionMode,
         injectionBudgetTokens: claude.injectionBudgetTokens,
+        ...(claude.breakpoint ? { breakpoint: claude.breakpoint } : {}),
       },
     ];
   }

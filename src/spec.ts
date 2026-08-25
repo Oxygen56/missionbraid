@@ -36,6 +36,8 @@ export interface AttemptStageSpecV1 {
   readonly stageId: string;
   readonly profile: AttemptProfileSpecV1;
   readonly instruction: string;
+  /** Pause mutable Claude tools at the native PreToolUse boundary. */
+  readonly breakpoint?: 'mutable-tools';
   readonly onFailure: 'stop' | 'handoff';
 }
 
@@ -173,6 +175,15 @@ export function loadMissionSpec(
           ),
         },
         instruction: requireString(stage.instruction, `attemptPlan[${index}].instruction`),
+        ...(stage.breakpoint === undefined
+          ? {}
+          : {
+              breakpoint: requireBreakpoint(
+                stage.breakpoint,
+                harness,
+                `attemptPlan[${index}].breakpoint`,
+              ),
+            }),
         onFailure:
           stage.onFailure === undefined
             ? 'stop'
@@ -346,6 +357,15 @@ export function restoreMissionSpecSnapshot(
           stage.instruction,
           `snapshot.spec.attemptPlan[${index}].instruction`,
         ),
+        ...(stage.breakpoint === undefined
+          ? {}
+          : {
+              breakpoint: requireBreakpoint(
+                stage.breakpoint,
+                harness,
+                `snapshot.spec.attemptPlan[${index}].breakpoint`,
+              ),
+            }),
         onFailure: requireFailureDisposition(
           stage.onFailure,
           `snapshot.spec.attemptPlan[${index}].onFailure`,
@@ -380,6 +400,20 @@ export function restoreMissionSpecSnapshot(
   };
   assertNoCredentialMaterial(resolved, 'snapshot.spec');
   return { ...resolved, sourceFile: resolve(sourceFileProvenance) };
+}
+
+function requireBreakpoint(
+  value: unknown,
+  harness: SupportedHarnessV1,
+  path: string,
+): 'mutable-tools' {
+  if (value !== 'mutable-tools') {
+    throw new MissionSpecError(`${path} must be mutable-tools`);
+  }
+  if (harness !== 'claude') {
+    throw new MissionSpecError(`${path} currently requires the Claude native Hook adapter`);
+  }
+  return value;
 }
 
 function expandKnownVariables(
