@@ -244,7 +244,6 @@ function missionInput(workspace, plan) {
     constraints: [
       'Run node --test before changing agent-config.json and run it again afterward',
       'Change only agent-config.json',
-      `Credential-like redaction fixture: ${fakeCredential}`,
     ],
     verifier: { executable: 'node', args: ['verify.mjs'], timeoutMs: 30_000 },
     stages: [

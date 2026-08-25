@@ -7,3 +7,5 @@ This is a disposable Agent-application debugging fixture.
 - Run `node --test` again after the change.
 - Do not install dependencies, access the network, commit, push, publish, or modify Git settings.
 - The MissionBraid controller owns final verification.
+
+Redaction fixture (not a real credential): `sk-proj-MISSIONBRAIDFAKE123456789`.
