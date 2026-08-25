@@ -14,8 +14,9 @@ from becoming disconnected pages backed by the same passive log.
 Every iteration strengthens one flagship user journey:
 
 ```text
-Mission → native Runtime → live evidence → intervention
-→ executable Branch → cross-Harness continuation → verified outcome
+change Agent → bind effective Revision → run native Runtime → inspect
+→ revise / Branch when useful → evaluate → save regression → verify
+                              ↘ Handoff only when justified
 ```
 
 ## Shared completion rule
@@ -38,18 +39,18 @@ engineering outputs but cannot complete an iteration by themselves.
 
 ## Iteration overview
 
-| Iteration                                       | Product result                                                                           | Status                  |
-| ----------------------------------------------- | ---------------------------------------------------------------------------------------- | ----------------------- |
-| 1. Mission continuity foundation                | One Mission survives process and Harness changes and closes with a Receipt               | Implemented local slice |
-| 2. Runtime intelligence and Event IR            | Effective Profiles and native events share one typed Runtime model                       | Validated local slice   |
-| 3. Live flight recorder and Context Graph       | Developers see context, tools, files, tests, cost, and subagents while work runs         | Planned                 |
-| 4. Tool gateway and live debugger               | A real mutable tool can be stopped before dispatch and changed or rejected               | Planned                 |
-| 5. Composite checkpoints, Fork, and Replay      | A failure scene becomes an isolated executable alternative Branch                        | Planned                 |
-| 6. Adaptive planning and cross-Harness handoff  | A failed Runtime is replaced without manual Profile choice or context copying            | Planned                 |
-| 7. Failure intelligence and diagnostic Branches | Evidence and single-variable probes distinguish likely failure layers                    | Planned                 |
-| 8. Multi-agent Mission Graph and live revisions | Parallel Agents stay attached to one changing Mission and stale work is invalidated      | Planned                 |
-| 9. Outcome, Eval, and Incident Studio           | Branches and Runtime versions are compared against one Contract and saved as regressions | Planned                 |
-| 10. Open Runtime Workbench 1.0                  | External developers install, extend, and reproduce the complete workflow                 | Planned                 |
+| Iteration                                       | Product result                                                                            | Status                  |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------- | ----------------------- |
+| 1. Mission continuity foundation                | One Mission survives process and Harness changes and closes with a Receipt                | Implemented local slice |
+| 2. Runtime intelligence and Event IR            | Effective Profiles and native events share one typed Runtime model                        | Validated local slice   |
+| 3. Live flight recorder and Context Graph       | Developers see context, tools, files, tests, cost, and subagents while work runs          | Planned                 |
+| 4. Tool gateway and live debugger               | A real mutable tool can be stopped before dispatch and changed or rejected                | Planned                 |
+| 5. Composite checkpoints, Fork, and Replay      | A retained execution boundary becomes an isolated executable comparison Branch            | Planned                 |
+| 6. Adaptive planning and cross-Harness handoff  | Profiles are selected explainably and Handoff occurs only when a Runtime change is needed | Planned                 |
+| 7. Failure intelligence and diagnostic Branches | Evidence and single-variable probes distinguish likely failure layers                     | Planned                 |
+| 8. Multi-agent Mission Graph and live revisions | Parallel Agents stay attached to one changing Mission and stale work is invalidated       | Planned                 |
+| 9. Outcome, Eval, and Incident Studio           | Agent Revisions are compared, saved as regressions, and optionally exported to CI         | Planned                 |
+| 10. Open Runtime Workbench 1.0                  | External developers install, extend, and reproduce the complete workflow                  | Planned                 |
 
 ## Iteration 1 — Mission continuity foundation
 
@@ -225,9 +226,10 @@ tool, or shows an approval dialog that is not on the execution path.
 
 ### User-visible result
 
-The developer opens a historical failure scene, changes one observable
-condition, and creates an isolated Branch that really continues while the
-original Branch remains unchanged.
+The developer opens a retained execution boundary, changes one observable
+Agent behavior input, and creates an isolated Branch that really continues
+while the original Branch remains unchanged. A failure is one useful source of
+such a boundary, not a prerequisite for Branching.
 
 ### Included
 
@@ -245,8 +247,9 @@ original Branch remains unchanged.
 
 ### Done when
 
-- Branch A preserves or reproduces the original failure;
-- Branch B changes one declared variable and performs real subsequent tool work;
+- Branch A preserves the original behavior and evidence boundary;
+- Branch B changes one declared variable and performs real subsequent tool
+  work;
 - both have independent future events, workspace-local Effects, and Receipts,
   while each references the inherited external Effect frontier;
 - a descendant Branch cannot blindly repeat the confirmed external Effect from
@@ -265,10 +268,11 @@ calling it continuation.
 
 ### User-visible result
 
-When the current Runtime becomes unavailable or no longer fits the Mission,
-MissionBraid selects an eligible Profile, explains the decision, compiles a
-compatibility report and Handoff Capsule, and continues without manual context
-copying.
+The current Runtime remains the default. When it becomes unavailable, lacks a
+required capability, no longer fits the Mission, or the developer deliberately
+chooses another Runtime, MissionBraid selects or validates an eligible Profile,
+explains the decision, compiles a compatibility report and Handoff Capsule, and
+continues without manual context copying.
 
 ### Included
 
@@ -286,7 +290,8 @@ copying.
 
 ### Done when
 
-- a real Runtime or Profile becomes unavailable after meaningful work;
+- a real Runtime or Profile becomes unavailable or demonstrably ineligible
+  after meaningful work;
 - the user does not choose the replacement or copy context;
 - MissionBraid records why Profiles were filtered and ranked;
 - another native Harness continues from the same Mission frontier and the
@@ -378,9 +383,10 @@ restarts the complete Mission after every requirement change.
 
 ### User-visible result
 
-The developer compares Branches and Runtime versions against one Contract,
-promotes a verified result, and saves the resolved failure as a repeatable
-regression scenario.
+The developer compares Agent Revisions and Branches against one Contract,
+selects a verified result, and saves useful behavior or a resolved failure as a
+repeatable regression scenario. The result can be exported to CI without
+turning MissionBraid into a deployment or approval platform.
 
 ### Included
 
@@ -390,23 +396,31 @@ regression scenario.
 - strict separation of agent-reported, verified, and accepted completion;
 - incident scenario packaging with redacted Checkpoint, Intervention, Profile,
   and expected evidence;
-- model, Prompt, Skill, MCP, tool, and Harness regression matrices;
+- content-addressed Agent Revision views over model, Prompt, Skill, MCP/tool,
+  context/memory, orchestration, permission, Harness, Adapter, and environment
+  evidence;
+- model, Prompt, Skill, MCP, tool, memory, and Harness regression matrices;
 - deterministic-control and stochastic-model result separation;
-- versioned Outcome Receipt and scenario export.
+- repeated trials and predeclared thresholds for stochastic behavior;
+- versioned Outcome Receipt, scenario export, and a machine-readable CI result.
 
 ### Done when
 
-- a failed and a repaired real Branch are compared under the same Contract;
+- an original and revised real Branch are compared under the same Contract and
+  exact controlling evaluation artifacts;
 - a false Agent success cannot issue a verified Receipt;
 - the selected Branch has criterion-level evidence and unresolved items remain
   visible;
 - the incident can be rerun against an upgraded Runtime Profile and identifies
-  whether the failure returned.
+  whether the behavior or failure returned;
+- an external CI runner can enforce the retained result without MissionBraid
+  owning deployment, organizational approval, or artifact publication.
 
 ### Not done when
 
 A model-as-judge alone selects the winner, public tests are the only verifier,
-or one aggregate score hides criterion, Effect, and uncertainty differences.
+one aggregate score hides criterion, Effect, and uncertainty differences, or
+the iteration expands into a generic release-governance platform.
 
 ## Iteration 10 — Open Runtime Workbench 1.0
 
@@ -425,10 +439,10 @@ Workbench evidence matrix.
   when its public lifecycle can satisfy the contract;
 - documentation and examples for direct, ACP, and provider-backed adapters;
 - at least one externally implemented or independently maintained Adapter;
-- one evolving flagship Mission and its incident revisions covering live
-  observation, pre-tool control, executable Fork, deterministic replan and
-  Handoff, failure attribution, Effect reconciliation, multi-Agent requirement
-  revision, regression rerun, and verification;
+- one evolving flagship Agent-development Mission and its Revisions covering
+  live observation, pre-tool control, executable Fork, conditional deterministic
+  replan/Handoff, failure attribution, Effect reconciliation, multi-Agent
+  requirement revision, regression rerun, and verification;
 - release notes whose capability claims point to reproducible evidence.
 
 ### Done when
@@ -459,7 +473,7 @@ Runtime semantics
 → live evidence
 → real control
 → executable state branches
-→ adaptive cross-Harness execution
+→ adaptive Runtime execution and conditional Handoff
 → credible attribution
 → multi-agent goal evolution
 → evaluation and regression
@@ -470,6 +484,11 @@ The planner is not built immediately because choosing between shallow,
 hard-coded Profiles would demonstrate a scheduler rather than Agent Runtime
 understanding. The product first learns what each Runtime can actually expose
 and control.
+
+CI export is delayed until the Workbench can bind an effective Agent Revision,
+real execution evidence, independent outcome criteria, and stochastic trial
+semantics. This keeps CI as an output of Agent development rather than a second
+product center.
 
 ## Existing evidence gates
 
@@ -489,6 +508,8 @@ meaning of E0 or E1.
 - A capability is documented as target, implemented, real-runtime validated,
   independently reproduced, or production adopted.
 - Tagged releases name only capabilities with evidence at the stated level.
+- Release evidence may be exported to CI, but MissionBraid 1.0 does not own
+  deployment, organizational approval, artifact signing, or general CD.
 - A new Adapter must add a real protocol, control, or user capability; another
   inventory card alone is not a milestone.
 - The same flagship Mission evolves across iterations so the final product is a

@@ -1,39 +1,64 @@
 # MissionBraid Product Requirements
 
-> **Document status:** accepted target PRD for the Agent Runtime Workbench.
-> Requirements describe the intended product. The
+> **Document status:** accepted target PRD and product boundary for the Agent
+> Runtime Workbench. Requirements describe the intended product. The
 > [current capability table](#current-product-baseline) and linked evidence
 > distinguish implemented behavior from target behavior.
 
 ## Product summary
 
-MissionBraid gives Agent developers one local Workbench for native coding-agent
-Runtimes:
+MissionBraid gives Agent developers one local Workbench for building and
+improving applications that run through native coding-agent Runtimes:
 
 ```text
-discover → configure → execute → observe → debug
-→ checkpoint → fork/replay → hand off → compare → verify
+compose → run → inspect → revise → re-run → evaluate → verify
+                         ↘ checkpoint / fork / handoff when needed
 ```
 
-The product answers a practical development problem: when an Agent behaves
-incorrectly, the developer should not have to reconstruct fragmented logs,
-restart a long task from the beginning, manually copy context into another
-Harness, or trust the Agent's own statement that the task is complete.
+The product answers a practical development problem: changing a model, Prompt,
+Skill, tool, context policy, permission, or Runtime can change an Agent's
+behavior in ways that ordinary source diffs do not explain. The developer
+should be able to see the effective Agent, run a real task, understand the
+observable decisions and effects, revise one execution condition, continue
+from a useful boundary, and judge the result against the same outcome.
+
+### Product boundary
+
+MissionBraid remains a **Mission-centric Agent Runtime Workbench**. Its primary
+product loop is Agent application development: compose, execute, observe,
+debug, revise, and evaluate. The following capabilities support that loop but
+do not replace it:
+
+- durable Mission state and long-running execution;
+- checkpoint, Branch, Replay, and failure reconstruction;
+- cross-Harness Handoff and adaptive Runtime selection;
+- regression scenarios, CI export, and release evidence;
+- multi-Agent coordination and Outcome Receipts.
+
+MissionBraid is not repositioned as a generic CI/CD system, an enterprise
+approval product, or a Harness switcher. Continuing in the same Harness is the
+normal path. Handoff is used when the current Runtime is unavailable, lacks a
+required capability, or a deliberate comparison justifies the change. CI is a
+consumer of retained scenarios and evidence, not the product's central user
+experience.
 
 ## Product purpose
 
 ### User outcome
 
-An Agent developer can turn an abnormal or failed native coding-agent run into
-a verified execution branch while preserving the original Mission, evidence,
-workspace history, and external-effect state.
+An Agent developer can change an Agent application, run it on a real Mission,
+inspect why it behaved as it did, revise it from a preserved execution
+boundary, and decide whether the new behavior is better using Branch-bound
+outcome evidence. A failure is one useful entry point, not a prerequisite for
+using the Workbench.
 
 ### Project outcome
 
-The repository should demonstrate real engineering depth across Agent Runtime
-integration, context engineering, tool calling, long-running state, multi-agent
-coordination, non-deterministic replay, cross-Harness handoff, failure
-attribution, evaluation, and the model/program boundary.
+The repository should demonstrate real engineering depth across Agent
+application composition, Runtime integration, context engineering, tool
+calling, memory, long-running state, multi-agent coordination,
+non-deterministic replay, cross-Harness handoff, failure attribution,
+evaluation, and the model/program boundary.
 
 ### Empty victories
 
@@ -55,8 +80,8 @@ continuable, and independently verifiable Agent run.
 ### Primary user: Agent application developer
 
 Builds and iterates on prompts, Skills, MCP tools, context policies, models, and
-Agent workflows. Needs to understand behavior changes and fix failures without
-rerunning an entire task.
+Agent workflows. Needs to understand behavior changes, compare revisions, and
+fix failures without rerunning an entire task.
 
 ### Primary user: Agent Runtime or platform engineer
 
@@ -72,27 +97,59 @@ the same task, state boundary, and outcome contract.
 Ordinary end users may benefit from the Workbench, but developer workflows take
 priority when product requirements conflict.
 
+## Agent Revision boundary
+
+MissionBraid identifies the effective behavior of an Agent application as an
+**Agent Revision**. This is a content-addressed view composed from existing
+Profile Snapshot, Attempt Binding, policy, Adapter, and environment evidence;
+it is not a second control-state machine beside the Mission. A Revision
+references the immutable inputs that can change how the same Mission is
+executed:
+
+- model, provider, reasoning, and exposed generation configuration;
+- system, developer, user, organization, and project instructions;
+- Skills and their resources;
+- MCP servers, tool schemas, tool implementations, and tool descriptions;
+- context, retrieval, memory, and compaction policies;
+- planner, retry, Handoff, session, and other orchestration behavior;
+- permissions, guardrails, Effect policy, and authority ceiling;
+- Runtime, Adapter, execution-provider, dependency, and environment identity.
+
+Authorship does not define the boundary. Code written by an Agent for an
+unrelated application is ordinary project output and remains subject to that
+project's normal tests. It becomes part of an Agent Revision only when it
+changes the Agent application or its effective execution environment.
+
+Evaluation suites, verifier implementations, baselines, thresholds, and
+qualification policies are **control artifacts**, not part of the candidate Agent
+Revision. They are versioned and reviewed separately. Changing either the
+Revision or a controlling artifact invalidates the previous qualification for
+that pair and requires the relevant checks to run again. An Agent or model may
+suggest a fix or explain evidence, but it cannot approve its own Revision.
+
 ## User problems
 
 1. Native coding agents expose incompatible sessions, events, tools,
    permissions, models, and configuration.
-2. Logs rarely show one coherent view of the effective context, tool request,
+2. A source diff does not reveal the complete effective Agent Revision that ran
+   a task or explain why its behavior changed.
+3. Logs rarely show one coherent view of the effective context, tool request,
    workspace change, and subsequent test result.
-3. A developer often notices an error only after a tool has already created a
+4. A developer often notices an error only after a tool has already created a
    side effect.
-4. Long tasks are expensive to rerun and non-deterministic enough that the
-   failure may disappear.
-5. Changing a prompt, model, tool result, or permission usually loses the
-   original execution boundary needed for a fair comparison.
-6. Existing replay terminology often mixes playback, cached responses, model
+5. Long tasks are expensive to rerun and non-deterministic enough that an
+   observed behavior may disappear or change on the next attempt.
+6. Changing a Prompt, model, Skill, tool result, memory policy, or permission
+   usually loses the original execution boundary needed for a fair comparison.
+7. Existing replay terminology often mixes playback, cached responses, model
    resampling, and real execution.
-7. Moving a task to another Harness requires manual context reconstruction and
+8. Moving a task to another Harness requires manual context reconstruction and
    can repeat already completed work or external actions.
-8. A failure may belong to the model, context, tool, Harness, environment, or
+9. A failure may belong to the model, context, tool, Harness, environment, or
    orchestration layer, but evidence is spread across those boundaries.
-9. Multiple Agents and requirement revisions can leave active workers pursuing
-   stale or conflicting goals.
-10. An Agent's completion message is not independent proof that the user's
+10. Multiple Agents and requirement revisions can leave active workers
+    pursuing stale or conflicting goals.
+11. An Agent's completion message is not independent proof that the user's
     outcome was achieved.
 
 ## Product principles
@@ -111,26 +168,38 @@ priority when product requirements conflict.
    authority, durable state, budgets, side effects, and acceptance.
 10. Every major capability must eventually appear in one end-to-end flagship
     Mission rather than a disconnected demo.
+11. Same-Harness iteration is the default. Runtime switching and automatic
+    routing must solve a recorded need rather than manufacture activity.
+12. Evaluation evidence is created inside the development loop. CI may enforce
+    a versioned result, but MissionBraid does not become a general deployment
+    or organizational approval system.
 
 ## Primary user journey
 
-1. Open the Workbench and inspect available Runtime Profiles.
+1. Open the Workbench and inspect the effective Agent Revision and available
+   Runtime Profiles for a project.
 2. Create a Mission with an objective, constraints, workspace, authority, and
    Outcome Contract.
-3. Select a Profile manually or accept a recorded planner decision.
-4. Run the Mission and watch a live, normalized view of model, context, tool,
+3. Select a Profile manually or accept a recorded planner decision. The normal
+   path keeps using that Profile until evidence justifies a change.
+4. Run the Mission and inspect a live, normalized view of model, context, tool,
    workspace, subagent, cost, and verification events.
-5. Let the Agent continue normally until a breakpoint, anomaly, failure, or
-   manual pause.
-6. Open the failure scene: effective Profile, visible Context Graph, pending or
-   completed tools, workspace, Effect state, and evidence graph.
-7. Resume unchanged, modify supported state, or create an isolated Branch.
-8. Continue the Branch in the same Harness or compile a Handoff Capsule for
-   another Harness.
-9. Compare original and alternative Branches by behavior, state, cost, Effects,
-   and Outcome Contract results.
-10. Promote a verified Branch, keep unresolved evidence visible, and save the
-    incident as a regression scenario.
+5. Review normal behavior, a breakpoint, an anomaly, a failed criterion, or a
+   deliberate Revision change without waiting for a catastrophic failure.
+6. Open the execution scene: effective Revision and Profile, visible Context
+   Graph, pending or completed tools, workspace, Effect state, and evidence
+   graph.
+7. Change a supported Prompt, Skill, tool, context or memory policy, model,
+   permission, or orchestration input, then resume or create an isolated
+   Branch from an explicit Checkpoint.
+8. Continue in the same Harness by default. Compile a Handoff Capsule only when
+   another Runtime is required or deliberately selected.
+9. Compare the original and revised Branches by behavior, state, cost, Effects,
+   and Outcome Contract results, using repeated trials where stochastic
+   behavior requires them.
+10. Select a verified Branch, keep unresolved evidence visible, save useful
+    behavior as a versioned regression scenario, and optionally export its
+    machine-readable result to an external CI system.
 
 ## Functional requirements
 
@@ -157,6 +226,11 @@ Acceptance:
 
 - a developer can inspect and diff Profile snapshots without reading native
   configuration files;
+- the Workbench computes an Agent Revision identity from behavior-affecting
+  Profile, instruction, Skill, tool, context/memory, permission, orchestration,
+  Adapter, and environment evidence, while preserving unknown fields;
+- a Revision diff explains which effective behavior inputs changed without
+  claiming that a source diff predicts the resulting model behavior;
 - an Attempt records the exact immutable Profile snapshot it used;
 - changing quota or workspace state does not silently change a saved Profile's
   identity;
@@ -296,7 +370,8 @@ Acceptance:
 ### PR-8 — Cross-Harness Handoff
 
 The product must let a Branch continue on another native Runtime without manual
-context copying.
+context copying when a Runtime change is justified. It is a conditional
+continuation path, not a required step in an ordinary Agent development loop.
 
 Acceptance:
 
@@ -309,6 +384,8 @@ Acceptance:
   records its native source order relative to the first observed tool request;
   only an enforced Adapter gate may claim that mutation was prevented;
 - the original Branch remains inspectable;
+- same-Harness continuation remains the default and never requires a synthetic
+  Handoff or duplicate run;
 - the product describes this as semantic continuation, not hidden-state or
   process migration.
 
@@ -335,6 +412,8 @@ Acceptance:
 
 - Branches can be compared by trajectory, context, tools, files, tests, model
   usage, cost, time, Effects, failures, and criterion results;
+- comparisons bind each Branch to its exact Agent Revision and controlling
+  evaluation artifacts;
 - every required Contract criterion ends in passed, failed, or unknown;
 - terminal evaluation issues a Receipt for both successful and unsuccessful
   outcomes; failed or unknown required criteria remain visible in a rejected
@@ -368,20 +447,30 @@ Acceptance:
 - failure, quota change, or Mission revision can trigger a recorded replan;
 - a manual override remains possible and becomes part of the event history.
 
-### PR-12 — Incident library and regression studio
+### PR-12 — Agent Revision, incident, and regression studio
 
-The product must turn a resolved failure into reusable Agent engineering
-knowledge.
+The product must turn a meaningful Agent Revision or resolved failure into
+reusable Agent engineering knowledge.
 
 Acceptance:
 
 - a developer can save a redacted Checkpoint, intervention, Contract, and
   expected evidence as a versioned incident scenario;
 - scenarios can run against selected model, Prompt, Skill, MCP, tool, and
-  Harness versions;
+  context/memory, orchestration, permission, Harness, Adapter, and environment
+  versions;
 - comparisons preserve the difference between deterministic control tests and
   stochastic model behavior;
-- a regression result links back to the exact Profile and scenario revision.
+- deterministic gates cover structure, dependency, authority, Effect,
+  executable, and independently verifiable outcome invariants;
+- stochastic behavior checks use explicit scenario revisions, repeated trials,
+  retained outputs, and predeclared thresholds rather than output equality;
+- an LLM grader is evidence with a named rubric and calibration boundary, not
+  the sole authority for qualification;
+- a regression result links back to the exact Profile and scenario revision;
+- a machine-readable scenario result can be consumed by an external CI runner;
+  MissionBraid does not implement general deployment, organization approval,
+  artifact signing, or release governance.
 
 ### PR-13 — Adapter SDK and execution providers
 
@@ -417,6 +506,28 @@ Acceptance:
   reconciliation, Mission revision, incident regression, and verification;
 - internal clean-host reproduction remains a lower evidence level and cannot be
   presented as independent external reproduction.
+
+## Ten-iteration requirement mapping
+
+The accepted delivery order remains ten product iterations. The sequence is
+unchanged; this PRD clarifies the role each iteration plays in the Agent
+development loop.
+
+| Iteration | User result                                                                         | Product role                          |
+| --------: | ----------------------------------------------------------------------------------- | ------------------------------------- |
+|         1 | Mission, Contract, execution evidence, and Receipt survive interruption             | Durable development-loop foundation   |
+|         2 | Effective Profiles and native events expose what Agent actually ran                 | Reproducible Revision foundation      |
+|         3 | Context, tools, files, tests, usage, and subagents are visible live                 | Daily observation                     |
+|         4 | Supported mutable actions can be inspected and controlled before dispatch           | Daily debugging                       |
+|         5 | A retained boundary becomes an isolated executable comparison Branch                | Revision and repair experiments       |
+|         6 | Profiles are selected explainably and Handoff occurs only when justified            | Runtime selection and fallback        |
+|         7 | Evidence and diagnostic Branches distinguish likely failure layers                  | Behavior diagnosis                    |
+|         8 | Multiple Agents and live requirement revisions remain one durable Mission           | Complex Agent application development |
+|         9 | Agent Revisions are compared, evaluated, saved as regressions, and exportable to CI | Continuous improvement                |
+|        10 | External developers install, extend, and reproduce the complete Workbench           | Open product form                     |
+
+The detailed completion evidence and non-completion conditions remain in the
+[roadmap](roadmap.md).
 
 ## Non-functional requirements
 
@@ -468,18 +579,26 @@ unobservable provider state, or already-realized external-world effects.
 
 Primary measures:
 
-- time from detected anomaly to a verified replacement Branch;
-- proportion of recoveries that avoid a complete Mission rerun;
-- first correct action after resume or cross-Harness handoff;
-- number of confirmed or ambiguous Effects repeated automatically;
-- proportion of failure conclusions with explicit evidence and calibrated
-  uncertainty;
-- successful independent replay of Outcome Receipt evidence.
+- elapsed time from an Agent behavior change to an independently verified
+  improvement on a real Mission;
+- proportion of Attempts bound to an inspectable effective Agent Revision;
+- proportion of useful comparisons that reuse a retained execution boundary
+  instead of rerunning the complete Mission;
+- proportion of resolved behavior problems saved as versioned regression
+  scenarios;
+- rate at which independent verification catches a false Agent completion or a
+  Revision regression before selection.
 
 Supporting measures:
 
+- time from a detected anomaly to a verified replacement Branch;
+- proportion of failure conclusions with explicit evidence and calibrated
+  uncertainty;
+- first correct action and manually copied context after a justified
+  cross-Harness Handoff;
+- number of confirmed or ambiguous Effects repeated automatically;
+- successful independent replay of Outcome Receipt evidence;
 - live-event latency and dropped-event rate;
-- context transferred manually by the developer;
 - Runtime cost and latency by Branch;
 - Adapter capability coverage and conformance results.
 

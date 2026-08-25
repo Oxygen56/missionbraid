@@ -16,42 +16,69 @@
 ## Product definition
 
 MissionBraid is a local-first **Agent Runtime Workbench** for developers who
-build with native coding agents. It treats Codex, Qoder, Claude Code, OpenCode,
-Hermes, and future Harnesses as replaceable execution runtimes behind one
-Mission lifecycle:
+build and improve applications with native coding agents. It treats Codex,
+Qoder, Claude Code, OpenCode, Hermes, and future Harnesses as execution
+Runtimes behind one Mission lifecycle:
 
 ```text
-configure → plan → run → observe → debug → fork → hand off → compare → verify
+compose → run → inspect → revise → re-run → evaluate → verify
+                         ↘ checkpoint / fork / handoff when needed
 ```
 
 The product is deliberately broader than an agent launcher, trace viewer, or
 workflow engine. It combines runtime discovery, long-running Mission state,
 context and tool observability, live intervention, time travel, multi-Harness
 continuation, failure intelligence, and outcome verification in one coherent
-developer workflow.
+developer workflow. Its primary path is everyday Agent application iteration;
+continuity, Branching, Handoff, routing, and CI export support that path.
 
 The central invariant remains:
 
 > **The Mission outlives every Runtime, session, and execution branch.**
 
+### Product boundary
+
+The architecture preserves three different concerns without turning them into
+three competing products:
+
+- **core development loop:** compose the effective Agent, execute a real
+  Mission, inspect context and tools, revise behavior inputs, and evaluate the
+  result;
+- **runtime continuity:** checkpoint, resume, Branch, Replay, Handoff, and
+  multi-Agent coordination preserve useful execution state;
+- **continuous verification:** incident scenarios, Revision comparison,
+  Outcome Receipts, and optional CI export retain evidence from the development
+  loop.
+
+MissionBraid is not a general CI/CD, deployment, organizational approval, or
+release-governance platform. The same Harness normally continues the Mission.
+A Runtime switch is conditional on availability, capability, deliberate
+comparison, or explicit user choice.
+
 ## Primary user loop
 
-1. The developer creates a Mission with an objective, constraints, workspace,
+1. The developer opens a project and inspects the effective Agent Revision:
+   model, instructions, Skills, tools, context/memory policy, permissions,
+   orchestration, Runtime, and environment evidence.
+2. The developer creates a Mission with an objective, constraints, workspace,
    and Outcome Contract.
-2. MissionBraid snapshots the effective Runtime Profiles available on the
-   machine and either records the developer's choice or plans an execution.
-3. A native Harness executes an Attempt while MissionBraid persists sanitized
+3. MissionBraid snapshots available Runtime Profiles and either records the
+   developer's choice or plans an execution. The selected Profile remains the
+   default for subsequent Attempts.
+4. A native Harness executes while MissionBraid persists sanitized
    native-format and normalized model, context, tool, workspace, and lifecycle
    events before projecting them live.
-4. The developer normally stays hands-off. A breakpoint or anomaly can pause
-   execution at an observable safe point.
-5. The developer inspects the exact visible context and state, changes one or
-   more execution conditions, and resumes or creates an isolated branch.
-6. A branch may continue in the same Harness or receive a Handoff Capsule and
-   continue in another Harness.
-7. MissionBraid compares branches, attributes failures within the available
-   evidence boundary, evaluates the immutable Contract revision bound to the
-   selected Branch, and issues an Outcome Receipt.
+5. The developer inspects normal behavior, a deliberate Revision change, an
+   anomaly, or a failed criterion. A supported breakpoint can pause execution
+   at an observable safe point.
+6. The developer changes one or more supported behavior inputs and continues
+   from the current head or creates an isolated Branch from a Checkpoint.
+7. The Branch continues in the same Harness by default. A Handoff Capsule is
+   compiled only when another Runtime is justified.
+8. MissionBraid compares Agent Revisions and Branches, attributes failures
+   within the available evidence boundary, evaluates the immutable Contract
+   revision, issues an Outcome Receipt, and can save the case as a regression
+   scenario for later local or CI execution.
 
 ```mermaid
 sequenceDiagram
@@ -85,7 +112,7 @@ sequenceDiagram
     H->>G: Propose mutable tool call
     G->>S: Persist intent, Effect and breakpoint state
     S-->>W: Show pending controlled action
-    D->>W: Inspect, edit, fork or switch Runtime
+    D->>W: Inspect, revise, resume or fork
     W->>K: Submit intervention command
     K->>O: Commit command and expected Mission head
     O->>C: Dispatch approved control
@@ -227,8 +254,13 @@ machines. The Workbench contains seven connected views:
 - **Debug Console:** breakpoints, pending tool calls, context and state
   inspection, interventions, pause, resume, and steer;
 - **Time Travel:** checkpoints, replay modes, forks, and portability reports;
-- **Branch Compare:** trajectory, workspace, cost, failure, and verifier diffs;
+- **Branch and Revision Compare:** effective Agent inputs, trajectory,
+  workspace, cost, failure, and verifier diffs;
 - **Outcome View:** criterion results, unresolved Effects, and Receipt.
+
+The Incident and Regression surface extends comparison and outcome evidence.
+It can export a scenario result to CI, but it does not own deployment or
+organizational approval.
 
 The UI is a projection of authoritative Kernel and evidence state. Refreshing or
 restarting it must not alter execution truth.
@@ -346,6 +378,32 @@ snapshot declares fidelity for:
 observe | context_capture | steer | interrupt | pre_tool_gate
 resume | native_fork | workspace_restore | external_effect_control
 ```
+
+### Agent Revision
+
+An Agent Revision is a content-addressed view of the behavior-affecting inputs
+that actually governed an Attempt:
+
+```text
+model/provider/reasoning
++ instructions and Skills
++ MCP/tools and their implementations
++ context, retrieval, memory and compaction policy
++ planner, retry, session and Handoff behavior
++ permissions, guardrails and Effect policy
++ Runtime, Adapter, provider, dependency and environment identity
+```
+
+It is composed from the Profile Snapshot, Attempt Binding, referenced content,
+policy versions, Adapter evidence, and environment observations. It is not a
+new authority or state machine beside the Mission. Unknown inputs remain
+unknown and are included in the Revision's fidelity record.
+
+Evaluation suites, verifiers, baselines, thresholds, and qualification policies
+are independent control artifacts. They are versioned separately so a
+candidate Revision cannot modify its own judge without invalidating the prior
+qualification. Ordinary project code authored by an Agent is not an Agent
+Revision unless that code implements or configures the Agent application.
 
 ### Attempt and Branch
 
@@ -577,6 +635,31 @@ presented as restoration of a complete native Runtime. Ordinary resume or
 Handoff from the current Branch head can add an Attempt to that Branch; replay
 from a historical point or with changed inputs cannot.
 
+## Revision and evaluation path
+
+Agent behavior and release authority use separate evidence paths:
+
+```text
+Agent Revision + Mission scenario + Outcome Contract
+→ deterministic checks and real Runtime trials
+→ retained criterion, trajectory and Effect evidence
+→ versioned comparison and Outcome Receipt
+→ optional machine-readable CI result
+```
+
+Deterministic checks own structural validity, dependencies, permissions,
+Effect invariants, executable tests, and objective environment outcomes. Model
+behavior remains stochastic, so behavior evaluation uses repeated trials and
+predeclared thresholds where one run is insufficient. Model-based graders can
+assess open-ended qualities, but their rubric, version, outputs, and human
+calibration boundary remain visible.
+
+The same immutable evidence and evaluation policy must produce the same
+qualification conclusion. Re-running a stochastic Agent may produce different
+evidence and therefore a different conclusion; MissionBraid does not disguise
+that as deterministic model behavior. External CI consumes this result. It
+does not become a second Mission authority or a deployment controller.
+
 ## Planner and adaptive execution
 
 Planning follows `extract → filter → rank → bind → observe → adapt`:
@@ -620,6 +703,7 @@ original revision and its branches remain inspectable.
 | Local Workbench              | Implemented, including persisted English/Chinese switching               | Full Runtime, trace, debug, branch and outcome views |
 | Branch                       | Default root Branch; no Fork semantics or UI                             | Isolated executable lineage and comparison           |
 | Runtime Profiles             | Definition, Catalog Observation, immutable Snapshot, and Attempt Binding | Effective environment and capability graph           |
+| Agent Revision               | Profile components exist; no unified Revision identity or diff           | Content-addressed effective behavior view            |
 | Execution                    | Direct Codex/Qoder/Claude Code Adapters                                  | Direct, ACP, and provider-backed adapters            |
 | Commands                     | Durable accepted command/outbox dispatch with restart recovery           | Durable path for every control operation             |
 | Events                       | Source-scoped Event IR plus sanitized content-addressed native artifacts | Live Agent Event IR with richer semantic coverage    |
@@ -630,7 +714,7 @@ original revision and its branches remain inspectable.
 | Handoff                      | Codex-to-Qoder Capsule                                                   | Debug-aware cross-Harness continuation               |
 | Failure attribution          | Bounded classifications                                                  | Evidence graph and discriminating probes             |
 | Planner                      | User-selected route                                                      | Capability, quota and outcome-aware planning         |
-| Verification                 | Command verifier and Receipt                                             | Branch comparison, extensible evaluators and Receipt |
+| Verification                 | Command verifier and Receipt                                             | Revision/Branch comparison, regression and CI export |
 
 The strongest current evidence is the
 [same-host Codex/Qoder/Claude Workbench record](../evidence/iteration-2-three-harness-local-2026-08-25.json).

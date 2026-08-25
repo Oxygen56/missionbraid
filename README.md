@@ -2,16 +2,21 @@
 
 **English** | [简体中文](README.zh-CN.md)
 
-**One Mission. Multiple Runtimes. Debuggable execution.**
+**One Mission. Native Runtimes. Inspectable Agent behavior.**
 
 MissionBraid is a local-first **Agent Runtime Workbench** for developers who
-build with native coding agents. It is designed to make Codex, Qoder, Claude
-Code, OpenCode, Hermes, and future Harnesses replaceable execution runtimes
-behind one durable Mission:
+build and improve applications with native coding agents. It gives Codex,
+Qoder, Claude Code, OpenCode, Hermes, and future Harnesses one durable Mission
+and one development loop:
 
 ```text
-configure → plan → run → observe → debug → fork → hand off → compare → verify
+compose → run → inspect → revise → re-run → evaluate → verify
+                         ↘ checkpoint / fork / handoff when needed
 ```
+
+The normal path keeps using the same Harness. Branching, Handoff, adaptive
+routing, and CI export are supporting capabilities used when the task actually
+needs them.
 
 > **Status:** pre-alpha, local-first, and run from source. The repository
 > already implements and locally validates a real Codex-to-Qoder-to-Claude Code
@@ -32,23 +37,27 @@ configure → plan → run → observe → debug → fork → hand off → compa
 
 |                   | MissionBraid                                                                                                                                                                                                                                                                                                        |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| User problem      | Native coding agents are powerful but fragmented and opaque. Developers lose execution state when switching tools and often debug only after an expensive run has failed.                                                                                                                                           |
-| Product           | One Workbench to configure Runtime Profiles, run a durable Mission, inspect context and tools live, pause at supported boundaries, fork from a checkpoint, switch Harnesses, compare branches, and verify the outcome.                                                                                              |
+| User problem      | Changing a model, Prompt, Skill, tool, memory policy, permission, or Runtime can change Agent behavior, but source diffs and fragmented logs do not explain the effective Agent that actually ran.                                                                                                                  |
+| Product           | One Workbench to bind the effective Agent Revision, run a durable Mission, inspect context and tools live, revise supported inputs, re-run from a useful boundary, compare behavior, and verify the outcome.                                                                                                        |
 | Core abstraction  | A **Mission** owns intent, execution branches, evidence, effects, and completion. A Harness is a replaceable Runtime.                                                                                                                                                                                               |
 | Implemented today | Bilingual local Workbench, Mission Kernel, Codex/Qoder/Claude Code execution adapters, root Branch, resolved Runtime Profiles and bindings, source-scoped Event IR with sanitized native artifacts, durable command/outbox recovery, workspace checkpoint evidence, Handoff Capsule, verifier, and Outcome Receipt. |
 | Delivery plan     | **10 major product iterations in total. Iterations 1 and 2 are implemented and validated locally; Iterations 3–10 are planned.**                                                                                                                                                                                    |
 
 ## Why this exists
 
-The hard part of using several Agent tools is not launching another process. It
-is preserving and understanding the execution:
+The hard part of Agent application development is not launching another
+process. It is preserving and understanding the effective Agent and its real
+execution:
 
 - which effective model, instructions, Skills, MCP servers, permissions, and
   tools were active;
 - which observable context the Harness exposed before it acted;
-- which tool call or context change caused a failure;
+- which behavior changed after a Prompt, Skill, tool, memory, model, or Runtime
+  revision;
+- which tool call or context change caused a failure when one occurs;
 - how to retry from a useful boundary without rerunning everything;
-- how to continue in another Harness without manually reconstructing the task;
+- how to continue in another Harness without manually reconstructing the task
+  when a Runtime change is justified;
 - which external effects already happened and must not be repeated;
 - whether the Branch-bound result was actually achieved.
 
@@ -58,28 +67,30 @@ MissionBraid makes this state explicit and keeps it above any vendor session.
 
 ## Target user story
 
-An Agent developer opens a repository and creates a Mission with an objective,
-constraints, and an Outcome Contract. MissionBraid discovers the effective
-Runtime Profiles on the machine—not just “Codex” or “Qoder”, but the actual
-Harness, model, reasoning mode, instructions, Skills, MCP servers, tools,
-permissions, and available resource signals.
+An Agent developer changes a Prompt, Skill, MCP tool, model, context/memory
+policy, permission, or orchestration rule in a repository. MissionBraid binds
+the effective Agent Revision—not just a source commit or “Codex”/“Qoder”, but
+the actual Harness, model, reasoning mode, instructions, Skills, MCP servers,
+tools, permissions, policies, environment, and available resource signals—to a
+Mission with an objective, constraints, and Outcome Contract.
 
 The developer starts the Mission. The selected native Harness still performs
 the work, while MissionBraid records a unified live trace of model turns,
 context assembly, tool calls, workspace mutations, and lifecycle events.
 
-Most runs need no intervention. If an anomaly or semantic breakpoint fires, the
-developer can inspect the exact observable context and state before the next
-controlled action. They can change a prompt, context item, tool result, model,
-or Harness; narrow authority; or explicitly approve a new Grant/Contract
-revision. They can then resume or create an isolated execution branch from a
-composite checkpoint.
+The developer can inspect normal behavior without waiting for a failure. When a
+Revision behaves unexpectedly, a criterion fails, or a breakpoint fires, they
+can inspect the exact observable context and state before the next controlled
+action. They can revise a Prompt, Skill, context item, tool result, memory
+policy, model, or supported orchestration input; narrow authority; then resume
+or create an isolated execution branch from a composite checkpoint.
 
-MissionBraid compares the branches, explains failure candidates without
-inventing hidden reasoning, runs the verifier bound to the selected Branch's
-immutable Contract revision, and issues an Outcome Receipt. The developer
-debugs the Agent execution itself instead of waiting for the final repository
-state and guessing what went wrong.
+The same Harness continues by default. MissionBraid uses a Handoff Capsule only
+when another Runtime is required or deliberately selected. It compares Agent
+Revisions and Branches, explains failure candidates without inventing hidden
+reasoning, runs the verifier bound to the selected Branch's immutable Contract
+revision, issues an Outcome Receipt, and can save the case as a regression
+scenario for later local or CI execution.
 
 ## Product architecture
 
@@ -187,6 +198,9 @@ Read the [final architecture](docs/architecture.md) and
 9. **Done is a Receipt, not an Agent claim.** Completion evaluates the exact
    immutable Contract revision bound to the selected Branch using
    controller-run evidence.
+10. **Agent development is the product center.** Same-Harness iteration is the
+    default. Fork, Handoff, routing, and CI export support development without
+    turning MissionBraid into a switching or release-governance product.
 
 The reasoning behind these choices is collected in
 [Key Questions](docs/key-questions.md).
@@ -243,11 +257,11 @@ adoption.
 |         2 | Runtime Profiles and native events become observable through a unified Event IR               | Validated locally   |
 |         3 | Developers inspect a live execution, context assembly, tool flow, and workspace changes       | Planned             |
 |         4 | Tool calls can stop at supported pre/post boundaries and be changed before continuation       | Planned             |
-|         5 | Composite checkpoints support honest playback, replay, and executable branches                | Planned             |
-|         6 | A reproducible planner selects, replans, and hands a Mission across Harnesses                 | Planned             |
+|         5 | A retained boundary supports honest playback, replay, and executable comparison Branches      | Planned             |
+|         6 | A reproducible planner selects Profiles and hands off only when a Runtime change is justified | Planned             |
 |         7 | Failures are attributed to observable model/context/tool/Harness/environment evidence         | Planned             |
 |         8 | Multi-Agent work becomes a durable Mission graph with revision-aware coordination             | Planned             |
-|         9 | Branch comparison, regression cases, evaluation, and Outcome Receipts form an Incident Studio | Planned             |
+|         9 | Agent Revision comparison, regression scenarios, evaluation, Receipts, and CI export          | Planned             |
 |        10 | External developers install, extend, and reproduce the complete Runtime Workbench             | Planned             |
 
 Each iteration ends in one real Workbench workflow, not an isolated schema,
@@ -334,7 +348,7 @@ executable Fork/Replay, cross-host reproduction, or production readiness.
 - [Final architecture](docs/architecture.md)
 - [Ten-iteration roadmap](docs/roadmap.md)
 - [Project tour](docs/project-tour.md)
-- [Key product and technical questions](docs/key-questions.md)
+- [Key product decisions and technical questions](docs/key-questions.md)
 - [Evidence and claim boundaries](evidence/README.md)
 - [Controlled reproduction](docs/reproducing-evidence.md)
 - [Contributing](CONTRIBUTING.md)

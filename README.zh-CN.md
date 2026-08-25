@@ -2,15 +2,19 @@
 
 [English](README.md) | **简体中文**
 
-**一条 Mission。多种 Runtime。可调试的执行过程。**
+**一条 Mission。原生 Runtime。可解释的 Agent 行为。**
 
-MissionBraid 是一个面向原生 Coding Agent 开发者的本地优先 **Agent Runtime
-Workbench（运行时工作台）**。它把 Codex、Qoder、Claude Code、OpenCode、Hermes
-和未来的 Harness 变成同一条持久 Mission 背后可替换的执行 Runtime：
+MissionBraid 是一个面向原生 Coding Agent 应用开发者的本地优先 **Agent Runtime
+Workbench（运行时工作台）**。它让 Codex、Qoder、Claude Code、OpenCode、Hermes
+和未来的 Harness 共享一条持久 Mission 与一套开发闭环：
 
 ```text
-配置 → 规划 → 运行 → 观察 → 调试 → 分叉 → 接力 → 对比 → 验收
+组合 → 运行 → 检查 → 修改 → 重跑 → 评测 → 验收
+                         ↘ 需要时使用 Checkpoint / Fork / Handoff
 ```
+
+正常路径会继续使用同一个 Harness。只有任务确实需要时，才使用 Branch、Handoff、
+自适应路由或 CI 导出。
 
 > **状态：** pre-alpha、本地优先、从源码运行。仓库目前已经实现一条真实的
 > Codex-to-Qoder-to-Claude Code Mission；Root Branch；Runtime Profile Definition、Catalog
@@ -28,21 +32,22 @@ Workbench（运行时工作台）**。它把 Codex、Qoder、Claude Code、OpenC
 
 |              | MissionBraid                                                                                                                                                                                                                                                               |
 | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 用户问题     | 原生 Coding Agent 很强，但彼此割裂且执行过程不透明。开发者切换工具时会丢失执行状态，而且经常要等昂贵的运行失败后才能开始调试。                                                                                                                                             |
-| 产品         | 用一个 Workbench 配置 Runtime Profile、运行持久 Mission、实时检查上下文和工具、在支持的边界暂停、从 Checkpoint 分叉、切换 Harness、对比 Branch，并验收结果。                                                                                                               |
+| 用户问题     | 修改模型、Prompt、Skill、工具、Memory 策略、权限或 Runtime 都可能改变 Agent 行为，但源码差异和零散日志无法说明真正运行的有效 Agent。                                                                                                                                       |
+| 产品         | 用一个 Workbench 绑定有效 Agent Revision、运行持久 Mission、实时检查上下文和工具、修改受支持的输入、从有价值的边界重跑、对比行为并验收结果。                                                                                                                               |
 | 核心抽象     | **Mission** 持有目标、执行 Branch、证据、Effect 和完成状态；Harness 只是可替换的 Runtime。                                                                                                                                                                                 |
 | 当前已经实现 | 双语本地 Workbench、Mission Kernel、Codex/Qoder/Claude Code 执行 Adapter、Root Branch、已解析的 Runtime Profile 与 Binding、按来源定序的 Event IR 与脱敏 Native Artifact、持久 Command/Outbox 恢复、工作区 Checkpoint 证据、Handoff Capsule、Verifier 和 Outcome Receipt。 |
 | 交付计划     | **共 10 次主要产品迭代。第 1、2 次已在本地实现并验证；第 3–10 次已规划。**                                                                                                                                                                                                 |
 
 ## 为什么要做 MissionBraid
 
-使用多个 Agent 工具时，真正困难的并不是再启动一个进程，而是保存并理解整个执行过程：
+开发 Agent 应用时，真正困难的并不是再启动一个进程，而是保存并理解真正生效的 Agent 与执行过程：
 
 - 当时实际生效的是哪个模型、指令、Skill、MCP Server、权限和工具；
 - Harness 在行动前暴露了哪些可观察上下文；
-- 哪一次工具调用或上下文变化导致了故障；
+- 修改 Prompt、Skill、工具、Memory、模型或 Runtime 后，哪些行为发生了变化；
+- 出现故障时，是哪一次工具调用或上下文变化造成的；
 - 如何从有价值的边界重试，而不是从头重复全部工作；
-- 如何切换到另一个 Harness 继续，而不必手工重建任务；
+- 确实需要更换 Runtime 时，如何切换 Harness 继续而不必手工重建任务；
 - 哪些外部 Effect 已经发生，不能再次执行；
 - 与当前 Branch 绑定的结果是否真的实现。
 
@@ -52,22 +57,24 @@ MissionBraid 将这些状态显式化，并把它们保存在任何厂商 Sessio
 
 ## 目标用户故事
 
-Agent 开发者打开一个代码仓库，创建一条包含目标、约束和 Outcome Contract
-（结果契约）的 Mission。MissionBraid 发现本机真正生效的 Runtime Profile——不只是
-“Codex”或“Qoder”，而是实际的 Harness、模型、推理模式、指令、Skill、MCP Server、
-工具、权限和可用资源信号。
+Agent 开发者在代码仓库中修改 Prompt、Skill、MCP 工具、模型、Context/Memory
+策略、权限或编排规则。MissionBraid 把真正生效的 Agent Revision 绑定到一条包含目标、
+约束和 Outcome Contract（结果契约）的 Mission：它不只是源码提交或“Codex”“Qoder”，
+而是实际的 Harness、模型、推理模式、指令、Skill、MCP Server、工具、权限、策略、环境和
+可用资源信号。
 
 开发者启动 Mission。选中的原生 Harness 仍然负责实际工作，MissionBraid 同时记录一条
 统一的实时时间线：模型轮次、上下文组装、工具调用、工作区变更和生命周期事件。
 
-大多数运行不需要人工介入。如果异常或语义断点触发，开发者可以在下一个受控动作之前，
-检查准确的可观察上下文和状态。他们可以修改 Prompt、上下文项、工具结果、模型或
-Harness；收窄权限；或者明确批准新的 Grant/Contract 修订。随后可以继续运行，或者从
+开发者不必等到故障发生才观察行为。当 Revision 表现异常、验收条件失败或断点触发时，
+可以在下一个受控动作之前检查准确的可观察上下文和状态，修改 Prompt、Skill、上下文项、
+工具结果、Memory 策略、模型或受支持的编排输入，收窄权限，然后继续运行，或者从
 Composite Checkpoint（复合检查点）创建一条隔离的执行 Branch。
 
-MissionBraid 对比不同 Branch，在不虚构隐藏推理过程的前提下解释故障候选，运行与所选
-Branch 的不可变 Contract 修订绑定的 Verifier，并签发 Outcome Receipt。开发者调试的是
-Agent 执行本身，而不是等到仓库最终状态出错后再猜测原因。
+默认仍由原 Harness 继续。只有另一个 Runtime 确实必要或被主动选择时，MissionBraid 才
+编译 Handoff Capsule。它对比 Agent Revision 和 Branch，在不虚构隐藏推理过程的前提下
+解释故障候选，运行与所选 Branch 的不可变 Contract 修订绑定的 Verifier，签发 Outcome
+Receipt，并可将场景保存为以后在本地或 CI 中重跑的回归用例。
 
 ## 产品架构
 
@@ -163,6 +170,8 @@ Kandev 可以通过公开的 Provider 边界，为成熟的工作区和进程执
    建议一旦被接受，版本化的确定性策略负责筛选、排序、绑定、权限、状态和最终验收。
 9. **Done 是 Receipt，不是 Agent 的自我声明。** 完成状态使用控制器运行的证据，对所选
    Branch 精确绑定的不可变 Contract 修订进行评估。
+10. **Agent 开发是产品中心。** 默认在同一 Harness 中持续迭代；Fork、Handoff、路由和
+    CI 导出只提供支撑，不把 MissionBraid 变成切换工具或发布治理产品。
 
 这些判断背后的推理收录在[关键问题](docs/key-questions.md)中。
 
@@ -211,11 +220,11 @@ Claude Code，得到已验证 Receipt，并在重启后稳定恢复。它不证�
 |    2 | Runtime Profile 和 Native 事件通过统一 Event IR 变得可观察                    | 本地已验证 |
 |    3 | 开发者可以检查实时执行、上下文组装、工具流和工作区变更                        | 已规划     |
 |    4 | 工具调用可以在支持的前/后边界停止，并在继续前修改                             | 已规划     |
-|    5 | Composite Checkpoint 支持诚实的 Playback、Replay 和可执行 Branch              | 已规划     |
-|    6 | 可复现的 Planner 选择 Runtime、重新规划，并让 Mission 跨 Harness 接力         | 已规划     |
+|    5 | 保留的执行边界支持诚实 Playback、Replay 和可执行对比 Branch                   | 已规划     |
+|    6 | 可复现的 Planner 选择 Profile，并只在需要更换 Runtime 时执行 Handoff          | 已规划     |
 |    7 | 使用可观察的模型/上下文/工具/Harness/环境证据归因故障                         | 已规划     |
 |    8 | Multi-Agent 工作成为持久 Mission Graph，并支持理解修订的协同                  | 已规划     |
-|    9 | Branch 对比、Regression Case、Eval 和 Outcome Receipt 组成 Incident Studio    | 已规划     |
+|    9 | Agent Revision 对比、Regression Scenario、Eval、Receipt 与 CI 导出            | 已规划     |
 |   10 | 外部开发者可以安装、扩展并复现完整 Runtime Workbench                          | 已规划     |
 
 每次迭代都必须结束于一条真实的 Workbench 用户流程，而不是孤立的 Schema、Adapter 或测试套件。
@@ -285,7 +294,7 @@ Complete the dependency-free JSONL Effect Ledger in this disposable repository. 
 - [最终架构](docs/architecture.md)
 - [十次迭代路线](docs/roadmap.md)
 - [项目导览](docs/project-tour.md)
-- [产品与技术关键问题](docs/key-questions.md)
+- [产品关键决策与技术问题](docs/key-questions.md)
 - [证据与声明边界](evidence/README.md)
 - [受控复现](docs/reproducing-evidence.md)
 - [贡献指南](CONTRIBUTING.md)

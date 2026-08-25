@@ -1,4 +1,4 @@
-# Key Product and Technical Questions
+# Key Product Decisions and Technical Questions
 
 > **Status:** these answers define the accepted target architecture. “Today”
 > includes the verified pre-alpha Codex/Qoder vertical slice and the Iteration 2
@@ -8,12 +8,15 @@
 ## 1. Why build a Workbench instead of another Agent launcher?
 
 Launching a CLI is already cheap. The unsolved developer loop is understanding
-and controlling a long Agent execution: effective configuration, context
-assembly, tool behavior, workspace mutations, failure location, retries,
-cross-Harness continuation, and final acceptance.
+and improving a real Agent application: which model, instructions, Skills,
+tools, context/memory, permissions, and Runtime actually governed a task; how
+those inputs shaped tool behavior and workspace mutations; what changed after
+a revision; and whether the result improved under the same outcome standard.
 
-MissionBraid therefore owns the Mission lifecycle and debugging workflow while
-native Harnesses keep their execution strengths.
+MissionBraid therefore owns the Mission lifecycle, evidence, debugging, and
+evaluation workflow while native Harnesses keep their execution strengths.
+Checkpoint, Fork, Handoff, and CI export support this daily loop; they are not
+mandatory steps in every run.
 
 ## 2. What is the scheduling unit?
 
@@ -260,3 +263,69 @@ MissionBraid does not currently claim:
 
 These are architectural boundaries, not footnotes. Any future claim must be
 earned by the corresponding real product workflow and published evidence.
+
+## 16. What counts as an Agent modification?
+
+Authorship is not the criterion. If Codex edits an unrelated application's
+button, that is Agent-authored project code and uses the project's ordinary CI.
+If a change can alter how the Agent handles the same Mission, it belongs to the
+effective **Agent Revision**:
+
+```text
+model/provider/reasoning
++ instructions and Skills
++ MCP/tools and their implementations
++ context, retrieval, memory and compaction
++ planning, retry, session and Handoff behavior
++ permissions, guardrails and Effect policy
++ Runtime, Adapter, dependencies and environment
+```
+
+The Revision is a content-addressed view composed from existing Profile,
+Attempt, policy, Adapter, and environment evidence. It is not another state
+machine beside the Mission.
+
+Evaluation suites, verifiers, baselines, thresholds, and qualification policies are
+separate control artifacts. Changing the candidate or its judge requires a new
+qualification for that exact pair. An Agent may propose a Revision or explain
+results, but it cannot approve its own change.
+
+## 17. How is an Agent Revision validated when model behavior is stochastic?
+
+The release decision is layered rather than delegated to another Agent:
+
+- deterministic checks cover structure, dependencies, permissions, tool and
+  Effect invariants, executable tests, and objective environment outcomes;
+- real Runtime trials cover trigger behavior, tool selection, trajectories,
+  cost, latency, side effects, and Mission outcomes;
+- repeated trials and predeclared thresholds handle stochastic behavior;
+- model-based graders cover open-ended qualities only with a visible rubric,
+  retained outputs, and a calibration boundary;
+- deterministic policy applies the recorded evidence to issue the final
+  qualification and Outcome Receipt.
+
+Public systems already expose parts of this pattern. Volcengine states that
+its Skills pass internal CI and end-to-end tests before synchronization, while
+its public release workflow validates versions, layouts, tests, bundles, and
+published hashes ([maintenance model](https://github.com/volcengine/volcengine-skills/blob/main/CONTRIBUTING.md),
+[release workflow](https://github.com/volcengine/volcengine-skills/blob/main/.github/workflows/release.yml)).
+ByteDance DeerFlow runs deterministic review CI for changed public Skills, but
+its own reviewer distinguishes static readiness from runtime behavior and
+regression evidence ([CI](https://github.com/bytedance/deer-flow/blob/main/.github/workflows/skill-review-ci.yml),
+[assurance rules](https://github.com/bytedance/deer-flow/blob/main/skills/public/skill-reviewer/SKILL.md)).
+These are useful precedents, not evidence that a complete native coding-Agent
+Revision gate already exists.
+
+## 18. Is MissionBraid a CI/CD platform or a Harness switching product?
+
+No. The primary product is the Agent application development loop:
+
+```text
+compose → run → inspect → revise → re-run → evaluate → verify
+```
+
+The same Harness normally continues. Fork is used for an isolated comparison;
+Handoff is used when availability, capability, deliberate comparison, or user
+choice justifies another Runtime. Saved scenarios and machine-readable results
+may be consumed by CI, but deployment, organization approval, artifact signing,
+and general release governance remain outside the 1.0 product boundary.

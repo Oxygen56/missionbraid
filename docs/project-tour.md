@@ -12,8 +12,11 @@ execution remains fragmented:
 - the effective model, reasoning mode, instructions, Skills, MCP servers, and
   permissions are hard to compare;
 - context assembly and tool decisions are often opaque until the final result;
-- a failed long run is expensive to understand and repeat;
-- switching Harnesses requires manual context reconstruction;
+- Agent behavior can change after a Prompt, Skill, tool, memory, model, or
+  Runtime revision without a sourced explanation;
+- a long run is expensive to understand and repeat, whether it fails or merely
+  behaves differently;
+- switching Harnesses, when required, needs manual context reconstruction;
 - external actions may be repeated after a retry;
 - “done” is usually the executor's own statement.
 
@@ -32,7 +35,8 @@ capability-aware adapters.
 The final Workbench supports one connected loop:
 
 ```text
-configure → plan → run → observe → debug → fork → hand off → compare → verify
+compose → run → inspect → revise → re-run → evaluate → verify
+                         ↘ checkpoint / fork / handoff when needed
 ```
 
 This is deliberately more than a launcher. The product remains useful after an
@@ -42,27 +46,31 @@ against the immutable Contract revision bound to the selected Branch.
 
 ## The target journey
 
-1. **Configure.** MissionBraid discovers effective Runtime Profiles, including
+1. **Compose.** MissionBraid identifies the effective Agent Revision, including
    the Harness, model, reasoning mode, instructions, Skills, MCP/tools,
-   permissions, environment, and available resource signals.
+   context/memory, permissions, orchestration, environment, and available
+   resource signals.
 2. **Plan.** The developer selects a Profile or accepts a recorded planner
-   decision over eligible Profiles.
+   decision over eligible Profiles. The same Profile remains the default.
 3. **Run.** A native Harness executes an Attempt. MissionBraid persists
    sanitized native-format and normalized model, context, tool, workspace, and
    lifecycle events before projecting them live.
 4. **Observe.** A live trace explains the active branch, visible context,
    pending action, workspace changes, and acceptance progress.
-5. **Debug.** A semantic breakpoint or anomaly pauses at an adapter-supported
-   safe point. The UI states whether the boundary is observable,
-   interruptible, gated, steerable, or reconstructable.
-6. **Fork.** The developer changes one or more inputs and creates a new
-   execution branch from a composite checkpoint.
-7. **Hand off.** A branch can continue in another Harness through a
-   provenance-bound Handoff Capsule.
-8. **Compare.** MissionBraid compares branches and failure hypotheses using
-   observable evidence rather than invented hidden reasoning.
-9. **Verify.** The Mission Kernel evaluates the exact immutable Contract
-   revision bound to the selected Branch and issues an Outcome Receipt.
+5. **Revise.** The developer can inspect normal behavior, a semantic
+   breakpoint, an anomaly, or a failed criterion, then change supported Agent
+   inputs at a real control boundary.
+6. **Re-run or Fork.** Continue from the current head, or create an isolated
+   execution Branch from a composite Checkpoint when a controlled comparison
+   is useful.
+7. **Hand off when justified.** A Branch continues in the same Harness by
+   default and uses a provenance-bound Handoff Capsule only when another
+   Runtime is needed or deliberately selected.
+8. **Compare.** MissionBraid compares Agent Revisions, Branches, and failure
+   hypotheses using observable evidence rather than invented hidden reasoning.
+9. **Verify and retain.** The Mission Kernel evaluates the exact immutable
+   Contract revision, issues an Outcome Receipt, and can save the scenario for
+   later local or CI regression runs.
 
 ## The architecture at a glance
 
@@ -115,6 +123,18 @@ Availability, quota, and price remain timestamped Catalog Observations. The
 snapshot becomes an Attempt Binding when it is attached to a Mission revision,
 Branch, workspace, authority, budget, and native session/process. This keeps a
 saved Profile stable while making each real execution explainable.
+
+### Agent Revision
+
+The effective behavior view for one Attempt. It content-addresses the model,
+instructions, Skills, MCP/tools, context/memory policy, orchestration,
+permissions, Runtime, Adapter, dependencies, and environment evidence that
+actually governed the run. It is composed from existing Profile and Attempt
+objects rather than becoming a second state machine beside the Mission.
+
+Evaluation suites, verifiers, baselines, and thresholds are independently
+versioned control artifacts. Ordinary code authored by an Agent is not an
+Agent Revision unless it changes the Agent application itself.
 
 ### Attempt and Branch
 
@@ -340,8 +360,9 @@ Fork/Replay, cross-host reproduction, production isolation, or adoption.
 
 MissionBraid has **ten major product iterations**. The foundation above is
 Iteration 1; Iteration 2 is now implemented and validated locally. Iterations
-3–10 next add live debugging, honest execution forks, adaptive handoff, failure
-intelligence, multi-Agent Mission graphs, evaluation, and an open Adapter SDK.
+3–10 next add live Agent observation and debugging, honest execution Branches,
+conditional adaptive Handoff, failure intelligence, multi-Agent Mission
+graphs, Agent Revision evaluation and CI export, and an open Adapter SDK.
 
 Continue with the [product requirements](product-requirements.md),
 [architecture](architecture.md), [roadmap](roadmap.md), and
