@@ -32,11 +32,27 @@ const runtimePlans = [
 ];
 
 const { startMissionBraidApp } = await import('../dist/src/app.js');
+const { NativeArtifactStore } = await import('../dist/src/artifact-store.js');
 let app;
 let restarted;
 const browsers = [];
 try {
+  const redactionProbeReference = await new NativeArtifactStore(stateDir).putLine(
+    `sanitization fixture: ${fakeCredential}`,
+  );
+  if (redactionProbeReference.redactionCount < 1) {
+    throw new Error('The local artifact store did not redact the credential-like fixture.');
+  }
   app = await startMissionBraidApp({ stateDir, port: 0 });
+  const redactionProbe = await requestJson(
+    `${app.url}/api/v1/artifacts/${encodeURIComponent(redactionProbeReference.artifactId)}`,
+  );
+  if (
+    redactionProbe.content.includes(fakeCredential) ||
+    sha256(redactionProbe.content) !== redactionProbe.sha256
+  ) {
+    throw new Error('The retained redaction probe leaked or failed content verification.');
+  }
   const inventory = await requestJson(`${app.url}/api/v1/runtimes`);
   const results = [];
   for (const plan of runtimePlans) {
@@ -129,19 +145,9 @@ try {
     const failedArtifact = await requestJson(
       `${app.url}/api/v1/artifacts/${encodeURIComponent(failedTestFact.event.nativeArtifact.artifactId)}`,
     );
-    const redactedRuntimeEvent = runtimeEvents.find(
-      (event) => event.nativeArtifact.redactionCount > 0,
-    );
-    if (redactedRuntimeEvent === undefined) {
-      throw new Error('No native Runtime artifact demonstrated credential-like redaction.');
-    }
-    const redactedRuntimeArtifact = await requestJson(
-      `${app.url}/api/v1/artifacts/${encodeURIComponent(redactedRuntimeEvent.nativeArtifact.artifactId)}`,
-    );
     if (
       promptArtifact.content.includes(fakeCredential) ||
-      failedArtifact.content.includes(fakeCredential) ||
-      redactedRuntimeArtifact.content.includes(fakeCredential)
+      failedArtifact.content.includes(fakeCredential)
     ) {
       throw new Error('Credential-like fixture material survived artifact redaction.');
     }
@@ -165,8 +171,9 @@ try {
       promptContextSnapshotId: contextEvent.data.contextSnapshotId,
       promptArtifactId: promptArtifact.artifactId,
       promptRedactionCount: contextEvent.data.nativeArtifact.redactionCount,
-      redactedRuntimeEventId: redactedRuntimeEvent.runtimeEventId,
-      redactedRuntimeArtifactId: redactedRuntimeArtifact.artifactId,
+      runtimeArtifactsRedactedByMissionBraid: runtimeEvents.filter(
+        (event) => event.nativeArtifact.redactionCount > 0,
+      ).length,
       graphIdentity: stableGraph(completed.contextGraph),
       live,
       rendered,
@@ -176,6 +183,16 @@ try {
   await app.close();
   app = undefined;
   restarted = await startMissionBraidApp({ stateDir, port: 0 });
+  const restoredRedactionProbe = await requestJson(
+    `${restarted.url}/api/v1/artifacts/${encodeURIComponent(redactionProbeReference.artifactId)}`,
+  );
+  if (
+    restoredRedactionProbe.content !== redactionProbe.content ||
+    restoredRedactionProbe.sha256 !== redactionProbe.sha256 ||
+    restoredRedactionProbe.content.includes(fakeCredential)
+  ) {
+    throw new Error('The redacted artifact changed or leaked after restart.');
+  }
   for (const result of results) {
     const restored = await requestJson(
       `${restarted.url}/api/v1/missions/${encodeURIComponent(result.missionId)}`,
@@ -219,8 +236,7 @@ try {
       promptContextSnapshotId: result.promptContextSnapshotId,
       promptArtifactId: result.promptArtifactId,
       promptRedactionCount: result.promptRedactionCount,
-      redactedRuntimeEventId: result.redactedRuntimeEventId,
-      redactedRuntimeArtifactId: result.redactedRuntimeArtifactId,
+      runtimeArtifactsRedactedByMissionBraid: result.runtimeArtifactsRedactedByMissionBraid,
       eventDeliveredBeforeProcessFinished: result.live.beforeProcessFinished,
       browserRenderedBeforeProcessFinished: result.rendered.beforeProcessFinished,
       browserTimelineText: result.rendered.timelineText,
@@ -239,11 +255,15 @@ try {
       sameContextGraphs: true,
     },
     redaction: {
-      injectedCredentialLikeFixtureRemoved: true,
+      evidenceLevel: 'deterministic-local-artifact-store-through-public-read-api',
+      probeArtifactId: redactionProbeReference.artifactId,
+      probeRedactionCount: redactionProbeReference.redactionCount,
+      injectedCredentialLikeFixtureRemoved: !redactionProbe.content.includes(fakeCredential),
+      stableAfterRestart: restoredRedactionProbe.sha256 === redactionProbe.sha256,
       promptArtifactHashesVerified: true,
     },
     claimBoundary:
-      'This proves same-host live durable event delivery and browser rendering before process completion for real Codex and Claude Code native protocols, visible controller-prompt provenance, structured test failure evidence, explicit unavailable hidden context, redaction, and restart-stable Context Graph reconstruction. It does not prove complete provider context, global native ordering, pre-tool control, production latency, or independent external reproduction.',
+      'This proves same-host live durable event delivery and browser rendering before process completion for real Codex and Claude Code native protocols, visible controller-prompt provenance, structured test failure evidence, explicit unavailable hidden context, deterministic local artifact redaction through the public read path, and restart-stable Context Graph reconstruction. The real providers may omit credential-like output before MissionBraid can observe it, so this evidence does not claim provider-pre-filtered material was locally redacted. It also does not prove complete provider context, global native ordering, pre-tool control, production latency, or independent external reproduction.',
     proofRoot,
   };
   const serialized = `${JSON.stringify(evidence, null, 2)}\n`;
