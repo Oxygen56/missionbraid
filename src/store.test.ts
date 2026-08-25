@@ -9,6 +9,7 @@ import {
   DOMAIN_SCHEMA_VERSION,
   type ContractV1,
   type EventV1,
+  type MissionProjectionV1,
   type MissionV1,
   type ProfileV1,
 } from './domain.js';
@@ -276,6 +277,196 @@ describe('MissionStore', () => {
     expect(resumed.prevHash).toBe(headBeforeClose);
     expect(reopened.verifyEventChain(mission.missionId).valid).toBe(true);
     reopened.close();
+  });
+
+  it('persists immutable child Branch lineage and accepts execution records on the child after restart', () => {
+    const directory = temporaryDirectory();
+    const databasePath = join(directory, 'kernel.sqlite');
+    const fixture = entities('child-branch-restart');
+    const first = new MissionStore(databasePath);
+    const lease = first.acquireWorkspaceLease(fixture.mission.workspaceKey, 'branch-runner');
+    first.createMission(fixture.creation, lease);
+    first.appendEvent(rootBranchEvent(fixture.mission), lease);
+    first.appendEvent(
+      checkpointEvidenceEvent(
+        fixture.mission.missionId,
+        fixture.mission.rootBranchId,
+        'checkpoint-child-base',
+      ),
+      lease,
+    );
+    first.appendEvent(
+      childBranchEvent(
+        fixture.mission.missionId,
+        'branch-child-1',
+        fixture.mission.rootBranchId,
+        'checkpoint-child-base',
+      ),
+      lease,
+    );
+
+    const attemptId = 'attempt-child-1';
+    const bindingId = 'binding-child-1';
+    first.appendEvents(
+      [
+        attemptBindingEvent(fixture, attemptId, bindingId, 'branch-child-1'),
+        attemptStartedEvent(fixture, attemptId, 'branch-child-1'),
+        runtimeEvent(fixture, attemptId, bindingId, 'branch-child-1'),
+      ],
+      lease,
+    );
+
+    expect(first.listBranches(fixture.mission.missionId)).toEqual([
+      expect.objectContaining({
+        branchId: fixture.mission.rootBranchId,
+      }),
+      expect.objectContaining({
+        branchId: 'branch-child-1',
+        parentBranchId: fixture.mission.rootBranchId,
+        baseCheckpointId: 'checkpoint-child-base',
+      }),
+    ]);
+    first.close();
+
+    const reopened = new MissionStore(databasePath);
+    expect(reopened.getBranch(fixture.mission.missionId, 'branch-child-1')).toMatchObject({
+      branchId: 'branch-child-1',
+      parentBranchId: fixture.mission.rootBranchId,
+      baseCheckpointId: 'checkpoint-child-base',
+    });
+    expect(reopened.listBranches(fixture.mission.missionId)).toHaveLength(2);
+    expect(reopened.verifyEventChain(fixture.mission.missionId)).toMatchObject({ valid: true });
+    reopened.close();
+  });
+
+  it('rejects child Branches without prior parent/checkpoint evidence and duplicate Branch identities', () => {
+    const fixture = createFixture();
+    fixture.store.createMission(fixture.creation, fixture.fence);
+    fixture.store.appendEvent(rootBranchEvent(fixture.mission), fixture.fence);
+
+    expect(() =>
+      fixture.store.appendEvent(
+        childBranchEvent(
+          fixture.mission.missionId,
+          'branch-missing-parent',
+          'branch-does-not-exist',
+          'checkpoint-does-not-exist',
+        ),
+        fixture.fence,
+      ),
+    ).toThrow(/Parent Branch/);
+
+    expect(() =>
+      fixture.store.appendEvent(
+        childBranchEvent(
+          fixture.mission.missionId,
+          'branch-missing-checkpoint',
+          fixture.mission.rootBranchId,
+          'checkpoint-does-not-exist',
+        ),
+        fixture.fence,
+      ),
+    ).toThrow(/Base Checkpoint/);
+
+    fixture.store.appendEvent(
+      checkpointEvidenceEvent(
+        fixture.mission.missionId,
+        fixture.mission.rootBranchId,
+        'checkpoint-valid-base',
+      ),
+      fixture.fence,
+    );
+    const child = childBranchEvent(
+      fixture.mission.missionId,
+      'branch-child-immutable',
+      fixture.mission.rootBranchId,
+      'checkpoint-valid-base',
+    );
+    fixture.store.appendEvent(child, fixture.fence);
+
+    expect(() =>
+      fixture.store.appendEvent(
+        { ...child, eventId: 'event-branch-child-duplicate' },
+        fixture.fence,
+      ),
+    ).toThrow(/already exists/);
+    expect(() =>
+      fixture.store.appendEvent(
+        attemptStartedEvent(fixture, 'attempt-unknown-branch', 'branch-does-not-exist'),
+        fixture.fence,
+      ),
+    ).toThrow(/is not persisted/);
+    expect(fixture.store.listBranches(fixture.mission.missionId)).toHaveLength(2);
+    fixture.store.close();
+  });
+
+  it('binds a Receipt to an existing child Branch and normalizes legacy rootBranchId receipts', () => {
+    const childFixture = createFixture();
+    childFixture.store.createMission(childFixture.creation, childFixture.fence);
+    childFixture.store.appendEvent(rootBranchEvent(childFixture.mission), childFixture.fence);
+    childFixture.store.appendEvent(
+      checkpointEvidenceEvent(
+        childFixture.mission.missionId,
+        childFixture.mission.rootBranchId,
+        'checkpoint-receipt-base',
+        'composite-checkpoint.created',
+      ),
+      childFixture.fence,
+    );
+    childFixture.store.appendEvent(
+      childBranchEvent(
+        childFixture.mission.missionId,
+        'branch-receipt-child',
+        childFixture.mission.rootBranchId,
+        'checkpoint-receipt-base',
+      ),
+      childFixture.fence,
+    );
+    const beforeChildReceipt = childFixture.store.getMission(childFixture.mission.missionId)!;
+    expect(() =>
+      childFixture.store.appendEvent(
+        verifiedReceiptEvent(childFixture, 'event-receipt-unknown-branch', beforeChildReceipt, {
+          branchId: 'branch-does-not-exist',
+        }),
+        childFixture.fence,
+      ),
+    ).toThrow(/is not persisted/);
+    expect(() =>
+      childFixture.store.appendEvent(
+        verifiedReceiptEvent(childFixture, 'event-receipt-conflicting-branch', beforeChildReceipt, {
+          branchId: 'branch-receipt-child',
+          rootBranchId: childFixture.mission.rootBranchId,
+        }),
+        childFixture.fence,
+      ),
+    ).toThrow(/conflicts with legacy rootBranchId/);
+    childFixture.store.appendEvent(
+      verifiedReceiptEvent(childFixture, 'event-receipt-child', beforeChildReceipt, {
+        branchId: 'branch-receipt-child',
+      }),
+      childFixture.fence,
+    );
+    expect(childFixture.store.getMission(childFixture.mission.missionId)?.receipt).toMatchObject({
+      branchId: 'branch-receipt-child',
+      outcome: 'verified',
+    });
+    childFixture.store.close();
+
+    const legacyFixture = createFixture();
+    legacyFixture.store.createMission(legacyFixture.creation, legacyFixture.fence);
+    legacyFixture.store.appendEvent(rootBranchEvent(legacyFixture.mission), legacyFixture.fence);
+    const beforeLegacyReceipt = legacyFixture.store.getMission(legacyFixture.mission.missionId)!;
+    legacyFixture.store.appendEvent(
+      verifiedReceiptEvent(legacyFixture, 'event-receipt-legacy-root', beforeLegacyReceipt, {
+        rootBranchId: legacyFixture.mission.rootBranchId,
+      }),
+      legacyFixture.fence,
+    );
+    expect(legacyFixture.store.getMission(legacyFixture.mission.missionId)?.receipt).toMatchObject({
+      branchId: legacyFixture.mission.rootBranchId,
+      rootBranchId: legacyFixture.mission.rootBranchId,
+    });
+    legacyFixture.store.close();
   });
 
   it('commits command intent with its outbox row and recovers it after reopen', () => {
@@ -556,6 +747,7 @@ describe('MissionStore', () => {
   it('rejects a verified Receipt with unresolved Effects or unresolved items', () => {
     const fixture = createFixture();
     fixture.store.createMission(fixture.creation, fixture.fence);
+    fixture.store.appendEvent(rootBranchEvent(fixture.mission), fixture.fence);
     const effectId = 'effect-unresolved';
     fixture.store.appendEvent(
       {
@@ -602,6 +794,7 @@ describe('MissionStore', () => {
               receiptId: `receipt-${eventId}`,
               missionId: fixture.mission.missionId,
               contractId: fixture.contract.contractId,
+              branchId: fixture.mission.rootBranchId,
               outcome: 'verified',
               verifications: [
                 {
@@ -737,6 +930,215 @@ function statusEvent(
     occurredAt,
     type: 'mission.status_changed',
     payload: { status },
+  };
+}
+
+function rootBranchEvent(mission: MissionV1): EventV1 {
+  return {
+    schemaVersion: DOMAIN_SCHEMA_VERSION,
+    eventId: `event-${mission.rootBranchId}`,
+    missionId: mission.missionId,
+    occurredAt: mission.createdAt,
+    type: 'branch.created',
+    payload: {
+      branch: {
+        schemaVersion: DOMAIN_SCHEMA_VERSION,
+        branchId: mission.rootBranchId,
+        missionId: mission.missionId,
+        status: 'active',
+        createdAt: mission.createdAt,
+      },
+    },
+  };
+}
+
+function checkpointEvidenceEvent(
+  missionId: string,
+  branchId: string,
+  checkpointId: string,
+  kind: 'checkpoint.created' | 'composite-checkpoint.created' = 'checkpoint.created',
+): EventV1 {
+  return {
+    schemaVersion: DOMAIN_SCHEMA_VERSION,
+    eventId: `event-${checkpointId}`,
+    missionId,
+    occurredAt: '2026-08-24T00:00:01.000Z',
+    type: 'runtime.observation',
+    payload: { kind, data: { checkpointId, branchId } },
+  };
+}
+
+function childBranchEvent(
+  missionId: string,
+  branchId: string,
+  parentBranchId: string,
+  baseCheckpointId: string,
+): EventV1 {
+  return {
+    schemaVersion: DOMAIN_SCHEMA_VERSION,
+    eventId: `event-${branchId}`,
+    missionId,
+    occurredAt: '2026-08-24T00:00:02.000Z',
+    type: 'branch.created',
+    payload: {
+      branch: {
+        schemaVersion: DOMAIN_SCHEMA_VERSION,
+        branchId,
+        missionId,
+        parentBranchId,
+        baseCheckpointId,
+        status: 'active',
+        createdAt: '2026-08-24T00:00:02.000Z',
+      },
+    },
+  };
+}
+
+function attemptBindingEvent(
+  fixture: {
+    readonly mission: MissionV1;
+    readonly contract: ContractV1;
+    readonly profile: ProfileV1;
+  },
+  attemptId: string,
+  bindingId: string,
+  branchId: string,
+): EventV1 {
+  return {
+    schemaVersion: DOMAIN_SCHEMA_VERSION,
+    eventId: `event-${bindingId}`,
+    missionId: fixture.mission.missionId,
+    attemptId,
+    occurredAt: '2026-08-24T00:00:03.000Z',
+    type: 'attempt.bound',
+    payload: {
+      binding: {
+        schemaVersion: DOMAIN_SCHEMA_VERSION,
+        bindingId,
+        missionId: fixture.mission.missionId,
+        attemptId,
+        branchId,
+        contractId: fixture.contract.contractId,
+        profileId: fixture.profile.profileId,
+        workspaceKey: fixture.mission.workspaceKey,
+        planNodeId: 'stage-child',
+        authority: 'workspace',
+        injectionBudgetTokens: 1_000,
+        boundAt: '2026-08-24T00:00:03.000Z',
+      },
+    },
+  };
+}
+
+function attemptStartedEvent(
+  fixture: { readonly mission: MissionV1; readonly profile: ProfileV1 },
+  attemptId: string,
+  branchId: string,
+): EventV1 {
+  return {
+    schemaVersion: DOMAIN_SCHEMA_VERSION,
+    eventId: `event-${attemptId}`,
+    missionId: fixture.mission.missionId,
+    attemptId,
+    occurredAt: '2026-08-24T00:00:04.000Z',
+    type: 'attempt.started',
+    payload: {
+      attempt: {
+        schemaVersion: DOMAIN_SCHEMA_VERSION,
+        attemptId,
+        missionId: fixture.mission.missionId,
+        branchId,
+        profileId: fixture.profile.profileId,
+        stageId: 'stage-child',
+        status: 'running',
+        startedAt: '2026-08-24T00:00:04.000Z',
+      },
+    },
+  };
+}
+
+function runtimeEvent(
+  fixture: { readonly mission: MissionV1 },
+  attemptId: string,
+  bindingId: string,
+  branchId: string,
+): EventV1 {
+  return {
+    schemaVersion: DOMAIN_SCHEMA_VERSION,
+    eventId: `event-runtime-${attemptId}`,
+    missionId: fixture.mission.missionId,
+    attemptId,
+    occurredAt: '2026-08-24T00:00:05.000Z',
+    type: 'runtime.event',
+    payload: {
+      event: {
+        runtimeEventId: `runtime-event-${attemptId}`,
+        missionId: fixture.mission.missionId,
+        branchId,
+        attemptId,
+        bindingId,
+        planNodeId: 'stage-child',
+        sourceHarness: 'codex',
+        sourceProtocol: 'codex-jsonl',
+        sourceId: `${attemptId}:stdout`,
+        sourceSequence: 1,
+        nativeEventType: 'assistant',
+        semanticKind: 'message',
+        causalParentIds: [],
+        correlationIds: [],
+        observedAt: '2026-08-24T00:00:05.000Z',
+        fidelity: 'native',
+        normalized: { type: 'assistant' },
+        nativeArtifact: {
+          artifactId: `artifact-${attemptId}`,
+          sha256: 'c'.repeat(64),
+          relativePath: `sha256/cc/${attemptId}.json`,
+          mediaType: 'application/json',
+          byteLength: 20,
+          sanitized: true,
+          redactionCount: 0,
+        },
+      },
+    },
+  };
+}
+
+function verifiedReceiptEvent(
+  fixture: { readonly mission: MissionV1; readonly contract: ContractV1 },
+  eventId: string,
+  projection: Pick<MissionProjectionV1, 'lastSeq' | 'headHash'>,
+  identity: { readonly branchId?: string; readonly rootBranchId?: string },
+): EventV1 {
+  return {
+    schemaVersion: DOMAIN_SCHEMA_VERSION,
+    eventId,
+    missionId: fixture.mission.missionId,
+    occurredAt: '2026-08-24T00:00:06.000Z',
+    type: 'receipt.issued',
+    payload: {
+      receipt: {
+        schemaVersion: DOMAIN_SCHEMA_VERSION,
+        receiptId: `receipt-${eventId}`,
+        missionId: fixture.mission.missionId,
+        contractId: fixture.contract.contractId,
+        ...identity,
+        outcome: 'verified',
+        verifications: [
+          {
+            criterionId: 'events-restored',
+            status: 'passed',
+            evidenceRefs: ['kernel:event-chain'],
+          },
+        ],
+        verifiedHeadHash: projection.headHash,
+        verifiedThroughSeq: projection.lastSeq,
+        attemptIds: [],
+        effectIds: [],
+        effects: [],
+        unresolvedItems: [],
+        issuedAt: '2026-08-24T00:00:06.000Z',
+      },
+    },
   };
 }
 

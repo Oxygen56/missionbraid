@@ -228,6 +228,13 @@ export interface ReceiptV1 {
   readonly receiptId: string;
   readonly missionId: string;
   readonly contractId: string;
+  /**
+   * Branch whose outcome this Receipt evaluates. Required for new records;
+   * optional in the TypeScript shape only so persisted rootBranchId-era data
+   * can still be decoded and normalized by the Mission Store.
+   */
+  readonly branchId?: string;
+  /** @deprecated Legacy alias retained only for persisted root-Branch Receipts. */
   readonly rootBranchId?: string;
   readonly outcome: 'verified' | 'rejected';
   readonly verifications: readonly VerificationResultV1[];

@@ -6,6 +6,7 @@ import { DatabaseSync } from 'node:sqlite';
 import {
   DOMAIN_SCHEMA_VERSION,
   type AppendEventResultV1,
+  type BranchV1,
   type ContractV1,
   type EffectV1,
   type EventV1,
@@ -438,6 +439,18 @@ export class MissionStore {
       )
       .all(missionId) as unknown as EventRow[];
     return rows.map(eventFromRow);
+  }
+
+  /** Rebuild immutable Branch lineage directly from authoritative Kernel events. */
+  listBranches(missionId: string): BranchV1[] {
+    return branchesFromEvents(this.listEvents(missionId));
+  }
+
+  /** Read one immutable Branch record without relying on a mutable projection table. */
+  getBranch(missionId: string, branchId: string): BranchV1 | undefined {
+    assertIdentifier('missionId', missionId);
+    assertIdentifier('branchId', branchId);
+    return this.listBranches(missionId).find((branch) => branch.branchId === branchId);
   }
 
   /** Commit the authoritative command intent and its dispatch row together. */
@@ -1053,41 +1066,35 @@ export class MissionStore {
         status = event.payload.status;
         break;
       case 'attempt.started':
-        if (event.payload.attempt.missionId !== event.missionId) {
-          throw new MissionInvariantError('Attempt belongs to a different mission');
-        }
         if (
-          current.rootBranchId !== undefined &&
-          event.payload.attempt.branchId !== current.rootBranchId
+          event.payload.attempt.missionId !== event.missionId ||
+          event.payload.attempt.attemptId !== event.attemptId
         ) {
-          throw new MissionInvariantError('Iteration 2 Attempt must remain on the root Branch');
+          throw new MissionInvariantError('Attempt identities do not match its Mission event');
         }
+        this.#requirePersistedBranch(event.missionId, event.payload.attempt.branchId, event.seq);
         status = 'running';
         break;
       case 'branch.created':
-        if (
-          event.payload.branch.missionId !== event.missionId ||
-          current.rootBranchId !== event.payload.branch.branchId
-        ) {
-          throw new MissionInvariantError('Root Branch identity does not match its Mission');
-        }
+        this.#assertBranchCreated(current, event);
         break;
       case 'attempt.bound':
         if (
           event.payload.binding.missionId !== event.missionId ||
-          event.payload.binding.branchId !== current.rootBranchId
+          event.payload.binding.attemptId !== event.attemptId
         ) {
-          throw new MissionInvariantError('Attempt Binding does not match its Mission Branch');
+          throw new MissionInvariantError('Attempt Binding identities do not match its event');
         }
+        this.#requirePersistedBranch(event.missionId, event.payload.binding.branchId, event.seq);
         break;
       case 'runtime.event':
         if (
           event.payload.event.missionId !== event.missionId ||
-          event.payload.event.attemptId !== event.attemptId ||
-          event.payload.event.branchId !== current.rootBranchId
+          event.payload.event.attemptId !== event.attemptId
         ) {
           throw new MissionInvariantError('Runtime event identities do not match the Mission');
         }
+        this.#requirePersistedBranch(event.missionId, event.payload.event.branchId, event.seq);
         break;
       case 'profile.selected':
         profile = event.payload.profile;
@@ -1099,14 +1106,12 @@ export class MissionStore {
         ) {
           throw new MissionInvariantError('Receipt belongs to a different mission or contract');
         }
-        if (
-          event.payload.receipt.rootBranchId !== undefined &&
-          event.payload.receipt.rootBranchId !== current.rootBranchId
-        ) {
-          throw new MissionInvariantError('Receipt belongs to a different Branch');
+        {
+          const normalizedReceipt = normalizeReceiptBranchIdentity(event.payload.receipt);
+          this.#requirePersistedBranch(event.missionId, normalizedReceipt.branchId, event.seq);
+          this.#assertReceipt(current, normalizedReceipt);
+          receipt = normalizedReceipt;
         }
-        receipt = event.payload.receipt;
-        this.#assertReceipt(current, receipt);
         status = receipt.outcome === 'verified' ? 'succeeded' : 'failed';
         break;
       default:
@@ -1129,6 +1134,77 @@ export class MissionStore {
         event.recordedAt,
         event.missionId,
       );
+  }
+
+  #assertBranchCreated(
+    current: MissionProjectionV1,
+    event: Extract<StoredEventV1, { type: 'branch.created' }>,
+  ): void {
+    const branch = event.payload.branch;
+    if (branch.missionId !== event.missionId) {
+      throw new MissionInvariantError('Branch belongs to a different Mission');
+    }
+    assertIdentifier('branch.branchId', branch.branchId);
+    if (branch.status !== 'active') {
+      throw new MissionInvariantError('A new Branch must start active');
+    }
+
+    const priorEvents = this.listEvents(event.missionId).filter(
+      (candidate) => candidate.seq < event.seq,
+    );
+    const priorBranches = branchesFromEvents(priorEvents);
+    if (priorBranches.some((candidate) => candidate.branchId === branch.branchId)) {
+      throw new MissionInvariantError(`Branch ${branch.branchId} already exists`);
+    }
+
+    if (branch.branchId === current.rootBranchId) {
+      if (branch.parentBranchId !== undefined || branch.baseCheckpointId !== undefined) {
+        throw new MissionInvariantError('Root Branch cannot have a parent or base Checkpoint');
+      }
+      return;
+    }
+
+    if (branch.parentBranchId === undefined || branch.baseCheckpointId === undefined) {
+      throw new MissionInvariantError(
+        'A child Branch must identify its parent Branch and base Checkpoint',
+      );
+    }
+    assertIdentifier('branch.parentBranchId', branch.parentBranchId);
+    assertIdentifier('branch.baseCheckpointId', branch.baseCheckpointId);
+    if (!priorBranches.some((candidate) => candidate.branchId === branch.parentBranchId)) {
+      throw new MissionInvariantError(
+        `Parent Branch ${branch.parentBranchId} does not exist in this Mission`,
+      );
+    }
+    if (!hasCheckpointEvidence(priorEvents, branch.baseCheckpointId, branch.parentBranchId)) {
+      throw new MissionInvariantError(
+        `Base Checkpoint ${branch.baseCheckpointId} is not recorded for parent Branch ${branch.parentBranchId}`,
+      );
+    }
+  }
+
+  #requirePersistedBranch(missionId: string, branchId: string, beforeSeq: number): BranchV1 {
+    assertIdentifier('branchId', branchId);
+    const branch = branchesFromEvents(
+      this.listEvents(missionId).filter((event) => event.seq < beforeSeq),
+    ).find((candidate) => candidate.branchId === branchId);
+    if (branch !== undefined) return branch;
+
+    // Some schema-v1 fixtures persisted only Mission.rootBranchId. Keep that
+    // identity readable without synthesizing it in listBranches(). Child
+    // Branches always require an explicit branch.created Kernel event.
+    const mission = this.getMission(missionId);
+    if (mission?.rootBranchId === branchId) {
+      return {
+        schemaVersion: DOMAIN_SCHEMA_VERSION,
+        branchId,
+        missionId,
+        status: 'active',
+        createdAt: mission.createdAt,
+      };
+    }
+
+    throw new MissionInvariantError(`Branch ${branchId} is not persisted for Mission ${missionId}`);
   }
 
   #assertReceipt(current: MissionProjectionV1, receipt: ReceiptV1): void {
@@ -1390,6 +1466,8 @@ function eventFromRow(row: EventRow): StoredEventV1 {
 }
 
 function missionFromRow(row: MissionRow): MissionProjectionV1 {
+  const persistedReceipt =
+    row.receipt_json === null ? undefined : (JSON.parse(row.receipt_json) as ReceiptV1);
   return {
     schemaVersion: DOMAIN_SCHEMA_VERSION,
     missionId: row.mission_id,
@@ -1401,10 +1479,69 @@ function missionFromRow(row: MissionRow): MissionProjectionV1 {
     activeProfile: JSON.parse(row.profile_json) as ProfileV1,
     lastSeq: row.last_seq,
     headHash: row.head_hash,
-    ...(row.receipt_json === null ? {} : { receipt: JSON.parse(row.receipt_json) as ReceiptV1 }),
+    ...(persistedReceipt === undefined
+      ? {}
+      : { receipt: normalizeReceiptBranchIdentity(persistedReceipt) }),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+function branchesFromEvents(events: readonly StoredEventV1[]): BranchV1[] {
+  const branches = new Map<string, BranchV1>();
+  for (const event of events) {
+    if (event.type !== 'branch.created') continue;
+    const branch = event.payload.branch;
+    const existing = branches.get(branch.branchId);
+    if (existing !== undefined) {
+      throw new MissionInvariantError(
+        canonicalJson(existing) === canonicalJson(branch)
+          ? `Branch ${branch.branchId} was created more than once`
+          : `Branch ${branch.branchId} has conflicting immutable records`,
+      );
+    }
+    branches.set(branch.branchId, branch);
+  }
+  return [...branches.values()];
+}
+
+function hasCheckpointEvidence(
+  events: readonly StoredEventV1[],
+  checkpointId: string,
+  branchId: string,
+): boolean {
+  return events.some((event) => {
+    if (
+      event.type !== 'runtime.observation' ||
+      (event.payload.kind !== 'checkpoint.created' &&
+        event.payload.kind !== 'composite-checkpoint.created') ||
+      event.payload.data === null ||
+      Array.isArray(event.payload.data) ||
+      typeof event.payload.data !== 'object'
+    ) {
+      return false;
+    }
+    const data = event.payload.data as Record<string, unknown>;
+    return data.checkpointId === checkpointId && data.branchId === branchId;
+  });
+}
+
+function normalizeReceiptBranchIdentity(
+  receipt: ReceiptV1,
+): ReceiptV1 & { readonly branchId: string } {
+  const branchId = receipt.branchId ?? receipt.rootBranchId;
+  if (branchId === undefined) {
+    throw new MissionInvariantError('Receipt must identify its Branch');
+  }
+  assertIdentifier('receipt.branchId', branchId);
+  if (
+    receipt.branchId !== undefined &&
+    receipt.rootBranchId !== undefined &&
+    receipt.branchId !== receipt.rootBranchId
+  ) {
+    throw new MissionInvariantError('Receipt branchId conflicts with legacy rootBranchId');
+  }
+  return { ...receipt, branchId };
 }
 
 function commandFromRow(row: CommandRow): MissionCommandV1 {
