@@ -9,10 +9,7 @@
     "nodeVersion": "v26.4.0"
   },
   "productEntry": "local Workbench page plus durable SSE event stream",
-  "nativeProtocols": [
-    "codex-jsonl",
-    "claude-stream-json"
-  ],
+  "nativeProtocols": ["codex-jsonl", "claude-stream-json"],
   "runs": [
     {
       "harness": "codex",
