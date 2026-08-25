@@ -394,8 +394,13 @@ function extractTool(
   }
 
   const command = commandText(record);
-  if (command !== undefined && looksLikeTestCommand(command)) {
-    const exitCode = safeInteger(record.exit_code ?? record.exitCode);
+  const structuredTestOutput = testOutput(record);
+  if (
+    (command !== undefined && looksLikeTestCommand(command)) ||
+    structuredTestOutput !== undefined
+  ) {
+    const exitCode =
+      safeInteger(record.exit_code ?? record.exitCode) ?? structuredTestOutput?.exitCode;
     candidates.push({
       identity: `test:${toolIdentity}`,
       evidence: 'derived',
@@ -684,6 +689,25 @@ function commandText(record: Record<string, unknown>): string | undefined {
   if (typeof command === 'string') return command;
   if (Array.isArray(command) && command.every((member) => typeof member === 'string')) {
     return command.join(' ');
+  }
+  return undefined;
+}
+
+function testOutput(record: Record<string, unknown>): { readonly exitCode?: number } | undefined {
+  const candidates = [record.content, record.stdout, record.stderr].filter(
+    (value): value is string => typeof value === 'string',
+  );
+  for (const candidate of candidates) {
+    const nodeTestSummary =
+      /(?:^|\n)[\s\S]*?(?:ℹ\s+tests\s+\d+|\b(?:pass|fail|tests)\s+\d+\b)/i.test(candidate) &&
+      /(?:^|\n)(?:✔|✖|ℹ|TAP version\s+\d+)/m.test(candidate);
+    const genericTestSummary =
+      /(?:^|\n)(?:FAILED|PASSED|FAIL|PASS)\b/m.test(candidate) &&
+      /(?:test|spec|suite)/i.test(candidate);
+    if (!nodeTestSummary && !genericTestSummary) continue;
+    const exitMatch = /(?:^|\n)EXIT:\s*(-?\d+)\s*(?:\n|$)/m.exec(candidate);
+    const exitCode = exitMatch?.[1] === undefined ? undefined : Number(exitMatch[1]);
+    return Number.isSafeInteger(exitCode) ? { exitCode: exitCode as number } : {};
   }
   return undefined;
 }

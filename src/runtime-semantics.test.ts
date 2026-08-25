@@ -189,6 +189,34 @@ describe('runtime semantic extraction', () => {
       ]),
     );
     expect(JSON.stringify(userFacts)).not.toContain('private tool result');
+
+    const failedNodeTest = fixture('claude-stream-json', 'user', 'message', {
+      type: 'user',
+      message: {
+        role: 'user',
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: 'tool-test-1',
+            content: '✖ behavior contract\nℹ tests 1\nℹ pass 0\nℹ fail 1\nEXIT: 1',
+            is_error: false,
+          },
+        ],
+      },
+    });
+    expect(extractRuntimeSemanticFacts(failedNodeTest.event, failedNodeTest.artifact)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'test_run',
+          status: 'failed',
+          exitCode: 1,
+          evidence: 'derived',
+        }),
+      ]),
+    );
+    expect(
+      JSON.stringify(extractRuntimeSemanticFacts(failedNodeTest.event, failedNodeTest.artifact)),
+    ).not.toContain('behavior contract');
   });
 
   it('extracts Qoder initialization, usage, and explicit subagent lifecycle shapes', () => {
