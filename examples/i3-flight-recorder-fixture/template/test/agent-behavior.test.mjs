@@ -4,7 +4,7 @@ import test from 'node:test';
 import { answer } from '../src/agent.mjs';
 
 test('the Agent labels answers with their visible evidence source', async () => {
-  console.error('sanitization fixture: sk-proj-MISSIONBRAIDFAKE123456789');
+  console.error('sanitization fixture: password=missionbraid-fake-value');
   await new Promise((resolve) => setTimeout(resolve, 1_500));
   assert.equal(await answer('fixture evidence'), 'SOURCE: fixture evidence');
 });

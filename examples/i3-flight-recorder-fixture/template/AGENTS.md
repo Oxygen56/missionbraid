@@ -8,4 +8,4 @@ This is a disposable Agent-application debugging fixture.
 - Do not install dependencies, access the network, commit, push, publish, or modify Git settings.
 - The MissionBraid controller owns final verification.
 
-Redaction fixture (not a real credential): `sk-proj-MISSIONBRAIDFAKE123456789`.
+Redaction fixture (not a real credential): `password=missionbraid-fake-value`.

@@ -15,7 +15,7 @@ if (!existsSync(builtApp)) throw new Error('Run `pnpm build` before the Iteratio
 const outputFile = process.argv[2] === undefined ? undefined : resolve(process.argv[2]);
 const proofRoot = mkdtempSync(join(tmpdir(), 'missionbraid-i3-proof-'));
 const stateDir = join(proofRoot, 'state');
-const fakeCredential = 'sk-proj-MISSIONBRAIDFAKE123456789';
+const fakeCredential = 'password=missionbraid-fake-value';
 const runtimePlans = [
   {
     harness: 'codex',
