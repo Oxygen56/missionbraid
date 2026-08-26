@@ -13,6 +13,11 @@ Start with the record for the product question being evaluated:
   and its broader [Checkpoint/Replay record](iteration-5-checkpoint-replay-local-2026-08-26.json);
 - conditional Runtime change: [Iteration 6 adaptive Handoff](iteration-6-adaptive-handoff-local-2026-08-26.json).
 - live Mission revision: [Iteration 8 multi-Agent revision](iteration-8-multi-agent-revision-local-2026-08-26.json).
+- Agent regression and fail-closed result enforcement: [Iteration 9 Outcome
+  regression](iteration-9-outcome-regression-local-2026-08-26.json) and its
+  exported [CI result](iteration-9-outcome-ci-result.json);
+- installed-product and source-bundle reproduction: [Iteration 10 package
+  smoke](iteration-10-package-smoke-local-2026-08-26.json).
 
 The Iteration 8 record is a same-host controlled-Git-fixture proof. Workbench
 HTTP creates, starts, revises, queries, and completes the Mission while real
@@ -23,6 +28,25 @@ Attempt plus an independent consolidation Attempt. The Receipt binds the latest
 Contract and Plan revisions, and restart reconstructs the same state. It does
 not establish production use, cross-host or distributed execution, independent
 external reproduction, provider-internal state, or natural-failure behavior.
+
+The Iteration 9 record is also same-host controlled evidence. A saved incident
+is executed with the accepted refreshed-Context intervention against one
+distinct Planner-selected declared high-reasoning Qoder/Qwen3.8-Max Profile.
+Three new Kernel-persisted Branch/Attempt/Binding trials pass the predeclared
+3/3 threshold. A standalone checker copied outside the repository accepts the
+retained result and exits nonzero for both returned and unknown results. This
+does not isolate the Profile as the cause of success, and it is not a hosted CI
+pipeline, third-party run, cross-host proof, deployment approval, publication
+authority, or production evidence.
+
+The Iteration 10 record is an internal clean-install result for one recorded
+local package artifact. It retains a consumer-style external Adapter identity
+chain through installed CLI and Workbench Missions and a same-Adapter isolated
+Fork; migrates one schema-v1 store to v2 without changing its Mission event
+chain; and exercises a separate source-candidate bundle containing the exact
+lockfile through frozen install, typecheck, build, and 362 tests without
+repository fallback. It has no npm publication or independent external,
+third-party, cross-host, or production result.
 
 The retained Runtime records above build on the
 [Iteration 3 live flight recorder](iteration-3-flight-recorder-local-2026-08-26.json),
@@ -81,12 +105,14 @@ semantics. These records do **not** prove a Codex-authored parent commit,
 native session migration, a natural Harness failure, cross-host or third-party
 reproduction, hostile-Runtime isolation, production readiness, or adoption.
 
-## Iterations 2–8 local evidence
+## Iterations 2–10 local evidence
 
 Iteration 2 is implemented in source, including Codex/Qoder/Claude Code
 execution Adapters, the root Branch, the four-part Runtime Profile model,
 source-scoped Event IR with sanitized native artifacts, durable command/outbox
 recovery, and the bilingual Workbench.
+OpenCode, Hermes, and DeepSeek Harness remain catalog-only rather than Mission
+execution Adapters.
 
 The linked records satisfy the Iteration 2, 3, 4, and the Iteration 5
 completion gates at the **same-host local real-Runtime** level. Iteration 3
@@ -100,14 +126,25 @@ all four Replay semantics. Iteration 6 has a separate same-host record for a
 controlled Codex interruption followed by deterministic Profile selection and
 native Handoff. Iteration 7 now has the linked same-host stale-Context record.
 Iteration 8 has the linked same-host controlled-Git-fixture real-Runtime record.
-Iteration 9 retains an implementation/API/local-test
-slice and Iteration 10 has an internal clean-install package smoke. Stronger
-cross-host, independent external, or production evidence remains open.
+Iteration 9 has the linked same-host real-Qoder 3/3 regression record and an
+outside-repository fail-closed checker. Iteration 10 has the linked internal
+clean-install, store-migration, and lockfile-bearing source-bundle record.
+Stronger cross-host, independent external, or production evidence remains open.
+
+At the source-and-test layer, the direct Claude Adapter compacts only
+`system/thinking_tokens` telemetry while preserving non-telemetry event
+semantics and order. Process-finish accounting records the compaction strategy,
+total raw/retained/dropped line counts, and a SHA-256 of the full raw stream;
+dropped telemetry payloads are not retained. This is not retained real-Claude
+performance evidence and does not establish private-thinking capture or
+provider token accuracy.
 
 ## Evidence catalog
 
 | Record                                                                                          | Evidence level                                                                 | What it establishes                                                                                                                                                                        | What it does not establish                                                                                                                                   |
 | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [Iteration 10 package smoke](iteration-10-package-smoke-local-2026-08-26.json)                  | Internal clean install of one recorded local package artifact                  | External Adapter identity chain through installed CLI/Workbench/Fork; v1→v2 store migration; lockfile-bearing source bundle frozen install/typecheck/build/362 tests                       | npm publication, current-revision binding, independent Adapter/operator, cross-host or production result                                                     |
+| [Iteration 9 Outcome regression](iteration-9-outcome-regression-local-2026-08-26.json)          | Same-host real Qoder/Qwen3.8-Max; controlled fixture; outside-repo checker     | Saved incident with accepted Context intervention; Planner-selected distinct Profile; three Kernel trials pass 3/3; restart; fail-closed returned/unknown enforcement                      | Profile-only causality, hosted CI, third-party or cross-host result, deployment/publication authority, production                                            |
 | [Iteration 8 multi-Agent revision](iteration-8-multi-agent-revision-local-2026-08-26.json)      | Same-host real Qoder and Claude Code; controlled Git fixture; Workbench HTTP   | Create/start/revise/query/complete flow; selective interruption and verified reuse; independent consolidation; latest-revision Receipt; restart consistency                                | Production, cross-host/distributed execution, independent external reproduction, provider-internal state, natural failure                                    |
 | [Iteration 7 stale Context](iteration-7-stale-context-2026-08-26.json)                          | Same-host real Qoder; controlled fixture; out-of-process verifier; new Attempt | Old cached Context caused rejection; freshness evidence led to a declared refresh in an isolated new Attempt with the same Profile, Contract, and authority; regression saved and restored | Original native Session resume, equality of hidden inputs, multi-layer attribution, diagnosis accuracy/recall, cross-host, production, external reproduction |
 | [Iteration 5 Checkpoint/Replay](iteration-5-checkpoint-replay-local-2026-08-26.json)            | Same-host real Codex/Qoder/Claude, browser, and local proof controller         | Restorable Composite Checkpoint; Playback, Cached Replay, Counterfactual Resampling, and Execution Fork records; no-tool/no-repeat semantics; restart                                      | Native session fork/resume or migration, natural Harness failure, cross-host, production, independent reproduction                                           |
@@ -125,13 +162,10 @@ cross-host, independent external, or production evidence remains open.
 | [Earlier blocked E1](e1-blocked-local-2026-08-24.json)                                          | Retained local failure history                                                 | Qoder stopped before acknowledgement and MissionBraid issued no false Receipt                                                                                                              | Successful continuity                                                                                                                                        |
 | [Kandev v0.91.0 public-interface check](kandev-v0.91.0-provider-check-local-2026-08-24.json)    | Clean-clone local compatibility check                                          | Fresh-create and deduplicated rerun for checked task, worktree, and custom-process endpoints                                                                                               | Kandev-backed Mission, full Session/Agent lifecycle, Outcome Receipt, Provider support                                                                       |
 
-The following later iterations do not yet have the retained real-Runtime
-evidence level represented above:
-
-| Slice                         | Evidence level                       | What is available                                                                        | Boundary                                                     |
-| ----------------------------- | ------------------------------------ | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| Iteration 9 Outcome Studio    | Implementation/API/local tests       | Agent Revision dimensions, evaluation/incident/CI projections, scenario save/export APIs | No benchmark, CI pipeline, or regression-quality claim       |
-| Iteration 10 package contract | Internal clean-install package smoke | Tarball manifest, public exports, adapter conformance, installed CLI/Workbench startup   | No registry publication or independent external reproduction |
+The 1.0 source candidate contains implementation surfaces for all ten planned
+iterations, but the catalog above does not turn local records into one unified
+flagship proof. Each row retains its own artifact, revision, environment, and
+claim boundary.
 
 ## Reading a record
 
@@ -164,6 +198,7 @@ documented Runtime Profile boundary. The Iteration 6 planner result is a
 controlled-interruption demonstration rather than a natural-failure benchmark;
 the Iteration 8 proof is a controlled same-host fixture rather than production,
 cross-host, independent, provider-internal, or natural-failure evidence; the
-Iteration 9 slice is not runtime evidence; and the Iteration 10
-smoke does not establish registry publication or independent external
-installation.
+Iteration 9 proof is a controlled same-host Qoder run plus an outside-repository
+process, not hosted CI, cross-host, third-party, or Profile-only causal evidence;
+and the Iteration 10 smoke does not establish registry publication,
+current-revision binding, or independent external installation.

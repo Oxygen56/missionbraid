@@ -15,16 +15,22 @@
 > same-host stale-Context diagnostic record. Iteration 8 has a retained
 > same-host controlled-Git-fixture record using real local Qoder/Qwen3.8-Max
 > and Claude Code/deepseek-v4-pro through the Workbench HTTP flow.
-> Iteration 9 has a local implementation slice, and Iteration 10 has an internal
-> clean-install package record. Cross-host, independent external reproduction,
-> and production evidence remains open.
+> The 1.0 source candidate contains implementation surfaces for all ten planned
+> iterations. Iteration 9 has retained same-host evidence for a saved incident
+> rerun with an accepted Context intervention on a distinct Planner-selected
+> high-reasoning Qoder/Qwen3.8-Max Profile, passing a predeclared 3/3 threshold,
+> plus a fail-closed checker copied outside the repository. Iteration 10 has one
+> internal clean-install, migration, and lockfile-bearing source-bundle record.
+> npm publication, cross-host proof, independent external reproduction, and
+> production adoption remain open.
 
 ## Product definition
 
 MissionBraid is a local-first **Agent Runtime Workbench** for developers who
-build and improve applications with native coding agents. It treats Codex,
-Qoder, Claude Code, OpenCode, Hermes, and future Harnesses as execution
-Runtimes behind one Mission lifecycle:
+build and improve applications with native coding agents. Codex, Qoder, and
+Claude Code are direct Mission execution Adapters. OpenCode, Hermes, and
+DeepSeek Harness are catalog-only until an execution Adapter exists. Supported
+Runtimes enter one Mission lifecycle:
 
 ```text
 compose → run → inspect → revise → re-run → evaluate → verify
@@ -604,6 +610,16 @@ Unsupported operations return explicit capability errors. MissionBraid does
 not simulate a strong debugger feature by relabeling transcript playback or
 process termination.
 
+The current built-in support boundary is explicit: Codex, Qoder, and Claude
+Code execute through direct process Adapters; Claude also has one
+request-scoped native pre-tool gate. OpenCode, Hermes, and DeepSeek Harness are
+catalog-only. The Claude direct Adapter preserves the semantics and ordering of
+non-telemetry events while compacting only `system/thinking_tokens` telemetry.
+Process-finish accounting retains total raw, retained, and dropped line counts,
+the compaction strategy, and a SHA-256 of the full raw stream. Dropped telemetry
+payloads are not retained; this does not claim private-thinking capture,
+provider token accuracy, or production performance.
+
 ## Durable execution command path
 
 Long-running execution cannot depend on an in-memory UI operation. Every
@@ -741,7 +757,8 @@ original revision and its branches remain inspectable.
 | Failure attribution          | Evidence graph plus one real stale-Context diagnostic Branch                                                                                          | More real-layer probes and calibrated conclusions                                        |
 | Planner                      | Deterministic filter/rank/bind projection with inspectable decisions                                                                                  | Broader quota/outcome learning and policy history                                        |
 | Mission Plan runtime         | Parallel isolated node execution, live selective invalidation/reuse, new consolidation Attempt, latest-revision Receipt, and Workbench/API projection | Broader node roles, shared-resource coordination, and provider-backed execution policies |
-| Verification                 | Out-of-process verifier, Receipt, Outcome Studio and scenario/CI export                                                                               | External CI runner and upgraded-Runtime regressions                                      |
+| Verification                 | Out-of-process verifier, Receipt, Outcome Studio, saved-incident rerun, real Qoder 3/3 threshold, and outside-repository fail-closed checker          | Hosted CI/operator reproduction and broader regression calibration                       |
+| Packaging and extension      | Public Adapter SDK; internal clean-install CLI/Workbench/Fork identity chain; v1→v2 migration; lockfile-bearing source-bundle reproduction            | npm publication, independent Adapter/operator reproduction, and cross-host validation    |
 
 The current records answer four different product questions:
 
@@ -784,6 +801,9 @@ readiness.
 - Native Harness credentials remain behind adapters and are filtered before
   any event or artifact persistence. “Raw” artifacts preserve sanitized native
   format plus redaction metadata, never credentials.
+- Claude per-token thinking telemetry may be compacted before Kernel ingestion.
+  Non-telemetry semantics remain ordered, while raw-stream accounting retains
+  counts and a whole-stream hash rather than the dropped per-token payloads.
 - Architecture, source code, fixture tests, real local Runtime execution,
   third-party reproduction, and production adoption are separate evidence
   levels.

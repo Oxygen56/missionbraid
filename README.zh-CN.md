@@ -5,8 +5,9 @@
 **一条 Mission。原生 Runtime。可解释的 Agent 行为。**
 
 MissionBraid 是一个面向原生 Coding Agent 应用开发者的本地优先 **Agent Runtime
-Workbench（运行时工作台）**。它让 Codex、Qoder、Claude Code、OpenCode、Hermes
-和未来的 Harness 共享一条持久 Mission 与一套开发闭环：
+Workbench（运行时工作台）**。Codex、Qoder 和 Claude Code 通过直接 Mission Adapter
+执行；OpenCode、Hermes 和 DeepSeek Harness 目前只进入清单。Workbench 让受支持的
+Runtime 共享一条持久 Mission 与一套开发闭环：
 
 ```text
 组合 → 运行 → 检查 → 修改 → 重跑 → 评测 → 验收
@@ -23,10 +24,15 @@ Workbench（运行时工作台）**。它让 Codex、Qoder、Claude Code、OpenC
 > 真实工作区继续路径仍然是 Execution Fork，但四种 Replay 语义已经实现并有单独的本地记录；第 8 次已有一条
 > 同机受控 Git Fixture 记录：Workbench HTTP API 创建、启动、修订、查询并完成一条 Mission Plan，真实本地
 > Qoder/Qwen3.8-Max 与 Claude Code/deepseek-v4-pro 分工执行，完成选择性失效与复用、新整合 Attempt、最新版
-> Receipt 和重启恢复。第 9 次是本地产品切片。第 10 次已有内部 clean-install 记录：
-> 外部消费者编写的 Harness 会出现在 Runtime Hub 和 Mission 表单中，能完成带验收
-> Receipt 的 Mission，并在隔离 worktree 中继续调用同一 Adapter。npm 发布、独立外部
-> 复现和生产证据仍未建立。
+> Receipt 和重启恢复。规划的十次产品迭代现已全部进入 1.0 source-candidate 实现层。
+> 第 9 次已有保留的同机真实证据：使用已接受的 Context 刷新 Intervention，在 Planner
+> 选择的一个升级 Qoder/Qwen3.8-Max Profile 上运行，三个新 Runtime trial 全部达到预先
+> 声明的 3/3 阈值；复制到仓库外运行的
+> 独立进程检查器会对 returned 或 unknown 结果失败关闭。第 10 次已有内部
+> clean-install 记录，覆盖外部 Adapter 身份链、已安装 CLI 与 Workbench Mission、
+> 同 Adapter 隔离 Execution Fork、Store v1→v2 迁移，以及包含 lockfile 的独立源码包；
+> 后者的 frozen install、typecheck、build 和完整测试全部通过。npm 发布、独立第三方
+> 复现、跨主机证据和生产采用仍未建立。
 > 当前 Workbench 可以运行真实 Codex、Qoder 和 Claude Code Attempt；实时展示 Context
 > Graph；控制一条真实 Claude Code 工具调用前边界；在控制器崩溃后对账一个可查询的外部
 > Effect；并从 Git 支撑的 Composite Checkpoint 创建隔离子 Branch，由全新的真实 Codex
@@ -40,13 +46,13 @@ Workbench（运行时工作台）**。它让 Codex、Qoder、Claude Code、OpenC
 
 ## 一张表了解产品
 
-|              | MissionBraid                                                                                                                                                                                                                                                                                                     |
-| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 用户问题     | 修改模型、Prompt、Skill、工具、Memory 策略、权限或 Runtime 都可能改变 Agent 行为，但源码差异和零散日志无法说明真正运行的有效 Agent。                                                                                                                                                                             |
-| 产品         | 用一个 Workbench 绑定有效 Agent Revision、运行持久 Mission、实时检查上下文和工具、修改受支持的输入、从有价值的边界重跑、对比行为并验收结果。                                                                                                                                                                     |
-| 核心抽象     | **Mission** 持有目标、执行 Branch、证据、Effect 和完成状态；Harness 只是可替换的 Runtime。                                                                                                                                                                                                                       |
-| 当前已经实现 | I1–I8 已提供双语 Workbench、Mission Kernel、原生与外部 Adapter、Runtime Profile、实时 Event IR/Context Graph、工具与 Effect 控制、Checkpoint/Replay/Fork、自适应 Handoff、stale Context 诊断、Mission Plan、Verifier 和 Receipt。I10 新增真实 Harness 身份、Workbench 外部路线、CLI 执行和同 Adapter 隔离 Fork。 |
-| 交付计划     | **共 10 次主要产品迭代。I8 已有真实本地 Qoder/Claude 的有界流程；I9 是本地实现切片；I10 已有内部安装版产品流程。npm 发布、独立外部复现、跨主机与生产证据仍未建立。**                                                                                                                                             |
+|              | MissionBraid                                                                                                                                                                                                                                                                                                                |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 用户问题     | 修改模型、Prompt、Skill、工具、Memory 策略、权限或 Runtime 都可能改变 Agent 行为，但源码差异和零散日志无法说明真正运行的有效 Agent。                                                                                                                                                                                        |
+| 产品         | 用一个 Workbench 绑定有效 Agent Revision、运行持久 Mission、实时检查上下文和工具、修改受支持的输入、从有价值的边界重跑、对比行为并验收结果。                                                                                                                                                                                |
+| 核心抽象     | **Mission** 持有目标、执行 Branch、证据、Effect 和完成状态；Harness 只是可替换的 Runtime。                                                                                                                                                                                                                                  |
+| 当前已经实现 | 规划的十次迭代已全部进入 1.0 source candidate：双语 Workbench、Mission Kernel、直接与公开外部 Adapter、Runtime Profile、实时 Event IR/Context Graph、工具与 Effect 控制、Checkpoint/Replay/Fork、自适应 Handoff、stale Context 诊断、Mission Plan、Outcome Studio、Verifier、Receipt，以及 clean-install package/迁移路径。 |
+| 证据边界     | I8 有真实本地 Qoder/Claude 的有界流程；I9 有真实 Qoder 升级 Profile 3/3 回归和仓库外失败关闭检查器；I10 有内部安装版产品流程及一个通过 frozen install 和检查的含 lockfile 源码包。npm 发布、独立第三方复现、跨主机证据与生产采用仍未建立。                                                                                  |
 
 ## 为什么要做 MissionBraid
 
@@ -215,6 +221,9 @@ Kandev 可以通过公开的 Provider 边界，为成熟的工作区和进程执
 - 注册外部 Adapter 在 Runtime Hub 中的清单与 Mission 表单路线，全程保留 manifest
   中的真实 Harness 身份；
 - 一条真实 Claude Code 原生工具调用前 Gate，以及受保护、可查询的外部 Effect 对账；
+- 有界的 Claude 输出压缩：保留非 telemetry 事件的语义和顺序，对逐 token
+  `thinking_tokens` telemetry 取样；进程结束统计记录总 raw/retained/dropped 行数和完整
+  raw stream 的 SHA-256，被丢弃的逐 token payload 不会保留；
 - Git 支撑的 Composite Checkpoint：工作区组件指向可恢复的准确 commit/tree，其他组件明确分类；
 - 不可变父子 Branch 谱系，以及在隔离 Git worktree 中启动全新原生进程的 Execution Fork；
 - Playback、Cached Replay、Counterfactual Resampling 和 Execution Fork 四种明确区分的 Replay
@@ -222,10 +231,16 @@ Kandev 可以通过公开的 Provider 边界，为成熟的工作区和进程执
 - 有预算约束、绑定 Provenance 的 Handoff Capsule；
 - 可查询的自适应 Planner、故障情报候选、Mission Plan 节点执行投影，以及 Outcome Studio
   的 Agent Revision/回归场景/CI 结果投影与场景导出接口；
+- 可执行的保存 Incident 会在 Planner 选出的升级 Qoder/Qwen3.8-Max Profile 上产生三个
+  新的 Kernel 持久 Trial 并达到 3/3；仓库外独立进程会对 returned 或 unknown 结果
+  以非零状态失败关闭；
 - 显式的可变工作区 Effect Identity；
 - 进程外验收和 Hash 绑定的 Outcome Receipt；
 - 可安装包的公开 Adapter SDK，direct、ACP 和 provider-backed 示例，以及一条通过
-  CLI、Workbench 表单和同 Adapter 隔离 Fork 的内部 clean-install 流程；
+  CLI、Workbench 表单和同 Adapter 隔离 Fork 的内部 clean-install 流程，并保留
+  Adapter、Profile、Attempt、Binding 与 Receipt 身份链；
+- 已安装产品的 Store schema v1→v2 迁移，以及单独包含 lockfile 的 source-candidate
+  bundle；后者不回退到仓库即可完成 frozen install、typecheck、build 与完整测试；
 - 重启后的状态恢复，以及中断 Mission 的继续运行。
 
 当前公开证据按所验证的能力分类：
@@ -235,6 +250,11 @@ Kandev 可以通过公开的 Provider 边界，为成熟的工作区和进程执
   Prompt 的 Contract 修订；只中止旧 Prompt 工作；复用已验证 Tool Artifact 而不重跑
   Qoder；在不改写来源 Branch 的新 Attempt 中整合；按最新版 Contract/Plan 签发 Receipt；
   并在重启后恢复一致状态。
+- **I9——保留的 Agent 回归：** 一条原本虚假报成功的 Qoder Branch 经修订后，保存的
+  Incident 使用已接受的 Context Intervention，在 Planner 选出的不同升级
+  Qoder/Qwen3.8-Max Profile 上重跑。三个新 Runtime trial
+  达到预先声明的 3/3 阈值；重启可恢复结果；仓库外检查器会对 returned 或 unknown
+  回归返回非零状态。这不把成功因果归于 Profile 单独变化。
 - **I7——日常 Agent 调试：** 真实 Qoder/Qwen3.8-Max 先因旧缓存 Context 失败，再由同一
   Runtime Profile 的全新 Attempt 在受控 Fixture 的 Context-only 诊断 Fork 中成功。
 - **I5——从保留边界重新执行：** 真实 Codex 父结果经浏览器创建 Composite Checkpoint，
@@ -261,22 +281,22 @@ Provider 内部状态、通用多层诊断准确率、跨主机或分布式执�
 
 ## 十次产品迭代
 
-| 迭代 | 用户可见结果                                                                        | 状态                              |
-| ---: | ----------------------------------------------------------------------------------- | --------------------------------- |
-|    1 | 一条 Mission 能从中断中恢复，完成 Codex → Qoder 接力，并以已验证 Receipt 结束       | 本地已实现                        |
-|    2 | Runtime Profile 和 Native 事件通过统一 Event IR 变得可观察                          | 本地已验证                        |
-|    3 | 开发者可以检查实时执行、上下文组装、工具流和工作区变更                              | 本地已验证                        |
-|    4 | 一条受支持的工具调用可以在发出前停止，并在继续前修改                                | 本地已验证                        |
-|    5 | 从保留的边界创建隔离的 Execution Fork，并提供 Playback/Cached/Counterfactual Replay | 本地已验证                        |
-|    6 | 可复现的 Planner 选择 Profile，并只在受控中断后需要时执行 Handoff                   | 受控本地已验证                    |
-|    7 | 从可观察的 Context/工作区证据诊断一条 stale Context 故障                            | 真实 Qoder 受控证明；更广归因开放 |
-|    8 | Multi-Agent 工作成为持久 Mission Graph，并支持理解修订的协同                        | 同机真实 Runtime 受控证明         |
-|    9 | Agent Revision 对比、Regression Scenario、Eval、Receipt 与 CI 导出                  | 实现/API/本地测试切片             |
-|   10 | 外部开发者可以安装、扩展并复现完整 Runtime Workbench                                | 内部 clean-install smoke          |
+| 迭代 | 用户可见结果                                                                        | 状态                                        |
+| ---: | ----------------------------------------------------------------------------------- | ------------------------------------------- |
+|    1 | 一条 Mission 能从中断中恢复，完成 Codex → Qoder 接力，并以已验证 Receipt 结束       | 本地已实现                                  |
+|    2 | Runtime Profile 和 Native 事件通过统一 Event IR 变得可观察                          | 本地已验证                                  |
+|    3 | 开发者可以检查实时执行、上下文组装、工具流和工作区变更                              | 本地已验证                                  |
+|    4 | 一条受支持的工具调用可以在发出前停止，并在继续前修改                                | 本地已验证                                  |
+|    5 | 从保留的边界创建隔离的 Execution Fork，并提供 Playback/Cached/Counterfactual Replay | 本地已验证                                  |
+|    6 | 可复现的 Planner 选择 Profile，并只在受控中断后需要时执行 Handoff                   | 受控本地已验证                              |
+|    7 | 从可观察的 Context/工作区证据诊断一条 stale Context 故障                            | 真实 Qoder 受控证明；更广归因开放           |
+|    8 | Multi-Agent 工作成为持久 Mission Graph，并支持理解修订的协同                        | 同机真实 Runtime 受控证明                   |
+|    9 | Agent Revision 对比、Regression Scenario、Eval、Receipt 与 CI 导出                  | 真实 Qoder 升级 Profile 3/3；失败关闭检查器 |
+|   10 | 外部开发者可以安装、扩展并复现完整 Runtime Workbench                                | 内部 clean-install 与源码包已验证           |
 
-目标是让每次迭代最终都结束于一条真实的 Workbench 用户流程，而不是只有孤立的 Schema、
-Adapter 或测试套件。I8 有同机真实 Runtime 流程；I10 有内部 clean-install Workbench
-流程和机器可读记录；I9 仍是本地切片。详见[迭代路线](docs/roadmap.md)和[证据边界](evidence/README.md)。
+十次迭代现已全部进入 1.0 source-candidate 实现层，但证据等级仍然明确分开。I8 有同机
+真实 Runtime 流程；I9 有同机真实 Qoder 回归与仓库外检查器；I10 有内部 clean-install
+Workbench、迁移和冻结源码包记录。详见[迭代路线](docs/roadmap.md)和[证据边界](evidence/README.md)。
 
 ## 运行当前 Workbench
 
@@ -373,6 +393,20 @@ Counterfactual Resampling 在隔离的模型安全模式中只产生模型证据
 目标，要求 Capsule 在首个工具请求前确认，并以 no-repeat Effect、Verifier 和 Receipt
 收口。这里的中断是证明控制边界的受控 Provider 行为，不是自然的模型、额度或网络故障。
 
+[第 9 次迭代 Outcome 回归记录](evidence/iteration-9-outcome-regression-local-2026-08-26.json)
+保留同一 Contract 与确定性 Suite 下的一条原始虚假成功和一条修订后已验证 Branch。保存的
+Incident 使用已接受的 Context Intervention，在 Planner 选择的不同升级
+Qoder/Qwen3.8-Max Profile 上产生三个新的 Kernel
+持久 Attempt，全部达到预先声明的 3/3 阈值。复制到仓库外运行的检查器接受保留结果，
+并对 returned 与 unknown 回归返回非零状态。这是同机受控证据，不是跨主机、生产、部署
+批准或发布权限证据，也不证明 Profile 单独变化导致成功。
+
+[第 10 次迭代 package smoke 记录](https://github.com/Oxygen56/missionbraid/blob/main/evidence/iteration-10-package-smoke-local-2026-08-26.json)
+覆盖本地 tarball 在干净消费者中的安装；外部 Adapter 在已安装 CLI、Workbench Mission
+和同 Adapter 隔离 Fork 中保持身份链；Store v1→v2 迁移保持 Mission 事件链；以及一个
+包含 lockfile 的独立 source-candidate bundle 在不回退仓库的情况下通过 frozen install、
+typecheck、build 和完整测试。它不证明 npm 发布或独立外部复现。
+
 [第 2 次迭代机器可读记录](evidence/iteration-2-three-harness-local-2026-08-25.json)
 将一个干净修订绑定到：
 
@@ -387,10 +421,10 @@ Counterfactual Resampling 在隔离的模型安全模式中只产生模型证据
 保留了相匹配的源 Checkpoint/目标 Baseline 工作区快照，以及不同的前后工作区 Digest；本项目不用它声称已实现受强制的修改前拦截。
 
 目前所有运行记录都是本地同机结果。[证据索引](evidence/README.md)严格区分已经演示的结果与目标架构。
-第 8 次迭代已有真实 Qoder 与 Claude Code 的同机受控 Git Fixture 记录；第 9 次没有新的
-真实 Runtime 证据；第 10 次是内部 clean-install package smoke。现有记录不证明原生
-Session 迁移、自然 Harness 故障迁移、Provider 内部状态、
-跨主机或独立外部复现、生产就绪或第三方采用。
+第 8 次迭代已有真实 Qoder 与 Claude Code 的同机受控 Git Fixture 记录；第 9 次已有真实
+Qoder 升级 Profile 3/3 与仓库外失败关闭检查器；第 10 次是内部 clean-install 与含 lockfile 源码包
+记录。现有记录不证明原生 Session 迁移、自然 Harness 故障迁移、Provider 内部状态、
+跨主机或独立第三方复现、生产就绪或采用。
 
 ## 文档
 

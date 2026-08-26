@@ -28,9 +28,10 @@ a collection of prompt templates.
 > **A Mission outlives every Runtime, session, and execution branch.**
 
 A Mission owns the user's objective, constraints, workspace, evolving plan,
-execution branches, mutable effects, and Outcome Contract. Codex, Qoder, Claude
-Code, OpenCode, Hermes, and future Harnesses are replaceable Runtimes behind
-capability-aware adapters.
+execution branches, mutable effects, and Outcome Contract. Codex, Qoder, and
+Claude Code currently run through direct Mission Adapters. OpenCode, Hermes,
+and DeepSeek Harness are catalog-only; future Harnesses must enter through an
+honest capability-aware Adapter before they can execute an Attempt.
 
 The final Workbench supports one connected loop:
 
@@ -243,6 +244,11 @@ Iteration 2 is now implemented in source:
 
 - Codex, Qoder, and Claude Code are execution Adapters with explicit capability
   declarations;
+- Claude Code has one request-scoped native pre-tool gate. Its direct Adapter
+  preserves non-telemetry event semantics and order while compacting per-token
+  `thinking_tokens` telemetry; process-finish accounting records total
+  raw/retained/dropped line counts and a SHA-256 of the full raw stream, while
+  dropped per-token payloads are not retained;
 - every new Mission receives a default root Branch;
 - Runtime Profile Definition, Catalog Observation, immutable effective
   Snapshot, and Attempt Binding are distinct persisted objects;
@@ -310,12 +316,20 @@ The repository now contains the following later product slices:
   benchmark is claimed.
 - **Iteration 9 — Outcome Studio.** Agent Revision dimensions, evaluation and
   incident projections, CI result views, and regression scenario save/export
-  APIs are implemented and locally tested. No external CI or regression-quality
-  claim is made.
-- **Iteration 10 — package contract.** An internal clean-install smoke checks
-  the tarball manifest, public exports, third-party Adapter conformance, and
-  installed CLI/Workbench startup. It has not been published to a registry or
-  independently reproduced outside this workspace.
+  APIs are implemented. The retained same-host record reruns one saved incident
+  with the accepted Context intervention on a distinct Planner-selected
+  high-reasoning Qoder/Qwen3.8-Max Profile; three new Kernel-persisted trials
+  pass the predeclared 3/3 threshold. A checker copied outside the repository
+  accepts the retained result and fails closed for returned or unknown results.
+  This is not a hosted CI pipeline, cross-host, or third-party evidence, and it
+  does not isolate the Profile as the cause of success.
+- **Iteration 10 — package contract.** One retained internal clean-install smoke
+  covers public exports; an external Adapter identity chain through installed
+  CLI and Workbench Missions; a same-Adapter isolated Fork; schema-v1-to-v2
+  store migration; and a separate lockfile-bearing source bundle whose frozen
+  install, typecheck, build, and full tests pass without repository fallback.
+  It has not been published to a registry or independently reproduced by a
+  third party.
 
 ## What is authoritative?
 
@@ -397,9 +411,11 @@ record is a controlled fixture, not an original-Session resume or evidence that
 every hidden or unobserved input was equal. Its Context refresh applies only to
 that diagnostic Attempt; multi-layer attribution and diagnosis accuracy remain
 open. Iteration 8 now has an executable local path and a retained same-host
-controlled-Git-fixture real-Runtime record. Iteration 9 is an
-implementation/API/local-test slice, and Iteration 10 is an internal
-clean-install package smoke rather than a registry or external-clone result.
+controlled-Git-fixture real-Runtime record. Iteration 9 has a retained
+same-host real-Qoder 3/3 upgraded-Profile regression and an outside-repository
+fail-closed checker. Iteration 10 has one internal clean-install, migration, and
+lockfile-bearing source-bundle record rather than a registry, cross-host, or
+independent external result.
 See the [evidence index](../evidence/README.md) for each claim boundary.
 
 ## Code map for the current foundation
@@ -426,13 +442,15 @@ See the [evidence index](../evidence/README.md) for each claim boundary.
 
 ## How to read the roadmap
 
-MissionBraid still has **ten major product iterations**, but “implemented” and
-“proven with a real Runtime” are deliberately separate labels. Iterations 1–5
+MissionBraid's 1.0 source candidate contains implementation surfaces for all
+**ten major product iterations**, but “implemented” and “proven with a real
+Runtime” are deliberately separate labels. Iterations 1–5
 have same-host local evidence, Iteration 6 has a controlled-interruption
 adaptive-Handoff record, Iteration 7 has one same-host stale-Context record,
 Iteration 8 has an executable local path and a retained same-host real-Runtime
-controlled-fixture record. Iteration 9 has an implementation/API/local-test slice,
-and Iteration 10 has an internal clean-install package smoke.
+controlled-fixture record. Iteration 9 has a same-host real-Qoder regression and
+outside-repository checker, and Iteration 10 has an internal clean-install and
+source-bundle package smoke.
 
 The remaining evidence upgrades are natural-failure handling, native-session or
 cross-host continuity where adapters can honestly support it, independent

@@ -2,7 +2,10 @@
 
 MissionBraid is pre-alpha. Contributions are welcome when they preserve the
 project's central boundary: the Mission Kernel owns control-plane truth, while
-Runtimes and execution providers remain replaceable adapters.
+Runtimes and execution providers remain replaceable adapters. The 1.0 source
+candidate contains implementation surfaces for all ten planned iterations, but
+retained local evidence is not npm publication, independent reproduction,
+cross-host validation, or production adoption.
 
 ## Before opening a change
 
@@ -43,8 +46,13 @@ messages, charge money, or mutate repositories outside the explicit fixture.
 
 ## Runtime support boundary
 
-- Codex and Qoder have direct Mission execution adapters.
-- Claude Code, OpenCode, Hermes, and DeepSeek Harness are catalog targets only.
+- Codex, Qoder, and Claude Code have direct Mission execution Adapters.
+- Claude Code also has one request-scoped native pre-tool gate. Its direct
+  Adapter compacts only `system/thinking_tokens` telemetry while preserving
+  non-telemetry event semantics and order. Accounting records raw, retained,
+  and dropped line counts plus a SHA-256 of the full raw stream; dropped
+  per-token payloads are not retained.
+- OpenCode, Hermes, and DeepSeek Harness are catalog-only.
 - Kandev v0.91.0 has a separate compatibility check; it is not a supported
   Mission execution provider.
 - Automatic optimal or quota-aware routing is not implemented.
@@ -78,6 +86,11 @@ Public claims must distinguish:
 New evidence should be machine-readable, revision-bound, free of credentials,
 and include an explicit claim boundary. A model or Harness report is not an
 Outcome Receipt.
+
+Do not describe the Iteration 9 outside-repository checker as hosted CI,
+third-party, or cross-host evidence. Do not describe the Iteration 10 internal
+clean install or lockfile-bearing source-bundle reproduction as npm publication
+or independent adoption.
 
 ## Pull requests
 

@@ -6,9 +6,13 @@
 > four Replay semantics, controlled adaptive Handoff, and one stale-Context
 > daily-debugging case. Iteration 8 has a retained same-host controlled-fixture
 > record using real local Qoder/Qwen3.8-Max and Claude Code/deepseek-v4-pro
-> through Workbench HTTP. Iterations 9–10 have
-> implementation/API or package slices. Independent external reproduction and
-> production evidence remains open.
+> through Workbench HTTP. The 1.0 source candidate contains implementation
+> surfaces for all ten planned iterations. Iteration 9 has a retained same-host
+> real-Qoder 3/3 upgraded-Profile regression plus an outside-repository
+> fail-closed checker; Iteration 10 has one internal clean-install, store
+> migration, and lockfile-bearing source-bundle record. npm publication,
+> independent external reproduction, cross-host proof, and production evidence
+> remain open.
 > Iteration 7's
 > stale-Context diagnostic loop is now recorded as same-host local evidence;
 > its provider-internal and generalization boundaries remain explicit.
@@ -240,10 +244,16 @@ Implemented and evidenced today (same-host, local pre-alpha):
 
 - bilingual local Workbench and Mission Kernel;
 - Codex, Qoder, and Claude Code execution Adapters;
+- OpenCode, Hermes, and DeepSeek Harness catalog entries without Mission
+  execution Adapters;
 - Runtime Profile Definition, Catalog Observation, immutable effective
   Snapshot, and Attempt Binding;
 - source-scoped Event IR linked to sanitized, content-addressed native
   artifacts, with live Context Graph and context-diff projections;
+- Claude non-telemetry event semantics and order preserved while only
+  `system/thinking_tokens` telemetry is compacted; raw/retained/dropped counts
+  and the full raw-stream hash are retained, but dropped per-token payloads are
+  not;
 - durable events, command/outbox dispatch, and restart restoration;
 - a native Claude Code pre-tool boundary and queryable external Effect
   reconciliation;
@@ -259,11 +269,21 @@ Implemented and evidenced today (same-host, local pre-alpha):
 - executable Mission Plan coordination through the Workbench/API: parallel
   isolated node Attempts, live revision fencing, verified Artifact reuse, a new
   consolidation Attempt, and a Receipt bound to the latest Contract and Plan;
+- Outcome Studio execution of a saved incident with the accepted Context
+  intervention on one distinct Planner-selected high-reasoning
+  Qoder/Qwen3.8-Max Profile: three new Kernel-persisted trials meet the
+  predeclared 3/3 threshold, restart restores the result, and a checker copied
+  outside the repository fails closed for returned or unknown outcomes;
 - controller-run out-of-process verifier, Branch-bound Outcome Receipts, and
-  the public Adapter SDK/package contract.
+  the public Adapter SDK/package contract;
+- an internal clean-install external Adapter identity chain through installed
+  CLI and Workbench Missions and a same-Adapter isolated Fork, store schema
+  v1→v2 migration, and a lockfile-bearing source bundle that passes frozen
+  install, typecheck, build, and the full test suite without repository fallback.
 
 The [evidence index](../evidence/README.md) records the exact retained Runtime
-boundaries for Iterations 1–8. They are local same-host results, not native
+and package boundaries for Iterations 1–10. They are local same-host or internal
+clean-install results, not native
 session migration, natural failure recovery, cross-host reproduction,
 production readiness, or third-party adoption. The Iteration 8 record covers
 Workbench HTTP creation, start, live revision, query, and completion with real
@@ -278,8 +298,10 @@ Still open beyond that bounded Iteration 7 record:
 
 Still open at stronger evidence or delivery levels:
 
-- Iteration 9 external CI execution and regression-quality evidence;
-- Iteration 10 registry publication and independent clean installation.
+- hosted or independently operated CI execution, broader regression
+  calibration, and proof that isolates a Runtime Profile change as causal;
+- npm publication, independent clean installation, cross-host validation, and
+  production adoption.
 
 The [Iteration 7 stale-Context record](../evidence/iteration-7-stale-context-2026-08-26.json)
 now proves one same-host local case: an old cached Context led to a rejected
@@ -307,6 +329,8 @@ MissionBraid does not currently claim:
 - perfect root-cause attribution;
 - globally optimal Runtime selection;
 - arbitrary Harness compatibility;
+- npm package publication, independent third-party reproduction, or cross-host
+  continuity;
 - production readiness or adoption.
 
 These are architectural boundaries, not footnotes. Any future claim must be
@@ -351,6 +375,17 @@ The release decision is layered rather than delegated to another Agent:
   retained outputs, and a calibration boundary;
 - deterministic policy applies the recorded evidence to issue the final
   qualification and Outcome Receipt.
+
+The [retained Iteration 9 record](../evidence/iteration-9-outcome-regression-local-2026-08-26.json)
+exercises that layering once. The original Agent-reported false success is
+rejected by the deterministic Suite; a revised verified Branch is selected by
+separate human authority; and the saved incident is then rerun with the accepted
+Context intervention on a distinct Planner-selected high-reasoning
+Qoder/Qwen3.8-Max Profile. Three new Runtime trials pass the predeclared 3/3
+threshold. A process copied outside the repository accepts the retained result
+but exits nonzero for returned or unknown outcomes. This does not prove the
+Profile alone caused the improvement, nor does it establish hosted CI,
+third-party operation, cross-host execution, or production reliability.
 
 Public systems already expose parts of this pattern. Volcengine states that
 its Skills pass internal CI and end-to-end tests before synchronization, while

@@ -7,9 +7,13 @@
 > 7 now has one same-host stale-Context diagnostic record. Iteration 8 has a
 > retained same-host, controlled-Git-fixture record with real local
 > Qoder/Qwen3.8-Max and Claude Code/deepseek-v4-pro executions through the
-> Workbench HTTP flow. Iteration 9 has a local implementation slice, and Iteration 10 has
-> an internal clean-install package record. Independent external reproduction,
-> cross-host, and production evidence remains open.
+> Workbench HTTP flow. The 1.0 source candidate contains implementation surfaces
+> for all ten planned iterations. Iteration 9 has retained same-host evidence for
+> a real Qoder upgraded-Profile 3/3 regression plus a fail-closed checker running
+> from outside the repository. Iteration 10 has an internal clean-install record
+> and a lockfile-bearing source bundle that passes frozen install, typecheck,
+> build, and full tests. Independent third-party reproduction, cross-host, npm
+> publication, and production evidence remain open.
 > The number describes dependency-complete product releases, not calendar
 > sprints.
 
@@ -55,18 +59,18 @@ engineering outputs but cannot complete an iteration by themselves.
 
 ## Iteration overview
 
-| Iteration                                       | Product result                                                                            | Status                                                          |
-| ----------------------------------------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| 1. Mission continuity foundation                | One Mission survives process and Harness changes and closes with a Receipt                | Implemented local slice                                         |
-| 2. Runtime intelligence and Event IR            | Effective Profiles and native events share one typed Runtime model                        | Validated local slice                                           |
-| 3. Live flight recorder and Context Graph       | Developers see context, tools, files, tests, cost, and subagents while work runs          | Validated local slice                                           |
-| 4. Tool gateway and live debugger               | A real mutable tool can be stopped before dispatch and changed or rejected                | Validated local slice                                           |
-| 5. Composite checkpoints, Fork, and Replay      | A retained execution boundary becomes an isolated executable comparison Branch            | Implemented locally; same-host proof                            |
-| 6. Adaptive planning and cross-Harness handoff  | Profiles are selected explainably and Handoff occurs only when a Runtime change is needed | Validated locally; controlled interruption                      |
-| 7. Failure intelligence and diagnostic Branches | Evidence and single-variable probes distinguish likely failure layers                     | Same-host stale-Context proof; broader gate open                |
-| 8. Multi-agent Mission Graph and live revisions | Parallel Agents stay attached to one changing Mission and stale work is invalidated       | Same-host real-Runtime proof; controlled fixture                |
-| 9. Outcome, Eval, and Incident Studio           | Agent Revisions are compared, saved as regressions, and optionally exported to CI         | Implemented local slice; external CI E2E open                   |
-| 10. Open Runtime Workbench 1.0                  | External developers install, extend, and reproduce the complete workflow                  | Internal clean-install validated; independent reproduction open |
+| Iteration                                       | Product result                                                                            | Status                                                       |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| 1. Mission continuity foundation                | One Mission survives process and Harness changes and closes with a Receipt                | Implemented local slice                                      |
+| 2. Runtime intelligence and Event IR            | Effective Profiles and native events share one typed Runtime model                        | Validated local slice                                        |
+| 3. Live flight recorder and Context Graph       | Developers see context, tools, files, tests, cost, and subagents while work runs          | Validated local slice                                        |
+| 4. Tool gateway and live debugger               | A real mutable tool can be stopped before dispatch and changed or rejected                | Validated local slice                                        |
+| 5. Composite checkpoints, Fork, and Replay      | A retained execution boundary becomes an isolated executable comparison Branch            | Implemented locally; same-host proof                         |
+| 6. Adaptive planning and cross-Harness handoff  | Profiles are selected explainably and Handoff occurs only when a Runtime change is needed | Validated locally; controlled interruption                   |
+| 7. Failure intelligence and diagnostic Branches | Evidence and single-variable probes distinguish likely failure layers                     | Same-host stale-Context proof; broader gate open             |
+| 8. Multi-agent Mission Graph and live revisions | Parallel Agents stay attached to one changing Mission and stale work is invalidated       | Same-host real-Runtime proof; controlled fixture             |
+| 9. Outcome, Eval, and Incident Studio           | Agent Revisions are compared, saved as regressions, and optionally exported to CI         | Real Qoder upgraded-Profile 3/3; outside-repo checker        |
+| 10. Open Runtime Workbench 1.0                  | External developers install, extend, and reproduce the complete workflow                  | Internal clean-install/source bundle; independent proof open |
 
 ## Iteration 1 — Mission continuity foundation
 
@@ -128,6 +132,8 @@ The repository now contains the Iteration 2 implementation:
 
 - direct Codex, Qoder, and Claude Code execution Adapters with explicit
   capability declarations;
+- OpenCode, Hermes, and DeepSeek Harness catalog entries without executable
+  Mission Adapters;
 - a default root Branch for every new Mission;
 - separate Runtime Profile Definitions, timestamped Catalog Observations,
   immutable effective Snapshots, and Attempt Bindings;
@@ -144,6 +150,14 @@ verified Receipt, and stable restart restoration. Both Handoff acknowledgements
 precede their target's first observed tool-request event in the corresponding
 native source stream. This is cooperative ordering evidence, not a live tool
 gate.
+
+At the source-and-test layer, the Claude direct Adapter preserves
+non-telemetry event semantics and order while compacting only
+`system/thinking_tokens` telemetry. It records the compaction strategy, total
+raw/retained/dropped line counts, and a SHA-256 of the full raw stream; dropped
+telemetry payloads are not retained. This is not a retained real-Claude
+performance benchmark or a claim of private-thinking capture or provider token
+accuracy.
 
 Iteration 2 is therefore complete at the same-host local evidence level. It
 does not establish automatic routing, executable Fork/Replay, live tool gating,
@@ -556,10 +570,19 @@ the iteration expands into a generic release-governance platform.
 Outcome Studio reconstructs content-addressed Agent Revisions, evaluation
 Suites, Branch comparisons, Incident Scenarios, Studio Receipts, and
 machine-readable CI results from persisted Mission facts. The Workbench can
-save, list, and export redacted scenarios idempotently. Local tests cover
-unknown dimensions, Contract revision binding, scenario persistence, and
-export. A real upgraded Runtime regression and an external CI runner have not
-yet been recorded.
+save, list, and export redacted scenarios idempotently. The [retained Iteration
+9 record](../evidence/iteration-9-outcome-regression-local-2026-08-26.json)
+starts with one Agent-reported false success rejected by the deterministic
+Suite, selects a revised verified Branch separately, then executes the saved
+incident with the accepted Context intervention on one distinct
+Planner-selected upgraded Qoder/Qwen3.8-Max Profile. Three new
+Kernel-persisted Runtime trials pass the predeclared 3/3
+threshold, and the Mission, scenario, rerun, and CI-result projection remain
+stable after restart. A standalone checker copied outside the repository
+accepts that retained result and exits nonzero for returned or unknown results.
+This is not a hosted CI pipeline, third-party reproduction, cross-host proof,
+deployment approval, publication authority, or production evidence, and it
+does not isolate the Profile as the cause of success.
 
 ## Iteration 10 — Open Runtime Workbench 1.0
 
@@ -606,11 +629,16 @@ external reproduction.
 ### Current implementation evidence
 
 The [package smoke record](https://github.com/Oxygen56/missionbraid/blob/main/evidence/iteration-10-package-smoke-local-2026-08-26.json)
-shows a clean local tarball install, public exports (including Mission Plan
-runtime projection and Outcome Studio), third-party Adapter conformance, and
-an installed Workbench that starts and shuts down cleanly. Registry
-publication, an independently maintained Adapter, and independent external
-reproduction remain open.
+shows an internal clean install of the local tarball and public exports. A
+consumer-style external direct Adapter passes conformance and retains its real
+Adapter/Harness/Profile/Attempt/Binding/Receipt identity chain through installed
+CLI and Workbench Missions plus a same-Adapter isolated Execution Fork. The
+installed Workbench also migrates a schema-v1 store to v2 without changing the
+retained Mission event chain. Separately, the smoke builds a source-candidate
+bundle containing the exact lockfile and verifies, from the extracted bundle
+without repository fallback, frozen install, typecheck, build, and the full
+test suite. npm publication, an independently maintained Adapter, independent
+external reproduction, cross-host proof, and production adoption remain open.
 
 ## Why this order
 

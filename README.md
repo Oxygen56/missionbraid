@@ -5,9 +5,10 @@
 **One Mission. Native Runtimes. Inspectable Agent behavior.**
 
 MissionBraid is a local-first **Agent Runtime Workbench** for developers who
-build and improve applications with native coding agents. It gives Codex,
-Qoder, Claude Code, OpenCode, Hermes, and future Harnesses one durable Mission
-and one development loop:
+build and improve applications with native coding agents. Codex, Qoder, and
+Claude Code run through direct Mission Adapters; OpenCode, Hermes, and DeepSeek
+Harness remain catalog-only. The Workbench gives supported Runtimes one durable
+Mission and one development loop:
 
 ```text
 compose → run → inspect → revise → re-run → evaluate → verify
@@ -34,12 +35,18 @@ needs them.
 > starts, revises, observes, and completes one Mission Plan using real local
 > Qoder/Qwen3.8-Max and Claude Code/deepseek-v4-pro processes, selective
 > invalidation and reuse, a new consolidation Attempt, a latest-revision
-> Receipt, and restart reconstruction. Iteration 9 remains a local product
-> slice. Iteration 10 has an internal clean-install record in which a
-> consumer-authored external Harness appears in the Runtime Hub, starts a
-> verified Mission from the Workbench form, and executes the same Adapter in
-> an isolated Execution Fork. Package-registry publication, an independent
-> external reproduction, and production evidence remain open.
+> Receipt, and restart reconstruction. All ten planned product iterations are
+> now present at the 1.0 source-candidate implementation layer. Iteration 9 has
+> retained same-host evidence for three real Qoder/Qwen3.8-Max trials using the
+> accepted refreshed-Context intervention on one Planner-selected upgraded
+> Profile, all passing the predeclared threshold, plus
+> a fail-closed checker copied into a process outside the repository. Iteration
+> 10 has an internal clean-install record covering an external Adapter identity
+> chain, installed CLI and Workbench Missions, a same-Adapter isolated Execution
+> Fork, store migration from v1 to v2, and a lockfile-bearing source bundle whose
+> frozen install, typecheck, build, and full tests pass. Package-registry
+> publication, an independent external reproduction, cross-host evidence, and
+> production adoption remain open.
 
 ![MissionBraid local Workbench overview](docs/assets/missionbraid-workbench-overview.png)
 
@@ -47,13 +54,13 @@ needs them.
 
 ## The product in one view
 
-|                   | MissionBraid                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| User problem      | Changing a model, Prompt, Skill, tool, memory policy, permission, or Runtime can change Agent behavior, but source diffs and fragmented logs do not explain the effective Agent that actually ran.                                                                                                                                                                                                                                            |
-| Product           | One Workbench to bind the effective Agent Revision, run a durable Mission, inspect context and tools live, revise supported inputs, re-run from a useful boundary, compare behavior, and verify the outcome.                                                                                                                                                                                                                                  |
-| Core abstraction  | A **Mission** owns intent, execution branches, evidence, effects, and completion. A Harness is a replaceable Runtime.                                                                                                                                                                                                                                                                                                                         |
-| Implemented today | I1–I8 provide the bilingual Workbench, Mission Kernel, native and public external Adapters, Runtime Profiles, live Event IR/Context Graph, tool and Effect controls, Checkpoint/Replay/Fork, adaptive Handoff, stale-Context diagnosis, Mission Plan coordination, verifier, and Outcome Receipts. I10 adds a clean-install public Adapter path with a real Harness identity, Workbench route, CLI execution, and same-Adapter isolated Fork. |
-| Delivery plan     | **10 major product iterations in total. I8 has a bounded real local Qoder/Claude workflow. I9 is a local implementation slice. I10 has an internal installed-product workflow, but npm publication, independent external reproduction, cross-host evidence, and production claims remain open.**                                                                                                                                              |
+|                   | MissionBraid                                                                                                                                                                                                                                                                                                                                                                                           |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| User problem      | Changing a model, Prompt, Skill, tool, memory policy, permission, or Runtime can change Agent behavior, but source diffs and fragmented logs do not explain the effective Agent that actually ran.                                                                                                                                                                                                     |
+| Product           | One Workbench to bind the effective Agent Revision, run a durable Mission, inspect context and tools live, revise supported inputs, re-run from a useful boundary, compare behavior, and verify the outcome.                                                                                                                                                                                           |
+| Core abstraction  | A **Mission** owns intent, execution branches, evidence, effects, and completion. A Harness is a replaceable Runtime.                                                                                                                                                                                                                                                                                  |
+| Implemented today | All ten planned iterations are present in the 1.0 source candidate: the bilingual Workbench, Mission Kernel, direct and public external Adapters, Runtime Profiles, live Event IR/Context Graph, tool and Effect controls, Checkpoint/Replay/Fork, adaptive Handoff, stale-Context diagnosis, Mission Plan coordination, Outcome Studio, verifier, Receipts, and clean-install package/migration path. |
+| Evidence boundary | I8 has a bounded real local Qoder/Claude workflow; I9 has a real Qoder upgraded-Profile 3/3 regression plus an outside-repository fail-closed checker; I10 has an internal installed-product workflow and a lockfile-bearing source bundle whose frozen install and checks pass. npm publication, independent external reproduction, cross-host evidence, and production adoption remain open.         |
 
 ## Why this exists
 
@@ -260,6 +267,10 @@ The implemented foundation already provides:
   Adapters, using each manifest's real Harness identity;
 - a real Claude Code native pre-tool gate for supported requests and guarded,
   queryable external Effect reconciliation;
+- bounded Claude output compaction that preserves non-telemetry event semantics
+  and order while sampling per-token `thinking_tokens` telemetry; process-finish
+  accounting records total raw/retained/dropped line counts and a SHA-256 of the
+  full raw stream, while dropped per-token payloads are not retained;
 - Git-backed Composite Checkpoints whose workspace component references an
   exact restorable commit/tree, with other components explicitly classified;
 - immutable parent/child Branch lineage and an Execution Fork that starts a
@@ -274,9 +285,17 @@ The implemented foundation already provides:
 - branch-scoped Failure Intelligence and diagnostic Fork entry points;
 - Outcome Studio projections plus redacted scenario/CI-result save and export
   endpoints;
+- an executable saved incident rerun on one Planner-selected upgraded
+  Qoder/Qwen3.8-Max Profile, with three new Kernel-persisted trials passing 3/3
+  and a standalone outside-repository process rejecting returned or unknown
+  results with a nonzero exit;
 - a versioned public Adapter SDK with direct, ACP, and provider-backed examples,
   plus an installed consumer Adapter that runs through the CLI, Workbench form,
-  and same-Adapter isolated Execution Fork;
+  and same-Adapter isolated Execution Fork while preserving its Adapter,
+  Profile, Attempt, Binding, and Receipt identity chain;
+- an installed store migration from schema v1 to v2, plus a separate
+  lockfile-bearing source-candidate bundle that passes frozen install,
+  typecheck, build, and the full test suite without repository fallback;
 - restart restoration and recovery of interrupted Missions.
 
 Current public evidence is classified by the capability it exercises:
@@ -287,6 +306,13 @@ Current public evidence is classified by the capability it exercises:
   reuses the verified tool Artifact without rerunning Qoder, creates a new
   consolidation Attempt over immutable sources, issues a Receipt for the latest
   revisions, and reconstructs the same state after restart.
+- **I9 — retained Agent regression:** one original false-success Qoder case is
+  revised, then the saved incident is rerun with the accepted Context
+  intervention on a distinct Planner-selected upgraded Qoder/Qwen3.8-Max
+  Profile. Three new Runtime trials pass the predeclared 3/3 threshold, restart
+  restores the result, and a checker running from outside the repository exits
+  nonzero for returned or unknown regressions. This does not isolate the Profile
+  as the cause of success.
 - **I7 — daily Agent debugging:** real Qoder/Qwen3.8-Max first fails with stale
   cached Context, then a fresh Attempt under the same Runtime Profile passes
   after a Context-only diagnostic Fork in a controlled fixture.
@@ -329,14 +355,15 @@ production isolation, or third-party adoption.
 |         6 | A reproducible planner selects Profiles and hands off only when a Runtime change is justified | Validated locally (controlled interruption)           |
 |         7 | One stale-Context failure is diagnosed from observable Context/workspace evidence             | Real Qoder controlled proof; broader attribution open |
 |         8 | Multi-Agent work becomes a durable Mission graph with revision-aware coordination             | Same-host real-Runtime controlled proof               |
-|         9 | Agent Revision comparison, regression scenarios, evaluation, Receipts, and CI export          | Implemented local slice                               |
-|        10 | External developers install, extend, and reproduce the complete Runtime Workbench             | Internal clean-install validated                      |
+|         9 | Agent Revision comparison, regression scenarios, evaluation, Receipts, and CI export          | Real Qoder upgraded-Profile 3/3; fail-closed checker  |
+|        10 | External developers install, extend, and reproduce the complete Runtime Workbench             | Internal clean-install and source bundle validated    |
 
-The completion rule is that each iteration should eventually end in a real
-Workbench workflow, not only an isolated schema, adapter, or test suite. I8 has
-a bounded same-host real-Runtime workflow; I10 has an internal clean-install
-Workbench workflow and machine-readable record. I9 remains a local slice. See the
-[detailed roadmap](docs/roadmap.md) and [evidence boundaries](evidence/README.md).
+All ten iterations are implemented in the 1.0 source candidate, while their
+evidence levels remain deliberately different. I8 has a bounded same-host
+real-Runtime workflow; I9 has a same-host real-Qoder regression and an
+outside-repository checker; I10 has an internal clean-install Workbench,
+migration, and lockfile-bearing source-bundle reproduction record. See the [detailed
+roadmap](docs/roadmap.md) and [evidence boundaries](evidence/README.md).
 
 ## Run the current Workbench
 
@@ -472,11 +499,25 @@ user copying context. It is not evidence of a natural Runtime failure,
 restorable target workspace, native session migration, cross-host continuity,
 or production reliability.
 
+The [Iteration 9 Outcome regression record](evidence/iteration-9-outcome-regression-local-2026-08-26.json)
+retains one original false-success and revised verified Branch under the same
+Contract and deterministic Suite. It reruns the saved incident with the accepted
+Context intervention through three new Kernel-persisted Qoder/Qwen3.8-Max
+Attempts on one distinct Planner-selected upgraded Profile; all three pass the
+predeclared 3/3 threshold.
+A checker copied outside the repository accepts the retained result and exits
+nonzero for both returned and unknown regressions. This is same-host controlled
+evidence, not cross-host, production, deployment approval, or publication
+authority, and it does not isolate the Profile as the cause of success.
+
 The [Iteration 10 package smoke record](https://github.com/Oxygen56/missionbraid/blob/main/evidence/iteration-10-package-smoke-local-2026-08-26.json)
-shows a locally packed tarball installing into a clean consumer, public exports
-loading, a third-party Adapter passing local conformance, and the installed
-Workbench starting and shutting down cleanly. Registry publication and
-independent external reproduction were not performed.
+shows a locally packed tarball installing into a clean consumer; an external
+Adapter preserving its identity through installed CLI and Workbench Missions
+and a same-Adapter isolated Fork; a v1-to-v2 store migration preserving the
+Mission event chain; and a separate source-candidate bundle containing the
+lockfile whose frozen install, typecheck, build, and full tests pass without a
+repository fallback. Registry publication and independent external
+reproduction were not performed.
 
 The
 [Iteration 2 machine-readable record](evidence/iteration-2-three-harness-local-2026-08-25.json)
