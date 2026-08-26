@@ -914,6 +914,7 @@ function assertExternalFrontierComplete(checkpoint: CompositeCheckpointManifestV
       );
     }
     if (
+      effect.scope === 'mission_global_external' &&
       effect.status === 'confirmed' &&
       (effect.authorityRef === undefined || effect.idempotencyKey === undefined)
     ) {

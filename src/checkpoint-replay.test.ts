@@ -27,7 +27,7 @@ import {
   type AttemptV1,
   type BranchV1,
   type ContractV1,
-  type EffectStatusV1,
+  type EffectV1,
   type EventV1,
   type MissionV1,
   type ProfileV1,
@@ -168,6 +168,15 @@ describe('CheckpointReplayService', () => {
     });
     expect(existsSync(ambiguousState)).toBe(false);
 
+    const incomplete = replayFixture('confirmed-without-idempotency');
+    await expect(
+      new CheckpointReplayService({
+        journal: new FileCheckpointReplayJournal(join(incomplete.root, 'incomplete-state')),
+      }).cachedReplay(incomplete.cachedRequest, foundArtifacts()),
+    ).rejects.toMatchObject({
+      code: 'EXTERNAL_EFFECT_FRONTIER_INCOMPLETE',
+    });
+
     const missingDecision = replayFixture();
     await expect(
       new CheckpointReplayService({
@@ -220,6 +229,49 @@ describe('CheckpointReplayService', () => {
         foundArtifacts(),
       ),
     ).rejects.toMatchObject({ code: 'INTERVENTION_INVALID' });
+  });
+
+  it('allows a confirmed shared-resource tool Effect without external identity only with an exact no-repeat decision', async () => {
+    const fixture = replayFixture('confirmed-with-shared-tool');
+    const service = new CheckpointReplayService({
+      journal: new FileCheckpointReplayJournal(join(fixture.root, 'shared-state')),
+      now: fixedClock(),
+    });
+    const record = await service.cachedReplay(fixture.cachedRequest, foundArtifacts());
+
+    expect(record.phase).toBe('completed');
+    expect(record.plan.mode).toBe('cached-replay');
+    if (record.plan.mode !== 'cached-replay') {
+      throw new Error('Expected a cached replay plan');
+    }
+    expect(record.plan.inheritedExternalEffectFrontier).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          effectId: 'effect-tool-shared',
+          scope: 'shared_resource',
+          status: 'confirmed',
+        }),
+      ]),
+    );
+    expect(record.plan.externalEffectDecisions).toContainEqual({
+      effectId: 'effect-tool-shared',
+      action: 'inherit-no-repeat',
+    });
+
+    const missingDecision = replayFixture('confirmed-with-shared-tool');
+    await expect(
+      new CheckpointReplayService({
+        journal: new FileCheckpointReplayJournal(join(missingDecision.root, 'missing-state')),
+      }).cachedReplay(
+        {
+          ...missingDecision.cachedRequest,
+          externalEffectDecisions: [
+            { effectId: 'effect-external-confirmed', action: 'inherit-no-repeat' },
+          ],
+        },
+        foundArtifacts(),
+      ),
+    ).rejects.toMatchObject({ code: 'EXTERNAL_EFFECT_DECISION_REQUIRED' });
   });
 
   it('counterfactual resampling injects only a model port and produces child evidence plus unknown Receipt input', async () => {
@@ -433,7 +485,11 @@ describe('CheckpointReplayService', () => {
   });
 });
 
-type FixtureEffectState = 'confirmed' | 'ambiguous';
+type FixtureEffectState =
+  | 'confirmed'
+  | 'ambiguous'
+  | 'confirmed-without-idempotency'
+  | 'confirmed-with-shared-tool';
 
 interface ReplayFixture {
   readonly root: string;
@@ -571,9 +627,9 @@ function replayFixture(effectState: FixtureEffectState = 'confirmed'): ReplayFix
     ...artifact('artifact-intervention-guidance', afterDigest),
     targetRef: intervention.targetRef,
   };
-  const externalEffectDecisions = [
-    { effectId: 'effect-external-confirmed', action: 'inherit-no-repeat' as const },
-  ];
+  const externalEffectDecisions = checkpoint.externalEffectFrontier
+    .filter((effect) => effect.status === 'confirmed')
+    .map((effect) => ({ effectId: effect.effectId, action: 'inherit-no-repeat' as const }));
   const cachedRequest: CachedReplayRequestV1 = {
     mode: 'cached-replay',
     checkpoint,
@@ -626,6 +682,36 @@ function checkpointInput(
   headHash: string,
   effectState: FixtureEffectState,
 ): CompositeCheckpointInputV1 {
+  const externalEffect: EffectV1 = {
+    schemaVersion: DOMAIN_SCHEMA_VERSION,
+    effectId: 'effect-external-confirmed',
+    missionId: mission.missionId,
+    attemptId: attempt.attemptId,
+    kind: 'http.create',
+    resourceKey: 'fixture-target',
+    controlLevel: 'guarded',
+    scope: 'mission_global_external',
+    status: effectState === 'ambiguous' ? 'ambiguous' : 'confirmed',
+    authorityRef: 'authority:fixture-target',
+    ...(effectState === 'confirmed-without-idempotency'
+      ? {}
+      : { idempotencyKey: 'fixture-create-once' }),
+    evidenceRefs: ['effect:target-receipt'],
+    createdAt: '2026-08-26T08:00:01.000Z',
+  };
+  const sharedToolEffect: EffectV1 = {
+    schemaVersion: DOMAIN_SCHEMA_VERSION,
+    effectId: 'effect-tool-shared',
+    missionId: mission.missionId,
+    attemptId: attempt.attemptId,
+    kind: 'tool.Bash',
+    resourceKey: 'tool-request:fixture-shared',
+    controlLevel: 'enforced',
+    scope: 'shared_resource',
+    status: 'confirmed',
+    evidenceRefs: ['tool-gate:fixture-shared', 'tool-result:fixture-shared'],
+    createdAt: '2026-08-26T08:00:01.500Z',
+  };
   return {
     mission,
     branch,
@@ -656,23 +742,10 @@ function checkpointInput(
       authorityRef: 'authority:workspace-read',
       evidenceRefs: ['policy:workspace-read'],
     },
-    effects: [
-      {
-        schemaVersion: DOMAIN_SCHEMA_VERSION,
-        effectId: 'effect-external-confirmed',
-        missionId: mission.missionId,
-        attemptId: attempt.attemptId,
-        kind: 'http.create',
-        resourceKey: 'fixture-target',
-        controlLevel: 'guarded',
-        scope: 'mission_global_external',
-        status: effectState as EffectStatusV1,
-        authorityRef: 'authority:fixture-target',
-        idempotencyKey: 'fixture-create-once',
-        evidenceRefs: ['effect:target-receipt'],
-        createdAt: '2026-08-26T08:00:01.000Z',
-      },
-    ],
+    effects:
+      effectState === 'confirmed-with-shared-tool'
+        ? [externalEffect, sharedToolEffect]
+        : [externalEffect],
     process: {
       status: 'stopped',
       stoppedAt: '2026-08-26T08:00:02.000Z',

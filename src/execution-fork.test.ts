@@ -295,9 +295,70 @@ describe('executable execution Fork', () => {
     });
     expect(existsSync(incomplete.worktreePath)).toBe(false);
   });
+
+  it('allows a confirmed shared-resource tool Effect without external identity only with an exact no-repeat decision', async () => {
+    const fixture = createGitFixture('confirmed-with-shared-tool');
+    const service = new ExecutionForkService({
+      journal: new FileExecutionForkEvidenceJournal(join(fixture.root, 'shared-state')),
+      now: fixedClock(),
+    });
+    const record = await service.execute(fixture.request, {
+      continueFromCheckpoint: async (input) => {
+        expect(input.inheritedExternalEffectFrontier).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              effectId: 'effect-tool-shared',
+              scope: 'shared_resource',
+              status: 'confirmed',
+            }),
+          ]),
+        );
+        expect(input.externalEffectDecisions).toContainEqual({
+          effectId: 'effect-tool-shared',
+          action: 'inherit-no-repeat',
+        });
+        return {
+          runtimeRunId: 'runtime-run-shared-effect',
+          status: 'failed',
+          toolExecutionEvidenceRefs: [],
+          verificationEvidenceRefs: [],
+          unresolvedItems: ['fixture-stop'],
+        };
+      },
+    });
+
+    expect(record.phase).toBe('finished');
+    expect(record.plan.inheritedExternalEffectFrontier).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          effectId: 'effect-tool-shared',
+          scope: 'shared_resource',
+          status: 'confirmed',
+        }),
+      ]),
+    );
+
+    const missingDecision = createGitFixture('confirmed-with-shared-tool');
+    await expect(
+      new ExecutionForkService({
+        journal: new FileExecutionForkEvidenceJournal(join(missingDecision.root, 'missing-state')),
+      }).execute(
+        {
+          ...missingDecision.request,
+          externalEffectDecisions: [{ effectId: 'effect-deploy-a', action: 'inherit-no-repeat' }],
+        },
+        rejectingRuntime('missing decision must block Runtime'),
+      ),
+    ).rejects.toMatchObject({ code: 'EXTERNAL_FRONTIER_INCOMPLETE' });
+    expect(existsSync(missingDecision.worktreePath)).toBe(false);
+  });
 });
 
-type ExternalFixtureState = 'confirmed' | 'ambiguous' | 'confirmed-without-idempotency';
+type ExternalFixtureState =
+  | 'confirmed'
+  | 'ambiguous'
+  | 'confirmed-without-idempotency'
+  | 'confirmed-with-shared-tool';
 
 function createGitFixture(externalState: ExternalFixtureState = 'confirmed'): {
   readonly root: string;
@@ -345,7 +406,9 @@ function createGitFixture(externalState: ExternalFixtureState = 'confirmed'): {
       description: 'Ask the child Runtime to create the declared output.',
       authorityChange: 'unchanged',
     },
-    externalEffectDecisions: [{ effectId: 'effect-deploy-a', action: 'inherit-no-repeat' }],
+    externalEffectDecisions: checkpoint.externalEffectFrontier
+      .filter((effect) => effect.status === 'confirmed')
+      .map((effect) => ({ effectId: effect.effectId, action: 'inherit-no-repeat' as const })),
   };
   return { root, repositoryRoot, worktreePath, checkpoint, request, commit, tree };
 }
@@ -382,6 +445,19 @@ function checkpointInput(
       : { idempotencyKey: 'deployment:fixture:v1' }),
     evidenceRefs: ['target:deployment-fixture', 'event:effect-boundary'],
     createdAt: '2026-08-26T00:59:55.000Z',
+  };
+  const sharedToolEffect: EffectV1 = {
+    schemaVersion: 1,
+    effectId: 'effect-tool-shared',
+    missionId: 'mission-fork',
+    attemptId: 'attempt-a',
+    kind: 'tool.Bash',
+    resourceKey: 'tool-request:fixture-shared',
+    controlLevel: 'enforced',
+    scope: 'shared_resource',
+    status: 'confirmed',
+    evidenceRefs: ['tool-gate:fixture-shared', 'tool-result:fixture-shared'],
+    createdAt: '2026-08-26T00:59:56.000Z',
   };
   return {
     mission: {
@@ -451,7 +527,10 @@ function checkpointInput(
       authorityRef: 'grant:workspace-fixture',
       evidenceRefs: ['profile:profile-fork'],
     },
-    effects: [externalEffect],
+    effects:
+      externalState === 'confirmed-with-shared-tool'
+        ? [externalEffect, sharedToolEffect]
+        : [externalEffect],
     process: {
       status: 'stopped',
       stoppedAt: '2026-08-26T00:59:50.000Z',
