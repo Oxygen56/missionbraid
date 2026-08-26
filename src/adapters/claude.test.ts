@@ -46,6 +46,32 @@ process.stdin.on('end', () => {
   return file;
 }
 
+async function fakeClaudeThinkingFlood(directory: string): Promise<string> {
+  const file = join(directory, 'fake-claude-thinking-flood');
+  await writeFile(
+    file,
+    `#!/usr/bin/env node
+process.stdin.resume();
+process.stdin.on('end', () => {
+  process.stdout.write(JSON.stringify({ type: 'system', subtype: 'init' }) + '\\n');
+  for (let index = 1; index <= 4096; index += 1) {
+    process.stdout.write(JSON.stringify({
+      type: 'system',
+      subtype: 'thinking_tokens',
+      estimated_tokens: ((index - 1) % 128) + 1,
+      estimated_tokens_delta: 1
+    }) + '\\n');
+  }
+  process.stdout.write(JSON.stringify({ type: 'assistant', message: { content: 'done' } }) + '\\n');
+  process.stdout.write(JSON.stringify({ type: 'result', subtype: 'success' }) + '\\n');
+});
+`,
+    'utf8',
+  );
+  await chmod(file, 0o755);
+  return file;
+}
+
 afterEach(async () => {
   await Promise.all(
     disposableDirectories.splice(0).map(async (directory) => {
@@ -204,6 +230,51 @@ describe('ClaudeAdapter', () => {
     expect(startedPid).toBe(result.process.pid);
     expect(result.process.invocation).not.toHaveProperty('stdin');
     expect(result.process.invocation).not.toHaveProperty('env');
+  });
+
+  it('compacts per-token thinking telemetry while preserving semantic order and raw accounting', async () => {
+    const workspace = await disposableDirectory();
+    const command = await fakeClaudeThinkingFlood(workspace);
+    const adapter = new ClaudeAdapter({ command });
+    const events: RuntimeOutputLine[] = [];
+
+    const result = await adapter.run({
+      workspace,
+      prompt: 'fixture prompt',
+      onOutput: (event) => {
+        events.push(event);
+      },
+    });
+
+    const thinkingEvents = events.filter(
+      (event) =>
+        typeof event.value === 'object' &&
+        event.value !== null &&
+        'subtype' in event.value &&
+        event.value.subtype === 'thinking_tokens',
+    );
+    const semanticTypes = events.flatMap((event) => {
+      if (typeof event.value !== 'object' || event.value === null || !('type' in event.value)) {
+        return [];
+      }
+      return event.value.type === 'system' && 'subtype' in event.value
+        ? [`${String(event.value.type)}.${String(event.value.subtype)}`]
+        : [String(event.value.type)];
+    });
+
+    expect(thinkingEvents.length).toBeLessThan(25);
+    expect(thinkingEvents.at(0)?.value).toMatchObject({ estimated_tokens: 1 });
+    expect(thinkingEvents.at(-1)?.value).toMatchObject({ estimated_tokens: 128 });
+    expect(semanticTypes.at(0)).toBe('system.init');
+    expect(semanticTypes.slice(-2)).toEqual(['assistant', 'result']);
+    expect(result.outputAccounting).toMatchObject({
+      strategy: 'claude-thinking-token-snapshots-v1',
+      rawLineCount: 4099,
+      retainedLineCount: events.length,
+      droppedLineCount: 4099 - events.length,
+      rawSha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+    });
+    expect(result.process.stdoutLineCount).toBe(4099);
   });
 
   it('reports a missing command without invoking it', async () => {

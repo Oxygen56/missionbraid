@@ -333,6 +333,55 @@ describe('runtime semantic extraction', () => {
     expect(JSON.stringify(finishedFacts)).not.toContain('private subagent failure detail');
   });
 
+  it('joins Qoder tool-result envelopes to their structured exit status', () => {
+    const failedTool = fixture('qoder-stream-json', 'user', 'tool', {
+      type: 'user',
+      message: {
+        role: 'user',
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: 'qoder-shell-call-1',
+            content: 'private command output',
+          },
+        ],
+      },
+      tool_use_result: {
+        kind: 'completed',
+        stdout: 'private command output',
+        stderr: '',
+        exitCode: 17,
+        isError: true,
+      },
+    });
+
+    const facts = extractRuntimeSemanticFacts(failedTool.event, failedTool.artifact);
+    expect(facts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'tool_result',
+          phase: 'failed',
+          exitCode: 17,
+          isError: true,
+          evidence: 'explicit',
+        }),
+        expect.objectContaining({
+          kind: 'failure',
+          failureKind: 'tool',
+          isError: true,
+          evidence: 'explicit',
+        }),
+      ]),
+    );
+    expect(facts.filter((candidate) => candidate.kind === 'tool_result')).toHaveLength(1);
+    expect(
+      facts.some(
+        (candidate) => candidate.kind === 'failure' && candidate.failureKind === 'runtime',
+      ),
+    ).toBe(false);
+    expect(JSON.stringify(facts)).not.toContain('private command output');
+  });
+
   it('uses unknown evidence for bounded fallbacks and never invents adjacency causality', () => {
     const unknown = fixture(
       'codex-jsonl',

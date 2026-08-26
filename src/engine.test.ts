@@ -130,6 +130,45 @@ describe('MissionEngine', () => {
     }
   });
 
+  it('rejects an oversized initial controller prompt before starting the native Runtime', async () => {
+    const fixture = await createFixture('claude');
+    const missionSource = await readFile(fixture.missionFile, 'utf8');
+    await writeFile(
+      fixture.missionFile,
+      missionSource.replace('injectionBudgetTokens: 4000', 'injectionBudgetTokens: 1'),
+      'utf8',
+    );
+    const engine = new MissionEngine({
+      stateDir: fixture.stateDir,
+      claudeAdapter: new ClaudeAdapter({ command: fixture.claude }),
+    });
+    try {
+      const created = await engine.create(fixture.missionFile, { workspace: fixture.workspace });
+
+      await expect(engine.resume(created.missionId)).rejects.toThrow(
+        /Controller prompt is \d+ bytes, above the 4-byte Runtime Profile budget/,
+      );
+
+      const timeline = engine.timeline(created.missionId);
+      expect(
+        timeline.find((entry) => entry.kind === 'context.prompt_budget_exceeded'),
+      ).toMatchObject({
+        data: {
+          stageId: 'claude-primary',
+          promptBytes: expect.any(Number),
+          promptBudgetBytes: 4,
+          contextFactId: null,
+        },
+      });
+      expect(timeline.some((entry) => entry.kind === 'runtime.process_started')).toBe(false);
+      await expect(readFile(join(fixture.workspace, 'claude.txt'), 'utf8')).rejects.toMatchObject({
+        code: 'ENOENT',
+      });
+    } finally {
+      engine.close();
+    }
+  });
+
   it('versions the Mission Plan when a Contract requirement changes', async () => {
     const fixture = await createFixture('resume');
     const engine = new MissionEngine({
@@ -165,6 +204,69 @@ describe('MissionEngine', () => {
         revised.contractRevision.contractRevisionId,
       );
       expect(revised.invalidation.changedRequirementIds).toEqual(['objective']);
+    } finally {
+      engine.close();
+    }
+  });
+
+  it('rejects Contract revisions that change the executable acceptance contract', async () => {
+    const fixture = await createFixture('resume');
+    const engine = new MissionEngine({
+      stateDir: fixture.stateDir,
+      codexAdapter: new CodexAdapter({ command: fixture.codex }),
+      qoderAdapter: new QoderAdapter({ command: fixture.qoder }),
+    });
+    try {
+      const created = await engine.create(fixture.missionFile, { workspace: fixture.workspace });
+      const before = engine.missionPlan(created.missionId);
+      const criterion = before.contractRevision.contract.acceptanceCriteria[0]!;
+
+      await expect(
+        engine.reviseMissionContract(created.missionId, {
+          contract: {
+            ...before.contractRevision.contract,
+            acceptanceCriteria: [
+              {
+                ...criterion,
+                verifier: {
+                  ...criterion.verifier,
+                  configuration: { ...criterion.verifier.configuration, timeoutMs: 1 },
+                },
+              },
+            ],
+          },
+          requirements: before.contractRevision.requirements.map((requirement) =>
+            requirement.requirementId === `acceptance-${criterion.criterionId}`
+              ? { ...requirement, statement: 'Changed executable acceptance configuration.' }
+              : requirement,
+          ),
+          reason: 'Attempt to replace the executable verifier in-place.',
+          evidenceRefs: ['test:unsupported-verifier-revision'],
+        }),
+      ).rejects.toThrow(/executable acceptance criteria/i);
+
+      await expect(
+        engine.reviseMissionContract(created.missionId, {
+          contract: {
+            ...before.contractRevision.contract,
+            acceptanceCriteria: [
+              ...before.contractRevision.contract.acceptanceCriteria,
+              {
+                criterionId: 'new-criterion',
+                description: 'A new executable criterion.',
+                verifier: { kind: 'command', configuration: { command: 'new-verifier' } },
+              },
+            ],
+          },
+          requirements: before.contractRevision.requirements,
+          reason: 'Attempt to add an executable criterion in-place.',
+          evidenceRefs: ['test:unsupported-criterion-revision'],
+        }),
+      ).rejects.toThrow(/executable acceptance criteria/i);
+
+      expect(engine.missionPlan(created.missionId).contractRevision.contractRevisionId).toBe(
+        before.contractRevision.contractRevisionId,
+      );
     } finally {
       engine.close();
     }
@@ -706,6 +808,231 @@ process.stdin.on('end', () => {
       });
     } finally {
       reopened.close();
+    }
+  });
+
+  it('blocks a mutable Claude Profile-Rebound Fork until its native tool decision is persisted', async () => {
+    const fixture = await createFixture('claude');
+    const missionSource = await readFile(fixture.missionFile, 'utf8');
+    await writeFile(
+      join(fixture.workspace, 'verify.mjs'),
+      await readFile(join(fixture.root, 'mission-source', 'verify.mjs'), 'utf8'),
+      'utf8',
+    );
+    await writeFile(
+      fixture.missionFile,
+      missionSource
+        .replace(
+          `    instruction: Complete the Claude fixture.
+    onFailure: stop`,
+          `    instruction: Complete the Claude fixture.
+    onFailure: stop
+  - stageId: claude-gated-upgraded
+    profile:
+      harness: claude
+      model: deepseek-v4-pro
+      reasoningEffort: high
+      permissionMode: dontAsk
+      injectionBudgetTokens: 5000
+    breakpoint: mutable-tools
+    instruction: Execute one controller-gated Write in the isolated Fork.
+    onFailure: stop`,
+        )
+        .replace(/cwd:.*MISSION_FILE_DIR.*$/m, "cwd: '$" + "{WORKSPACE}'"),
+      'utf8',
+    );
+    execFileSync('git', ['add', 'verify.mjs'], { cwd: fixture.workspace });
+    execFileSync(
+      'git',
+      [
+        '-c',
+        'user.name=MissionBraid',
+        '-c',
+        'user.email=fixture@example.invalid',
+        'commit',
+        '-qm',
+        'add gated fork verifier',
+      ],
+      { cwd: fixture.workspace },
+    );
+    const engine = new MissionEngine({
+      stateDir: fixture.stateDir,
+      claudeAdapter: new ClaudeAdapter({ command: fixture.claude }),
+    });
+    const controller = new AbortController();
+    let forkPromise: Promise<Awaited<ReturnType<typeof engine.executeFork>>> | undefined;
+    try {
+      const parent = await engine.run(fixture.missionFile, { workspace: fixture.workspace });
+      expect(parent).toMatchObject({ status: 'succeeded', receipt: { outcome: 'verified' } });
+      execFileSync('git', ['add', 'claude.txt'], { cwd: fixture.workspace });
+      execFileSync(
+        'git',
+        [
+          '-c',
+          'user.name=MissionBraid',
+          '-c',
+          'user.email=fixture@example.invalid',
+          'commit',
+          '-qm',
+          'mutable fork checkpoint',
+        ],
+        { cwd: fixture.workspace },
+      );
+      const parentAttemptId = parent.receipt?.attemptIds?.[0];
+      expect(parentAttemptId).toBeDefined();
+      const checkpoint = await engine.createCompositeCheckpoint(parent.missionId, parentAttemptId!);
+      const candidate = engine
+        .executionPlannerCandidates(parent.missionId)
+        .find((item) => item.stageId === 'claude-gated-upgraded');
+      expect(candidate).toBeDefined();
+
+      await executable(
+        fixture.claude,
+        `#!/usr/bin/env node
+import { execFileSync } from 'node:child_process';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+if (process.argv[2] === '--version') { console.log('2.1.245 (Claude Code)'); process.exit(0); }
+const settingsIndex = process.argv.indexOf('--settings');
+if (settingsIndex < 0 || !process.argv[settingsIndex + 1]) process.exit(21);
+const settings = JSON.parse(readFileSync(process.argv[settingsIndex + 1], 'utf8'));
+const preCommand = settings.hooks.PreToolUse[0].hooks[0].command;
+const postCommand = settings.hooks.PostToolUse[0].hooks[0].command;
+const hookCwd = ${JSON.stringify(process.cwd())};
+const toolInput = { file_path: 'fork-gated.txt', content: 'released\\n' };
+const base = { session_id: 'fork-gated-session', tool_name: 'Write', tool_use_id: 'fork-gated-write', tool_input: toolInput };
+const pre = JSON.parse(execFileSync('/bin/sh', ['-c', preCommand], {
+  input: JSON.stringify({ ...base, hook_event_name: 'PreToolUse' }),
+  encoding: 'utf8',
+  cwd: hookCwd,
+}).trim());
+if (pre.hookSpecificOutput?.permissionDecision !== 'allow') process.exit(22);
+writeFileSync(join(process.cwd(), 'fork-gated.txt'), 'released\\n');
+execFileSync('/bin/sh', ['-c', postCommand], {
+  input: JSON.stringify({ ...base, hook_event_name: 'PostToolUse', tool_response: { status: 'written' } }),
+  encoding: 'utf8',
+  cwd: hookCwd,
+});
+console.log(JSON.stringify({ type: 'system', subtype: 'init', session_id: 'fork-gated-session', model: 'deepseek-v4-pro', permissionMode: 'dontAsk', tools: ['Write'], claude_code_version: '2.1.245' }));
+console.log(JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'fork-gated-write', name: 'Write', input: toolInput }] }, session_id: 'fork-gated-session' }));
+console.log(JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'fork-gated-write', content: 'write completed', is_error: false }] }, session_id: 'fork-gated-session' }));
+console.log(JSON.stringify({ type: 'result', subtype: 'success', session_id: 'fork-gated-session', total_cost_usd: 0.01 }));
+`,
+      );
+
+      forkPromise = engine.executeFork(
+        parent.missionId,
+        {
+          checkpointId: checkpoint.checkpointId,
+          stageId: candidate!.stageId,
+          targetProfileDefinitionId: candidate!.profileDefinition.definitionId,
+          childBranchId: 'branch-gated-profile-rebound',
+          intervention: {
+            interventionId: 'intervention-gated-profile-rebound',
+            kind: 'guidance',
+            targetRef: 'stage:claude-gated-upgraded',
+            beforeDigest: 'sha256:source-guidance',
+            afterDigest: 'sha256:upgraded-guidance',
+            description: 'Run the upgraded Profile through one native gated Write.',
+            authorityChange: 'unchanged',
+          },
+        },
+        controller.signal,
+      );
+      let earlyForkError: unknown;
+      void forkPromise.catch((error: unknown) => {
+        earlyForkError = error;
+      });
+      const gate = await waitForValue(async () => {
+        if (earlyForkError !== undefined) {
+          const records = await engine.executionForks(parent.missionId);
+          throw new Error(
+            `Execution Fork failed before exposing its native tool gate: ${String(earlyForkError)}; ${JSON.stringify(records)}`,
+          );
+        }
+        return (await engine.pendingToolGates(parent.missionId))[0];
+      });
+      const activeFork = await waitForValue(
+        async () => (await engine.executionForks(parent.missionId))[0],
+      );
+      const gatedFile = join(activeFork.lineage.isolatedWorktreePath, 'fork-gated.txt');
+      await expect(readFile(gatedFile, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+      expect(gate).toMatchObject({
+        attemptId: `fork-attempt-${activeFork.forkId}`,
+        toolName: 'Write',
+        controlLevel: 'enforced',
+        scope: 'branch_local_workspace',
+      });
+
+      await engine.decideToolGate(parent.missionId, gate.attemptId, {
+        gateId: gate.gateId,
+        expectedRequestSha256: gate.requestSha256,
+        decision: 'approve',
+        reason: 'Integration test persists approval before dispatch.',
+      });
+      const forked = await forkPromise;
+      forkPromise = undefined;
+
+      expect(await readFile(gatedFile, 'utf8')).toBe('released\n');
+      await expect(
+        readFile(join(fixture.workspace, 'fork-gated.txt'), 'utf8'),
+      ).rejects.toMatchObject({ code: 'ENOENT' });
+      expect(forked).toMatchObject({
+        record: {
+          phase: 'finished',
+          runtimeResult: { status: 'completed', unresolvedItems: [] },
+          lineage: {
+            profileSelection: {
+              sourceProfileId: checkpoint.source.profileId,
+              targetStageId: 'claude-gated-upgraded',
+              targetProfileDefinitionId: candidate!.profileDefinition.definitionId,
+            },
+          },
+        },
+        receipt: { outcome: 'verified', unresolvedItems: [] },
+      });
+
+      const childAttemptId = `fork-attempt-${forked.record.forkId}`;
+      const timeline = engine.timeline(parent.missionId);
+      const requested = timeline.find(
+        (entry) => entry.kind === 'tool.gate.requested' && entry.attemptId === childAttemptId,
+      );
+      const decided = timeline.find(
+        (entry) => entry.kind === 'tool.gate.decided' && entry.attemptId === childAttemptId,
+      );
+      const completed = timeline.find(
+        (entry) => entry.kind === 'tool.gate.result' && entry.attemptId === childAttemptId,
+      );
+      expect(requested?.seq).toBeLessThan(decided?.seq ?? 0);
+      expect(decided?.seq).toBeLessThan(completed?.seq ?? 0);
+
+      const selection = timeline.find(
+        (entry) => entry.kind === 'execution-fork.profile-rebound.selected',
+      )?.data as unknown as { readonly targetProfileId: string };
+      const binding = timeline.find(
+        (entry) => entry.kind === 'attempt.bound' && entry.attemptId === childAttemptId,
+      )?.data as unknown as {
+        readonly profileId: string;
+        readonly runtimeBinding: { readonly profileId: string };
+      };
+      expect(binding).toMatchObject({
+        profileId: selection.targetProfileId,
+        runtimeBinding: { profileId: selection.targetProfileId },
+      });
+      expect(
+        timeline.find(
+          (entry) => entry.kind === 'tool.gateway.armed' && entry.attemptId === childAttemptId,
+        )?.data,
+      ).toMatchObject({
+        operation: 'execution-fork',
+        attemptId: childAttemptId,
+        capabilityFidelity: 'native',
+        controlLevel: 'enforced',
+      });
+    } finally {
+      controller.abort();
+      await forkPromise?.catch(() => undefined);
+      engine.close();
     }
   });
 

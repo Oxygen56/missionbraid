@@ -1,0 +1,14 @@
+{
+  "name": "missionbraid-i8-policy-triage-fixture",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:tool": "MISSIONBRAID_TARGET_WORKSPACE=. node verify-tool-node.mjs",
+    "test:prompt": "MISSIONBRAID_TARGET_WORKSPACE=. node verify-prompt-node.mjs",
+    "test:final": "MISSIONBRAID_TARGET_WORKSPACE=. node verify-final.mjs"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

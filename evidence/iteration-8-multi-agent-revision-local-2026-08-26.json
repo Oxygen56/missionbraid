@@ -1,0 +1,152 @@
+{
+  "schemaVersion": "missionbraid.dev/evidence/iteration-8-multi-agent-revision/v1",
+  "evidenceLevel": "same-host-local-real-runtime-controlled-fixture",
+  "generatedAt": "2026-08-26T08:49:38.641Z",
+  "missionId": "mission-7fcf8e50-fd46-4560-974d-a2e737e1b86f",
+  "implementation": {
+    "gitRevision": "82cdcde2aeffa9276fbaa1f0aff52e8334dd3b2f",
+    "worktreeState": "dirty",
+    "freshBuildUsed": true,
+    "buildInputDigestBefore": "sha256:8e8437804be43ba189a95f6830c5af4149e94e01d5fbf26866dace00fe7d34cc",
+    "buildInputDigestAfter": "sha256:8e8437804be43ba189a95f6830c5af4149e94e01d5fbf26866dace00fe7d34cc",
+    "buildInputsStable": true,
+    "distributionDigestBefore": "sha256:8733a810385f024312bdd2937d0358841499b68614b40b864000fafac61a9229",
+    "distributionDigestAfter": "sha256:d1f82bebe4f04a1a9cd12dc7ace1ca1b5ed0bcbaa6b41f09e72e35a9fcc95579",
+    "selectedBuildInputFileCount": 9,
+    "selectedDistributionFileCount": 6
+  },
+  "environment": {
+    "nodeVersion": "v26.4.0",
+    "qoderVersion": "1.1.6",
+    "claudeCodeVersion": "2.1.246"
+  },
+  "productEntry": {
+    "workbenchStarted": true,
+    "missionCreatedThroughWorkbenchHttpApi": true,
+    "planStartedThroughWorkbenchHttpApi": true,
+    "contractRevisedThroughWorkbenchHttpApi": true,
+    "statusReadThroughWorkbenchHttpApi": true,
+    "missionDraftApiSupportsExplicitPlanDag": true
+  },
+  "fixture": {
+    "workspace": "/private/var/folders/s6/97lfn3_942g3b1w0cw82sgz00000gn/T/missionbraid-i8-multi-agent-HhFoq9/workspace",
+    "baselineHead": "32aa56c225ee53519f81ad4a65dd257b66abb487",
+    "baselineTree": "b5b9c88a06bca1fb7f025d6b99894f0d0f67016d",
+    "baselineVerifierExitCodes": {
+      "toolExitCode": 1,
+      "promptExitCode": 1,
+      "finalExitCode": 1
+    }
+  },
+  "initial": {
+    "contractRevisionId": "contract-revision-8b697e06aedc45debedaf408",
+    "planRevisionId": "plan-revision-a55dbfd7aa87552d075f5163",
+    "toolAttemptId": "attempt-plan-9a450ef10ca2a90a247d6e66be70",
+    "toolArtifactId": "plan-artifact-c0ded18bcebbacce7479bfb3915f",
+    "toolArtifactDigest": "89e2d2bb61621711ffc71a92bf5191b3cdf46ae594de3bb56f143e3e43a55ece",
+    "promptAttemptId": "attempt-plan-c3980e19064d8a835e92bd7a67e7",
+    "promptAttemptActiveAtRevision": true,
+    "promptHoldMarker": {
+      "phase": "initial",
+      "pid": 16767,
+      "state": "waiting-for-contract-revision"
+    }
+  },
+  "revision": {
+    "contractRevisionId": "contract-revision-0849e46d785a207ca5966476",
+    "planRevisionId": "plan-revision-a4212bafcc7fea262b765056",
+    "changedRequirementIds": ["acceptance-prompt-schema"],
+    "directlyImpactedNodeIds": ["prompt-skill"],
+    "invalidatedNodeIds": ["integrate", "prompt-skill"],
+    "replanFrontierNodeIds": ["prompt-skill"],
+    "reusableNodeIds": ["tool-implementation"],
+    "reusableArtifactIds": ["plan-artifact-c0ded18bcebbacce7479bfb3915f"],
+    "fence": {
+      "fenceId": "attempt-fence-b95b0b83f043a7e3a62f1dcc",
+      "attemptId": "attempt-plan-c3980e19064d8a835e92bd7a67e7",
+      "agentId": "claude",
+      "nodeId": "prompt-skill",
+      "reason": "requirement-or-authority-changed",
+      "action": "interrupt-and-preserve-evidence",
+      "acceptsFurtherEffects": false,
+      "observedPlanRevisionId": "plan-revision-a55dbfd7aa87552d075f5163",
+      "observedContractRevisionId": "contract-revision-8b697e06aedc45debedaf408",
+      "targetContractRevisionId": "contract-revision-0849e46d785a207ca5966476",
+      "evidenceRefs": [
+        "attempt:attempt-plan-c3980e19064d8a835e92bd7a67e7",
+        "branch:branch-plan-c3980e19064d8a835e92bd7a67e7"
+      ]
+    }
+  },
+  "execution": {
+    "qoderToolAttemptCount": 1,
+    "qoderToolRerun": false,
+    "reusedToolArtifactId": "plan-artifact-reuse-e1ae1829a574dbb014d2c20db80a",
+    "reusedFromArtifactId": "plan-artifact-c0ded18bcebbacce7479bfb3915f",
+    "claudeV1AttemptId": "attempt-plan-c3980e19064d8a835e92bd7a67e7",
+    "claudeV1Status": "abandoned",
+    "claudeV1ProcessAborted": true,
+    "claudeV2AttemptId": "attempt-plan-376e41646a0a4918e435e2c0d61a",
+    "claudeV2Status": "succeeded",
+    "claudeV2ArtifactId": "plan-artifact-f640bd15539de3f8ebfb667d1d84",
+    "consolidationAttemptId": "attempt-consolidation-ff12113a35ce9b08000bc9452da5",
+    "consolidationId": "consolidation-649c51065fbe3d9c8bb1af49",
+    "consolidationStatus": "succeeded",
+    "integrationConclusion": "confirmed",
+    "sourceHistoryImmutable": true,
+    "sourceArtifactIds": [
+      "plan-artifact-f640bd15539de3f8ebfb667d1d84",
+      "plan-artifact-reuse-e1ae1829a574dbb014d2c20db80a"
+    ]
+  },
+  "receipt": {
+    "receiptId": "receipt-4ca3b008-51b1-4406-b075-24c30b9bd82f",
+    "outcome": "verified",
+    "contractRevisionId": "contract-revision-0849e46d785a207ca5966476",
+    "planRevisionId": "plan-revision-a4212bafcc7fea262b765056",
+    "branchId": "branch-consolidation-ff12113a35ce9b08000bc9452da5",
+    "attemptIds": [
+      "attempt-plan-c3980e19064d8a835e92bd7a67e7",
+      "attempt-plan-9a450ef10ca2a90a247d6e66be70",
+      "attempt-plan-376e41646a0a4918e435e2c0d61a",
+      "attempt-consolidation-ff12113a35ce9b08000bc9452da5"
+    ],
+    "verifications": [
+      {
+        "criterionId": "tool-behavior",
+        "evidenceRefs": [
+          "verifier:044b2fee660eca3e5857524f6c9fc660a32efbc96091b538ea60e09ed10477b9",
+          "stdout:sha256:d429ad26f7f16dcd27be2716e009cb013fca75bd8799a10e935b6c3711a5d516",
+          "stderr:sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        ],
+        "status": "passed"
+      },
+      {
+        "criterionId": "prompt-schema",
+        "evidenceRefs": [
+          "verifier:0441b026d39d9ca9ebdee57678dee02e8d4e832f0fd863cc03df7a66450ffaa6",
+          "stdout:sha256:c79c2b41dddaa859fb1bca93d9833c12eceb4e0f9c15581e274eba00376c5236",
+          "stderr:sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        ],
+        "status": "passed"
+      },
+      {
+        "criterionId": "final-outcome",
+        "evidenceRefs": [
+          "verifier:a5565140d9e9a554a64928f805f78764ae21b91db353a3902967b3c93f9bd034",
+          "stdout:sha256:6e18d88a2bfdd7d0e9172c34d40353d6315664cbfe9c5ba4e88e44527ec0a7de",
+          "stderr:sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        ],
+        "status": "passed"
+      }
+    ],
+    "unresolvedItems": []
+  },
+  "restart": {
+    "stableMissionHead": true,
+    "stableReceipt": true,
+    "stablePlanExecution": true,
+    "eventChainValid": true
+  },
+  "claimBoundary": "This is same-host local evidence from real Qoder and Claude Code processes in a controlled Git fixture. It proves one explicit Mission Plan was created, started, revised, observed, and completed through Workbench HTTP APIs; preserved a verified unaffected tool artifact; interrupted and fenced a stale prompt Attempt after a prompt-only Contract revision; executed a fresh revised prompt Attempt; consolidated immutable source Branches in a new Attempt; passed deterministic verifiers; issued a Receipt bound to the latest Contract and Plan revisions; and reconstructed the same state after Workbench restart. It does not claim production adoption, provider-internal state capture, distributed execution, or reliability outside this controlled same-host run."
+}

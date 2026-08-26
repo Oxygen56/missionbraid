@@ -42,7 +42,14 @@ export interface MissionExecutionForkContextV1 {
 interface ForkLineageIdentityV1 {
   readonly missionId: string;
   readonly contractId: string;
+  /** Legacy field always denotes the immutable source Profile. */
   readonly profileId: string;
+  readonly sourceProfileId: string;
+  readonly targetProfileId: string;
+  readonly targetStageId: string | null;
+  readonly profileSelectionId: string | null;
+  readonly plannerDecisionHash: string | null;
+  readonly profileSelectionEvidenceRefs: readonly string[];
   readonly parentAttemptId: string;
   readonly parentBranchId: string;
   readonly childBranchId: string;
@@ -469,6 +476,7 @@ function normalizeSourceEvent(
         runtimeResult: { runtimeRunId: result.runtimeRunId, status: result.status },
         evidenceRefs: normalizeEvidenceRefs([
           ...requireStringArray('toolExecutionEvidenceRefs', result.toolExecutionEvidenceRefs),
+          ...requireStringArray('contextEvidenceRefs', result.contextEvidenceRefs ?? []),
           ...requireStringArray('verificationEvidenceRefs', result.verificationEvidenceRefs),
         ]),
       };
@@ -483,6 +491,7 @@ function normalizeSourceEvent(
       const refs = normalizeEvidenceRefs([
         ...requireStringArray('futureEvidenceRefs', input.futureEvidenceRefs),
         ...requireStringArray('toolExecutionEvidenceRefs', input.toolExecutionEvidenceRefs),
+        ...requireStringArray('contextEvidenceRefs', input.contextEvidenceRefs ?? []),
         ...requireStringArray('verificationEvidenceRefs', input.verificationEvidenceRefs),
         ...requireStringArray(
           'workspaceEffectInput.evidenceRefs',
@@ -525,10 +534,54 @@ function validatePlanned(
   if (source === undefined || plan === undefined) {
     throw new MissionExecutionForkBridgeError('fork.planned lacks lineage or plan');
   }
+  const profileId = requireIdentifier('lineage.profileId', source.profileId);
+  const selection = source.profileSelection;
+  const hasExplicitProfileRebound =
+    selection !== undefined ||
+    (source.sourceProfileId !== undefined && source.sourceProfileId !== profileId) ||
+    (source.targetProfileId !== undefined && source.targetProfileId !== profileId) ||
+    source.targetStageId !== undefined;
+  if (
+    hasExplicitProfileRebound &&
+    (selection === undefined ||
+      source.sourceProfileId === undefined ||
+      source.targetProfileId === undefined ||
+      source.targetStageId === undefined ||
+      source.sourceProfileId !== profileId ||
+      source.sourceProfileId !== selection.sourceProfileId ||
+      source.targetProfileId !== selection.targetProfileId ||
+      source.targetStageId !== selection.targetStageId ||
+      selection.sourceProfileId === selection.targetProfileId ||
+      !/^[a-f0-9]{64}$/.test(selection.plannerDecisionHash) ||
+      selection.evidenceRefs.length === 0 ||
+      selection.evidenceRefs.some((reference) => reference.trim().length === 0))
+  ) {
+    throw new MissionExecutionForkBridgeError(
+      'fork.planned Profile-Rebound lineage is incomplete or contradictory',
+    );
+  }
   const lineage: ForkLineageIdentityV1 = {
     missionId: requireIdentifier('lineage.missionId', source.missionId),
     contractId: requireIdentifier('lineage.contractId', source.contractId),
-    profileId: requireIdentifier('lineage.profileId', source.profileId),
+    profileId,
+    sourceProfileId:
+      source.sourceProfileId === undefined
+        ? profileId
+        : requireIdentifier('lineage.sourceProfileId', source.sourceProfileId),
+    targetProfileId:
+      source.targetProfileId === undefined
+        ? profileId
+        : requireIdentifier('lineage.targetProfileId', source.targetProfileId),
+    targetStageId:
+      source.targetStageId === undefined
+        ? null
+        : requireIdentifier('lineage.targetStageId', source.targetStageId),
+    profileSelectionId:
+      selection === undefined
+        ? null
+        : requireIdentifier('lineage.profileSelection.selectionId', selection.selectionId),
+    plannerDecisionHash: selection?.plannerDecisionHash ?? null,
+    profileSelectionEvidenceRefs: selection === undefined ? [] : [...selection.evidenceRefs],
     parentAttemptId: requireIdentifier('lineage.parentAttemptId', source.parentAttemptId),
     parentBranchId: requireIdentifier('lineage.parentBranchId', source.parentBranchId),
     childBranchId: requireIdentifier('lineage.childBranchId', source.childBranchId),
@@ -577,7 +630,8 @@ function validateContextAgainstLineage(
     binding.attemptId !== context.childAttemptId ||
     binding.branchId !== lineage.childBranchId ||
     binding.contractId !== lineage.contractId ||
-    binding.profileId !== lineage.profileId ||
+    binding.profileId !== lineage.targetProfileId ||
+    (lineage.targetStageId !== null && binding.planNodeId !== lineage.targetStageId) ||
     binding.workspaceKey !== lineage.childWorkspaceKey
   ) {
     throw new MissionExecutionForkBridgeError(

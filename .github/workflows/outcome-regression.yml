@@ -1,0 +1,30 @@
+name: Outcome Regression Evidence
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  enforce-retained-outcome:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Enforce retained Outcome CI result
+        run: >-
+          node examples/i9-outcome-regression-fixture/ci/check-outcome-ci.mjs
+          evidence/iteration-9-outcome-ci-result.json
+
+      - name: Prove tamper and unknown results fail closed
+        run: >-
+          node examples/i9-outcome-regression-fixture/ci/check-outcome-ci.mjs
+          --self-test evidence/iteration-9-outcome-ci-result.json

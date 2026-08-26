@@ -766,6 +766,11 @@ export function analyzeSelectiveInvalidation(
     }
     if (reason === 'obsolete-contract-revision' && !invalidated.has(node.nodeId)) {
       rebindableRunningAttemptIds.push(attempt.attemptId);
+      // An unaffected Agent keeps its immutable old-revision binding while it
+      // finishes. Its verified artifact may later be adopted into the child
+      // Plan through the explicit reuse decision; changing the Contract
+      // revision alone is not a reason to terminate useful work.
+      continue;
     }
     staleAttemptFences.push({
       fenceId: `attempt-fence-${shortHash(

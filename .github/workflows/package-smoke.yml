@@ -1,0 +1,33 @@
+name: Package clean consumer
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  clean-consumer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.18.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test:package -- --output evidence/iteration-10-package-smoke-ci.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: iteration-10-package-smoke
+          path: evidence/iteration-10-package-smoke-ci.json
+          if-no-files-found: warn

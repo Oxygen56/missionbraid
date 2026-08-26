@@ -41,8 +41,11 @@ export function normalizeRuntimeOutput(
   context: RuntimeEventContext,
   artifact: NativeArtifactRefV1,
 ): AgentRuntimeEventV1 {
-  const sourceId = `${context.attemptId}:${line.runtime}:${context.sourceProtocol}:${line.stream}`;
-  const runtimeEventId = `runtime-event-${sha256(`${sourceId}:${String(line.streamSequence)}`).slice(0, 32)}`;
+  const sourceId =
+    adapterSourceId(line.value, context) ??
+    `${context.attemptId}:${line.runtime}:${context.sourceProtocol}:${line.stream}`;
+  const sourceSequence = adapterSourceSequence(line.value) ?? line.streamSequence;
+  const runtimeEventId = `runtime-event-${sha256(`${sourceId}:${String(sourceSequence)}`).slice(0, 32)}`;
   const nativeEventType = nativeType(line);
   const correlationIds = collectCorrelationIds(line.value);
   const occurredAt = nativeTimestamp(line.value);
@@ -56,19 +59,19 @@ export function normalizeRuntimeOutput(
     sourceHarness: line.runtime,
     sourceProtocol: context.sourceProtocol,
     sourceId,
-    sourceSequence: line.streamSequence,
+    sourceSequence,
     nativeEventType,
     semanticKind: semanticKind(nativeEventType, line.value),
     causalParentIds: [...(context.causalParentIds ?? [])],
     correlationIds,
     observedAt: line.receivedAt,
     ...(occurredAt === undefined ? {} : { nativeOccurredAt: occurredAt }),
-    fidelity: line.value === undefined ? 'opaque' : 'native',
+    fidelity: nativeFidelity(line.value) ?? (line.value === undefined ? 'opaque' : 'native'),
     normalized: {
       stream: line.stream,
       structured: line.value !== undefined,
       nativeEventType,
-      sourceSequence: line.streamSequence,
+      sourceSequence,
       controllerSequence: line.sequence,
     },
     nativeArtifact: artifact,
@@ -132,7 +135,7 @@ function nativeType(line: RuntimeOutputLine): string {
     return `${line.stream}.text`;
   }
   const record = line.value as Record<string, unknown>;
-  for (const key of ['type', 'event', 'kind', 'subtype']) {
+  for (const key of ['nativeEventType', 'type', 'event', 'kind', 'subtype']) {
     const value = record[key];
     if (typeof value === 'string' && value.trim().length > 0) return value;
   }
@@ -181,6 +184,8 @@ function findNativeToolRequest(
 }
 
 function semanticKind(nativeEventType: string, value: unknown): RuntimeSemanticKindV1 {
+  const adapterHint = adapterSemanticHint(value);
+  if (adapterHint !== undefined) return adapterHint;
   const haystack = `${nativeEventType} ${nativeSubtypes(value)}`.toLowerCase();
   if (haystack.includes('error') || haystack.includes('fail')) return 'failure';
   if (haystack.includes('tool') || haystack.includes('hook')) return 'tool';
@@ -233,12 +238,62 @@ function uniqueStrings(values: readonly unknown[]): string[] {
 function nativeTimestamp(value: unknown): string | undefined {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
   const record = value as Record<string, unknown>;
-  for (const key of ['timestamp', 'created_at', 'occurred_at']) {
+  for (const key of ['nativeOccurredAt', 'observedAt', 'timestamp', 'created_at', 'occurred_at']) {
     const candidate = record[key];
     if (typeof candidate === 'string' && Number.isFinite(Date.parse(candidate))) return candidate;
   }
   return undefined;
 }
+
+function adapterSourceId(value: unknown, context: RuntimeEventContext): string | undefined {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  if (
+    typeof record.adapterId !== 'string' ||
+    typeof record.runId !== 'string' ||
+    typeof record.sourceId !== 'string'
+  ) {
+    return undefined;
+  }
+  return `${context.attemptId}:${context.sourceProtocol}:${record.adapterId}:${record.runId}:${record.sourceId}`;
+}
+
+function adapterSourceSequence(value: unknown): number | undefined {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const sequence = (value as Record<string, unknown>).sequence;
+  return Number.isSafeInteger(sequence) && (sequence as number) > 0
+    ? (sequence as number)
+    : undefined;
+}
+
+function adapterSemanticHint(value: unknown): RuntimeSemanticKindV1 | undefined {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const hint = (value as Record<string, unknown>).semanticHint;
+  return typeof hint === 'string' && adapterSemanticHints.has(hint as RuntimeSemanticKindV1)
+    ? (hint as RuntimeSemanticKindV1)
+    : undefined;
+}
+
+function nativeFidelity(value: unknown): AgentRuntimeEventV1['fidelity'] | undefined {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const fidelity = (value as Record<string, unknown>).fidelity;
+  return fidelity === 'native' || fidelity === 'derived' || fidelity === 'opaque'
+    ? fidelity
+    : undefined;
+}
+
+const adapterSemanticHints = new Set<RuntimeSemanticKindV1>([
+  'runtime',
+  'session',
+  'model',
+  'context',
+  'tool',
+  'workspace',
+  'usage',
+  'failure',
+  'message',
+  'unknown',
+]);
 
 function nestedString(value: unknown, key: string): string | undefined {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;

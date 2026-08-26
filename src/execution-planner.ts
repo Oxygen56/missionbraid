@@ -900,6 +900,8 @@ function meetsMinimumFidelity(
     unsupported: 0,
     unknown: 0,
     'process-only': 1,
+    'observe-only': 1,
+    controller: 2,
     cooperative: 2,
     native: 3,
   };

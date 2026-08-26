@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { basename, isAbsolute } from 'node:path';
 import { performance } from 'node:perf_hooks';
 
@@ -10,12 +11,15 @@ import type {
   RuntimeDetection,
   RuntimeInvocation,
   RuntimeOutputLine,
+  RuntimeOutputObserver,
   RuntimeRunResult,
 } from './types.js';
 
 const DEFAULT_COMMAND = 'claude';
 const DEFAULT_PROBE_TIMEOUT_MS = 2_000;
 const DEFAULT_PERMISSION_MODE = 'dontAsk' as const;
+const THINKING_TOKEN_SNAPSHOT_INTERVAL = 256;
+const THINKING_TOKEN_COMPACTION_STRATEGY = 'claude-thinking-token-snapshots-v1';
 
 export type ClaudePermissionMode =
   | 'default'
@@ -202,6 +206,108 @@ function parseJsonLine(event: ProcessOutputLine): RuntimeOutputLine {
   }
 }
 
+function thinkingTokenEstimate(event: RuntimeOutputLine): number | null {
+  if (
+    event.stream !== 'stdout' ||
+    typeof event.value !== 'object' ||
+    event.value === null ||
+    !('type' in event.value) ||
+    event.value.type !== 'system' ||
+    !('subtype' in event.value) ||
+    event.value.subtype !== 'thinking_tokens'
+  ) {
+    return null;
+  }
+
+  if ('estimated_tokens' in event.value && typeof event.value.estimated_tokens === 'number') {
+    return event.value.estimated_tokens;
+  }
+  return null;
+}
+
+interface ClaudeOutputCompactor {
+  observe(event: ProcessOutputLine): Promise<void>;
+  finish(): Promise<void>;
+  accounting(): NonNullable<RuntimeRunResult['outputAccounting']>;
+}
+
+function createClaudeOutputCompactor(observer?: RuntimeOutputObserver): ClaudeOutputCompactor {
+  const rawHash = createHash('sha256');
+  let rawLineCount = 0;
+  let retainedLineCount = 0;
+  let droppedLineCount = 0;
+  let lastEmittedEstimate: number | null = null;
+  let thinkingEventsSinceEmission = 0;
+  let pendingThinkingTokenEvent: RuntimeOutputLine | undefined;
+
+  const emit = async (event: RuntimeOutputLine): Promise<void> => {
+    retainedLineCount += 1;
+    await observer?.(event);
+  };
+
+  const flushPending = async (): Promise<void> => {
+    if (pendingThinkingTokenEvent === undefined) return;
+    const pending = pendingThinkingTokenEvent;
+    pendingThinkingTokenEvent = undefined;
+    const estimate = thinkingTokenEstimate(pending);
+    await emit(pending);
+    lastEmittedEstimate = estimate;
+    thinkingEventsSinceEmission = 0;
+  };
+
+  return {
+    async observe(event) {
+      rawLineCount += 1;
+      rawHash.update(`${event.stream}\0${event.line}\n`, 'utf8');
+      const parsed = parseJsonLine(event);
+      const estimate = thinkingTokenEstimate(parsed);
+
+      if (estimate === null) {
+        await flushPending();
+        await emit(parsed);
+        return;
+      }
+
+      if (lastEmittedEstimate === null) {
+        await emit(parsed);
+        lastEmittedEstimate = estimate;
+        thinkingEventsSinceEmission = 0;
+        return;
+      }
+
+      thinkingEventsSinceEmission += 1;
+      if (
+        estimate - lastEmittedEstimate >= THINKING_TOKEN_SNAPSHOT_INTERVAL ||
+        thinkingEventsSinceEmission >= THINKING_TOKEN_SNAPSHOT_INTERVAL
+      ) {
+        if (pendingThinkingTokenEvent !== undefined) {
+          droppedLineCount += 1;
+          pendingThinkingTokenEvent = undefined;
+        }
+        await emit(parsed);
+        lastEmittedEstimate = estimate;
+        thinkingEventsSinceEmission = 0;
+        return;
+      }
+
+      if (pendingThinkingTokenEvent !== undefined) {
+        droppedLineCount += 1;
+      }
+      pendingThinkingTokenEvent = parsed;
+    },
+    finish: flushPending,
+    accounting() {
+      return {
+        strategy: THINKING_TOKEN_COMPACTION_STRATEGY,
+        rawLineCount,
+        retainedLineCount,
+        droppedLineCount,
+        rawSha256: rawHash.digest('hex'),
+      };
+    },
+  };
+}
+
 export function buildClaudeInvocation(
   request: ClaudeRunRequest,
   command = DEFAULT_COMMAND,
@@ -349,22 +455,19 @@ export class ClaudeAdapter implements RuntimeAdapter<ClaudeRunRequest> {
 
   async run(request: ClaudeRunRequest): Promise<RuntimeRunResult> {
     const invocation = this.buildInvocation(request);
+    const outputCompactor = createClaudeOutputCompactor(request.onOutput);
     const processResult = await runProcess(invocation, {
       ...(request.signal === undefined ? {} : { signal: request.signal }),
       ...(request.onStart === undefined ? {} : { onStart: request.onStart }),
-      ...(request.onOutput === undefined
-        ? {}
-        : {
-            onOutput: async (event: ProcessOutputLine) => {
-              await request.onOutput?.(parseJsonLine(event));
-            },
-          }),
+      onOutput: outputCompactor.observe,
     });
+    await outputCompactor.finish();
 
     return {
       runtime: 'claude',
       outputProtocol: 'claude-stream-json',
       process: processResult,
+      outputAccounting: outputCompactor.accounting(),
     };
   }
 }

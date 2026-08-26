@@ -16,6 +16,7 @@ import {
   type ExternalEffectReplayDecisionV1,
 } from './composite-checkpoint.js';
 import { snapshotGitWorkspace, type GitWorkspaceSnapshotV1 } from './workspace.js';
+import type { RuntimeBindingV1 } from './domain.js';
 
 export const EXECUTION_FORK_SCHEMA_VERSION = 'missionbraid.dev/execution-fork/v1' as const;
 
@@ -68,6 +69,7 @@ export type ExecutionForkErrorCodeV1 =
   | 'SOURCE_BRANCH_MUTATED'
   | 'FORK_ALREADY_IN_PROGRESS'
   | 'FORK_EVIDENCE_CORRUPT'
+  | 'PROFILE_SELECTION_INVALID'
   | 'RUNTIME_CONTINUATION_FAILED'
   | 'WORKTREE_NOT_OWNED';
 
@@ -93,6 +95,25 @@ export interface ExecutionForkRequestV1 {
   /** Exactly one declared variable changed from the parent boundary. */
   readonly intervention: CheckpointInterventionV1;
   readonly externalEffectDecisions: readonly ExternalEffectReplayDecisionV1[];
+  /**
+   * An explicit deterministic Planner decision may rebind the child execution
+   * to another already-declared Runtime Profile. The source Checkpoint remains
+   * immutable and continues to identify the original Profile.
+   */
+  readonly profileSelection?: ExecutionForkProfileSelectionV1;
+  readonly runtimeBinding?: RuntimeBindingV1;
+}
+
+export interface ExecutionForkProfileSelectionV1 {
+  readonly selectionId: string;
+  readonly sourceProfileId: string;
+  readonly targetProfileId: string;
+  readonly targetStageId: string;
+  readonly targetProfileDefinitionId: string;
+  readonly plannerDecisionHash: string;
+  readonly authorityChange: 'unchanged' | 'narrowed';
+  readonly evidenceRefs: readonly string[];
+  readonly selectedAt: string;
 }
 
 export interface ExecutionForkLineageV1 {
@@ -102,7 +123,15 @@ export interface ExecutionForkLineageV1 {
   readonly mode: 'execution-fork';
   readonly missionId: string;
   readonly contractId: string;
+  /** Legacy source Profile identity retained for v1 journal compatibility. */
   readonly profileId: string;
+  /** Present for Profile-Rebound Forks; absent historical records read as profileId. */
+  readonly sourceProfileId?: string;
+  /** Present for Profile-Rebound Forks; absent historical records read as profileId. */
+  readonly targetProfileId?: string;
+  readonly targetStageId?: string;
+  readonly runtimeBinding?: RuntimeBindingV1;
+  readonly profileSelection?: ExecutionForkProfileSelectionV1;
   readonly parentAttemptId: string;
   readonly parentBranchId: string;
   readonly childBranchId: string;
@@ -155,6 +184,8 @@ export interface RuntimeContinuationResultV1 {
   readonly status: 'completed' | 'failed';
   /** At least one reference proving that a real tool path was invoked. */
   readonly toolExecutionEvidenceRefs: readonly string[];
+  /** Evidence refs proving how the visible Context was bound or refreshed. */
+  readonly contextEvidenceRefs?: readonly string[];
   readonly verificationEvidenceRefs: readonly string[];
   readonly unresolvedItems: readonly string[];
 }
@@ -190,6 +221,7 @@ export interface ExecutionForkReceiptInputV1 {
   };
   readonly futureEvidenceRefs: readonly string[];
   readonly toolExecutionEvidenceRefs: readonly string[];
+  readonly contextEvidenceRefs?: readonly string[];
   readonly verificationEvidenceRefs: readonly string[];
   readonly unresolvedItems: readonly string[];
   readonly generatedAt: string;
@@ -417,6 +449,9 @@ export class ExecutionForkService {
     verifyCompositeCheckpoint(request.checkpoint);
     assertCheckpointComplete(request.checkpoint);
     assertExternalFrontierComplete(request.checkpoint);
+    if (request.profileSelection !== undefined) {
+      validateProfileSelection(request.profileSelection, request.checkpoint.source.profileId);
+    }
 
     const repositoryRoot = await resolveRepositoryRoot(request.repositoryRoot);
     const worktreePath = await resolveNewWorktreePath(repositoryRoot, request.isolatedWorktreePath);
@@ -461,6 +496,20 @@ export class ExecutionForkService {
       missionId: request.checkpoint.source.missionId,
       contractId: request.checkpoint.source.contractId,
       profileId: request.checkpoint.source.profileId,
+      ...(request.runtimeBinding === undefined
+        ? {}
+        : {
+            targetProfileId: request.runtimeBinding.profileId,
+            runtimeBinding: { ...request.runtimeBinding },
+          }),
+      ...(request.profileSelection === undefined
+        ? {}
+        : {
+            sourceProfileId: request.profileSelection.sourceProfileId,
+            targetProfileId: request.profileSelection.targetProfileId,
+            targetStageId: request.profileSelection.targetStageId,
+            profileSelection: cloneProfileSelection(request.profileSelection),
+          }),
       parentAttemptId: request.checkpoint.source.attemptId,
       parentBranchId: request.checkpoint.source.branchId,
       childBranchId: planned.plan.childBranchId,
@@ -483,7 +532,19 @@ export class ExecutionForkService {
     const forkId = `execution-fork-${digest({ lineageId, planId: planned.plan.planId }).slice(
       'sha256:'.length,
     )}`;
-    const lineage: ExecutionForkLineageV1 = { ...lineageCore, lineageId, forkId };
+    const lineage: ExecutionForkLineageV1 = {
+      ...lineageCore,
+      lineageId,
+      forkId,
+      ...(request.runtimeBinding === undefined
+        ? {}
+        : {
+            runtimeBinding: {
+              ...request.runtimeBinding,
+              attemptId: `fork-attempt-${forkId}`,
+            },
+          }),
+    };
 
     const existing = await this.#journal.load(forkId);
     if (existing.length > 0) {
@@ -603,9 +664,13 @@ export class ExecutionForkService {
         },
         futureEvidenceRefs: uniqueSorted([
           ...runtimeEvidenceEventRefs,
+          ...(result.contextEvidenceRefs ?? []),
           `workspace:${futureSnapshot.workspaceDigest}`,
         ]),
         toolExecutionEvidenceRefs: [...result.toolExecutionEvidenceRefs],
+        ...(result.contextEvidenceRefs === undefined
+          ? {}
+          : { contextEvidenceRefs: [...result.contextEvidenceRefs] }),
         verificationEvidenceRefs: [...result.verificationEvidenceRefs],
         unresolvedItems: [...result.unresolvedItems],
         generatedAt,
@@ -1031,6 +1096,13 @@ function normalizeRuntimeResult(result: RuntimeContinuationResultV1): RuntimeCon
     runtimeRunId: requireIdentifier(result.runtimeRunId, 'runtimeRunId'),
     status: result.status,
     toolExecutionEvidenceRefs,
+    ...(result.contextEvidenceRefs === undefined
+      ? {}
+      : {
+          contextEvidenceRefs: uniqueSorted(
+            result.contextEvidenceRefs.map((ref) => requireNonEmpty(ref, 'contextEvidenceRef')),
+          ),
+        }),
     verificationEvidenceRefs: uniqueSorted(
       result.verificationEvidenceRefs.map((ref) => requireNonEmpty(ref, 'verificationEvidenceRef')),
     ),
@@ -1173,6 +1245,52 @@ function requireIdentifier(value: string, path: string): string {
     throw new ExecutionForkError('CHECKPOINT_INCOMPLETE', `${path} must be a stable identifier`);
   }
   return value;
+}
+
+function validateProfileSelection(
+  selection: ExecutionForkProfileSelectionV1,
+  checkpointProfileId: string,
+): void {
+  for (const [path, value] of [
+    ['profileSelection.selectionId', selection.selectionId],
+    ['profileSelection.sourceProfileId', selection.sourceProfileId],
+    ['profileSelection.targetProfileId', selection.targetProfileId],
+    ['profileSelection.targetStageId', selection.targetStageId],
+    ['profileSelection.targetProfileDefinitionId', selection.targetProfileDefinitionId],
+  ] as const) {
+    requireIdentifier(value, path);
+  }
+  if (
+    selection.sourceProfileId !== checkpointProfileId ||
+    selection.sourceProfileId === selection.targetProfileId
+  ) {
+    throw new ExecutionForkError(
+      'PROFILE_SELECTION_INVALID',
+      'Profile selection must retain the Checkpoint source Profile and bind a distinct target Profile',
+    );
+  }
+  if (!/^[a-f0-9]{64}$/.test(selection.plannerDecisionHash)) {
+    throw new ExecutionForkError(
+      'PROFILE_SELECTION_INVALID',
+      'Profile selection must bind a complete Planner decision hash',
+    );
+  }
+  if (
+    selection.evidenceRefs.length === 0 ||
+    selection.evidenceRefs.some((ref) => ref.trim() === '')
+  ) {
+    throw new ExecutionForkError(
+      'PROFILE_SELECTION_INVALID',
+      'Profile selection must retain non-empty Planner evidence references',
+    );
+  }
+  requireIsoTimestamp(selection.selectedAt, 'profileSelection.selectedAt');
+}
+
+function cloneProfileSelection(
+  selection: ExecutionForkProfileSelectionV1,
+): ExecutionForkProfileSelectionV1 {
+  return { ...selection, evidenceRefs: [...selection.evidenceRefs] };
 }
 
 function requireNonEmpty(value: string, path: string): string {

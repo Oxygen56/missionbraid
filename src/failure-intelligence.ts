@@ -58,6 +58,9 @@ export interface ContextFreshnessEvidenceV1 {
   readonly contextFactId: string;
   readonly boundWorkspaceDigest: string;
   readonly currentWorkspaceDigest: string;
+  /** Optional content-level binding evidence. Older Runtime records may omit it. */
+  readonly boundContextDigest?: string;
+  readonly currentContextDigest?: string;
   readonly evidenceRefs: readonly string[];
 }
 
@@ -175,7 +178,7 @@ export interface DiagnosticBranchProposalV1 {
   readonly baseCheckpointId?: string;
   readonly baseCheckpointDigest?: string;
   readonly changedVariable: DiagnosticVariableV1;
-  readonly preserve: readonly ['outcome-contract', 'all-other-observable-inputs'];
+  readonly preserve: readonly ['outcome-contract', 'checkpointed-comparison-boundary'];
   readonly expectedDiscriminator: string;
   readonly requiresExplicitAuthorization: boolean;
   readonly missingPreconditions: readonly string[];
@@ -322,7 +325,10 @@ export function deriveFailureIntelligence(
     addFinding,
   );
 
-  if (findings.size === 0) {
+  const hasMechanismBeforeVerification = [...findings.values()].some(
+    (finding) => finding.detector !== 'verification-failure',
+  );
+  if (findings.size === 0 || (failures.length > 0 && !hasMechanismBeforeVerification)) {
     const unknownEvidence = uniqueSorted([
       ...failures.map((failure) => failure.evidenceId),
       ...[...evidence.values()]
@@ -333,15 +339,20 @@ export function deriveFailureIntelligence(
       detector: 'unattributed',
       layer: 'unknown',
       mechanismKey: 'no-deterministic-mechanism',
-      title: 'No deterministic failure mechanism is established',
+      title: 'No deterministic upstream failure mechanism is established',
       baseStatus: 'unknown',
       supportingEvidenceIds: unknownEvidence,
       counterEvidenceIds: [],
       decisiveEvidenceIds: [],
-      missingEvidence: [
-        'A persisted failure symptom with a stable identity',
-        'Evidence connecting the symptom to model, context, tool, Harness, environment, or MissionBraid',
-      ],
+      missingEvidence:
+        failures.length === 0
+          ? [
+              'A persisted failure symptom with a stable identity',
+              'Evidence connecting the symptom to model, context, tool, Harness, environment, or MissionBraid',
+            ]
+          : [
+              'Evidence connecting the terminal failure symptom to model, context, tool, Harness, environment, or MissionBraid',
+            ],
       recommendedAction:
         'Collect the missing layer-specific evidence before changing execution inputs.',
     });
@@ -402,31 +413,38 @@ function collectContextEvidence(
 
   const freshness = deduplicateBy(input.contextFreshness ?? [], (item) => item.evidenceId);
   for (const item of freshness) {
+    const contentStale = contextContentDiffers(item);
+    const workspaceStale = item.boundWorkspaceDigest !== item.currentWorkspaceDigest;
     registerEvidence({
       evidenceId: item.evidenceId,
       layer: 'context',
-      label:
-        item.boundWorkspaceDigest === item.currentWorkspaceDigest
-          ? 'context binding matches current workspace'
-          : 'context binding differs from current workspace',
+      label: contentStale
+        ? 'context content differs from the bound snapshot'
+        : workspaceStale
+          ? 'context binding differs from current workspace'
+          : 'context binding matches current workspace',
       evidenceRefs: [item.contextFactId, ...item.evidenceRefs],
     });
   }
   for (const stale of freshness.filter(
-    (item) => item.boundWorkspaceDigest !== item.currentWorkspaceDigest,
+    (item) =>
+      contextContentDiffers(item) ||
+      (noContentDigestEvidence(item) && item.boundWorkspaceDigest !== item.currentWorkspaceDigest),
   )) {
     const counter = freshness
       .filter(
         (item) =>
           item.contextFactId === stale.contextFactId &&
-          item.boundWorkspaceDigest === item.currentWorkspaceDigest,
+          !contextContentDiffers(item) &&
+          (item.boundWorkspaceDigest === item.currentWorkspaceDigest ||
+            noContentDigestEvidence(item)),
       )
       .map((item) => item.evidenceId);
     addFinding({
       detector: 'stale-context',
       layer: 'context',
       mechanismKey: stale.contextFactId,
-      title: 'Model context is bound to an older workspace digest',
+      title: 'Model context is bound to an older Context or workspace frontier',
       baseStatus: 'inferred',
       supportingEvidenceIds: [stale.evidenceId],
       counterEvidenceIds: counter,
@@ -437,6 +455,18 @@ function collectContextEvidence(
       recommendedAction: 'Refresh only the bound context snapshot on a diagnostic Branch.',
     });
   }
+}
+
+function contextContentDiffers(item: ContextFreshnessEvidenceV1): boolean {
+  return (
+    item.boundContextDigest !== undefined &&
+    item.currentContextDigest !== undefined &&
+    item.boundContextDigest !== item.currentContextDigest
+  );
+}
+
+function noContentDigestEvidence(item: ContextFreshnessEvidenceV1): boolean {
+  return item.boundContextDigest === undefined || item.currentContextDigest === undefined;
 }
 
 function collectWorkspaceEvidence(
@@ -964,7 +994,7 @@ function diagnosticProposal(
           baseCheckpointDigest: checkpoint.checkpointDigest,
         }),
     changedVariable,
-    preserve: ['outcome-contract', 'all-other-observable-inputs'],
+    preserve: ['outcome-contract', 'checkpointed-comparison-boundary'],
     expectedDiscriminator: diagnosticDiscriminator(candidate),
     requiresExplicitAuthorization,
     missingPreconditions,
@@ -1013,7 +1043,7 @@ function diagnosticVariable(
 }
 
 function diagnosticDiscriminator(candidate: FailureCandidateV1): string {
-  return `The ${candidate.detector} evidence changes while the Outcome Contract and every other observable input remain fixed.`;
+  return `A declared ${candidate.layer} Intervention changes the ${candidate.detector} evidence; Contract, Profile, authority, workspace, and run-state differences are evaluated from recorded evidence rather than assumed equal.`;
 }
 
 function buildGraph(

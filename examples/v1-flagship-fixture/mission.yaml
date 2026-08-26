@@ -1,0 +1,134 @@
+schemaVersion: missionbraid.dev/mission/v1
+title: Repair and evolve the Policy Triage Agent
+objective: >-
+  Preserve one Mission while a developer observes two real Harnesses, changes a
+  native tool request before dispatch, hands work off, diagnoses stale Context,
+  and then evolves the verified Agent through parallel work and consolidation.
+workspace: '${WORKSPACE}'
+context:
+  factId: agent-behavior-source
+  source: context-source.json
+  snapshot: .missionbraid/context-cache.json
+constraints:
+  - Stay inside the disposable workspace and obey AGENTS.md.
+  - Use only Node.js built-ins and do not access the network.
+acceptanceCriteria:
+  - id: context-current
+    description: The Agent behavior configuration matches the accepted current Context source.
+    verifier:
+      executable: node
+      args: ['${HIDDEN_VERIFIER}']
+      timeoutMs: 30000
+  - id: tool-behavior
+    description: The deterministic policy lookup returns the declared decisions and rejects malformed input.
+    verifier:
+      executable: node
+      args: [verify-tool-node.mjs]
+      timeoutMs: 30000
+  - id: prompt-schema
+    description: The prompt and Skill implement the active Contract revision's exact output schema.
+    verifier:
+      executable: node
+      args: [verify-prompt-node.mjs]
+      timeoutMs: 30000
+  - id: final-outcome
+    description: The assembled Agent and integration record satisfy the active Contract revision.
+    verifier:
+      executable: node
+      args: [verify-final.mjs]
+      timeoutMs: 30000
+attemptPlan:
+  - stageId: qoder-tool
+    profile:
+      harness: qoder
+      model: Qwen3.8-Max
+      reasoningEffort: medium
+      injectionBudgetTokens: 2600
+      permissionMode: bypass_permissions
+    onFailure: handoff
+    instruction: >-
+      Follow the execution-mode rules in AGENTS.md. In the ordinary fallback
+      route, create the exact handoff marker and wait for the controller-owned
+      process boundary. In Plan node tool-implementation, refresh
+      agent-config.json from the accepted current source, refactor only the
+      declared policy tool into the indexed Plan implementation, run both
+      declared verifiers, and exit.
+  - stageId: claude-prompt
+    profile:
+      harness: claude
+      model: deepseek-v4-pro
+      reasoningEffort: medium
+      injectionBudgetTokens: 3600
+      permissionMode: bypassPermissions
+    breakpoint: mutable-tools
+    onFailure: handoff
+    instruction: >-
+      Follow the execution-mode rules in AGENTS.md. In the ordinary fallback
+      route, acknowledge the Handoff Capsule before every tool, perform the
+      controlled tool probe, let the developer revise the requested native
+      Write, and build the complete Contract-v1 baseline using only the visible
+      cached Context. In a Context diagnostic Fork, change only
+      agent-config.json from the refreshed visible Context. In Plan node
+      prompt-skill, implement the active prompt Contract, verify it, hold open
+      only for revision 1, and exit for revision 2.
+  - stageId: qoder-integrate
+    profile:
+      harness: qoder
+      model: Qwen3.8-Max
+      reasoningEffort: medium
+      injectionBudgetTokens: 1800
+      permissionMode: bypass_permissions
+    onFailure: stop
+    instruction: >-
+      Work only in the consolidation workspace, preserve both immutable source
+      Artifacts, write integration/summary.json for Contract revision 2, run
+      verify-final.mjs, and exit.
+  - stageId: claude-regression-upgraded
+    profile:
+      harness: claude
+      model: deepseek-v4-pro
+      reasoningEffort: high
+      injectionBudgetTokens: 5200
+      permissionMode: bypassPermissions
+    breakpoint: mutable-tools
+    onFailure: stop
+    instruction: >-
+      This stage is reserved for an explicit Outcome Studio Profile-Rebound and
+      is not referenced by the ordinary fallback route or Mission Plan. Follow
+      the Context diagnostic Fork rules in AGENTS.md, change only the declared
+      Context target, run the verifiers, and exit.
+plan:
+  nodes:
+    - nodeId: tool-implementation
+      kind: task
+      title: Refresh Context and index the policy tool
+      requirementIds: [acceptance-context-current, acceptance-tool-behavior]
+      stageId: qoder-tool
+      acceptanceCriterionIds: [context-current, tool-behavior]
+      declaredOutputKeys: [agent-config.json, src/tools/policy-lookup.mjs]
+      requiredAuthorityScopes: [workspace]
+    - nodeId: prompt-skill
+      kind: task
+      title: Evolve the triage prompt and Skill
+      requirementIds: [acceptance-prompt-schema]
+      stageId: claude-prompt
+      acceptanceCriterionIds: [prompt-schema]
+      declaredOutputKeys: [prompts/triage.md, skills/triage/SKILL.md]
+      requiredAuthorityScopes: [workspace]
+    - nodeId: integrate
+      kind: join
+      title: Consolidate verified Agent artifacts
+      requirementIds: [acceptance-final-outcome]
+      stageId: qoder-integrate
+      acceptanceCriterionIds: [final-outcome]
+      declaredOutputKeys: [integration/summary.json]
+      requiredAuthorityScopes: [workspace:integrate]
+  edges:
+    - fromNodeId: tool-implementation
+      toNodeId: integrate
+      relation: join-input
+      evidenceRefs: [plan:tool-to-integrate]
+    - fromNodeId: prompt-skill
+      toNodeId: integrate
+      relation: join-input
+      evidenceRefs: [plan:prompt-to-integrate]

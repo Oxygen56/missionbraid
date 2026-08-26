@@ -84,6 +84,21 @@ describe('Workbench copy', () => {
     expect(APP_COPY['zh-CN']['intelligence.field.modelOverride']).toBe('模型是否被改写');
   });
 
+  it('exposes the guided two-worker Mission Plan through the ordinary composer', () => {
+    expect(APP_HTML).toContain('value="mission-plan"');
+    expect(APP_HTML).toContain('id="plan-composer"');
+    expect(APP_HTML).toContain('id="plan-workstream-a-requirement"');
+    expect(APP_HTML).toContain('id="plan-workstream-b-requirement"');
+    expect(APP_HTML).toContain('id="plan-consolidation-outputs"');
+    expect(APP_JAVASCRIPT).toContain("stageId: 'qoder-workstream'");
+    expect(APP_JAVASCRIPT).toContain("stageId: 'claude-workstream'");
+    expect(APP_JAVASCRIPT).toContain("stageId: 'qoder-consolidation'");
+    expect(APP_JAVASCRIPT).toContain('acceptanceCriteria: [');
+    expect(APP_JAVASCRIPT).toContain("relation: 'join-input'");
+    expect(APP_COPY.en['form.createdPlan']).toContain('Run Mission Plan');
+    expect(APP_COPY['zh-CN']['form.createdPlan']).toContain('运行计划');
+  });
+
   it('shows explicit adapter capability boundaries in the Runtime Hub', () => {
     for (const capability of [
       'observe',

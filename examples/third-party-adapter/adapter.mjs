@@ -16,6 +16,7 @@ export const manifest = {
   schemaVersion: ADAPTER_MANIFEST_SCHEMA_VERSION,
   apiVersion: ADAPTER_API_VERSION,
   adapterId: 'example.third-party-direct',
+  harnessId: 'third-party-direct',
   displayName: 'Third-party Direct Adapter Example',
   adapterVersion: '1.0.0',
   transport: 'direct',
@@ -118,3 +119,5 @@ export function createThirdPartyAdapter({ now = () => new Date() } = {}) {
     },
   });
 }
+
+export default createThirdPartyAdapter();

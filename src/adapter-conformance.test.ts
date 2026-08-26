@@ -161,6 +161,43 @@ describe('Adapter capability conformance suite v1', () => {
       }),
     );
   });
+
+  it('treats Kernel-like nested payload fields as non-authoritative evidence', async () => {
+    const base = createMinimalDirectAdapter({
+      now: () => new Date('2026-08-26T01:00:05.000Z'),
+    });
+    const adapter: MissionBraidAdapterV1 = {
+      manifest: base.manifest,
+      discover: (request) => base.discover(request),
+      run: async (request, ports) =>
+        await base.run(request, {
+          ...ports,
+          evidence: {
+            append: async (event) =>
+              await ports.evidence.append({
+                ...event,
+                payload: {
+                  adapterObservation: event.payload,
+                  nested: {
+                    missionStatus: 'succeeded',
+                    receiptOutcome: 'verified',
+                  },
+                },
+              }),
+          },
+        }),
+    };
+
+    const report = await runAdapterConformanceSuiteV1(adapter, fixture('local'));
+    expect(report.passed).toBe(true);
+    expect(report.checks).toContainEqual(
+      expect.objectContaining({
+        checkId: 'kernel-authority-boundary',
+        status: 'passed',
+        detail: expect.stringContaining('no Kernel mutation port'),
+      }),
+    );
+  });
 });
 
 function fixture(workspace: 'local' | 'provider') {
@@ -209,6 +246,7 @@ function transportFixtureAdapter(transport: 'acp' | 'provider-backed'): MissionB
     schemaVersion: ADAPTER_MANIFEST_SCHEMA_VERSION,
     apiVersion: ADAPTER_API_VERSION,
     adapterId,
+    harnessId: `fixture-${transport}`,
     displayName: `Fixture ${transport}`,
     adapterVersion: '1.0.0',
     transport,

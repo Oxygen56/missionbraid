@@ -1085,6 +1085,15 @@ export class MissionStore {
         ) {
           throw new MissionInvariantError('Attempt Binding identities do not match its event');
         }
+        if (
+          event.payload.binding.runtimeBinding !== undefined &&
+          (event.payload.binding.runtimeBinding.attemptId !== event.payload.binding.attemptId ||
+            event.payload.binding.runtimeBinding.profileId !== event.payload.binding.profileId)
+        ) {
+          throw new MissionInvariantError(
+            'Attempt runtime binding identities do not match the Kernel binding',
+          );
+        }
         this.#requirePersistedBranch(event.missionId, event.payload.binding.branchId, event.seq);
         break;
       case 'runtime.event':
@@ -1215,6 +1224,21 @@ export class MissionStore {
       throw new MissionInvariantError(
         'Receipt must bind to the current pre-receipt event-chain head',
       );
+    }
+    if (
+      receipt.runtimeBindings !== undefined &&
+      receipt.runtimeBindingsDigest !== `sha256:${hashPayload(receipt.runtimeBindings)}`
+    ) {
+      throw new MissionInvariantError('Receipt runtime binding digest does not match its content');
+    }
+    const latestRevisions = latestMissionRevisionBindings(this.listEvents(current.missionId));
+    if (
+      (latestRevisions.contractRevisionId !== undefined &&
+        receipt.contractRevisionId !== latestRevisions.contractRevisionId) ||
+      (latestRevisions.planRevisionId !== undefined &&
+        receipt.planRevisionId !== latestRevisions.planRevisionId)
+    ) {
+      throw new MissionInvariantError('Receipt must bind to the latest Contract and Plan revision');
     }
     const hasRecordedEffects = this.listEvents(current.missionId).some(
       (event) => event.type === 'effect.recorded',
@@ -1514,7 +1538,8 @@ function hasCheckpointEvidence(
     if (
       event.type !== 'runtime.observation' ||
       (event.payload.kind !== 'checkpoint.created' &&
-        event.payload.kind !== 'composite-checkpoint.created') ||
+        event.payload.kind !== 'composite-checkpoint.created' &&
+        event.payload.kind !== 'mission.plan_base_checkpoint.created') ||
       event.payload.data === null ||
       Array.isArray(event.payload.data) ||
       typeof event.payload.data !== 'object'
@@ -1524,6 +1549,43 @@ function hasCheckpointEvidence(
     const data = event.payload.data as Record<string, unknown>;
     return data.checkpointId === checkpointId && data.branchId === branchId;
   });
+}
+
+function latestMissionRevisionBindings(events: readonly StoredEventV1[]): {
+  readonly contractRevisionId?: string;
+  readonly planRevisionId?: string;
+} {
+  let contractRevisionId: string | undefined;
+  let planRevisionId: string | undefined;
+
+  for (const event of events) {
+    if (event.type !== 'runtime.observation') continue;
+    const field =
+      event.payload.kind === 'mission.contract_revision.created'
+        ? 'contractRevisionId'
+        : event.payload.kind === 'mission.plan_revision.created'
+          ? 'planRevisionId'
+          : undefined;
+    if (field === undefined) continue;
+    if (
+      event.payload.data === null ||
+      Array.isArray(event.payload.data) ||
+      typeof event.payload.data !== 'object'
+    ) {
+      throw new MissionInvariantError(`Mission revision observation is missing ${field}`);
+    }
+    const revisionId = (event.payload.data as Record<string, unknown>)[field];
+    if (typeof revisionId !== 'string' || revisionId.trim().length === 0) {
+      throw new MissionInvariantError(`Mission revision observation is missing ${field}`);
+    }
+    if (field === 'contractRevisionId') contractRevisionId = revisionId;
+    else planRevisionId = revisionId;
+  }
+
+  return {
+    ...(contractRevisionId === undefined ? {} : { contractRevisionId }),
+    ...(planRevisionId === undefined ? {} : { planRevisionId }),
+  };
 }
 
 function normalizeReceiptBranchIdentity(

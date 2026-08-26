@@ -218,6 +218,38 @@ describe('Mission Execution Fork bridge', () => {
       fixture.store.close();
     }
   });
+
+  it('keeps the source Profile immutable while binding a Profile-Rebound child Attempt to the target', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'missionbraid-fork-rebound-journal-'));
+    disposableDirectories.push(directory);
+    const journal = new FileExecutionForkEvidenceJournal(directory);
+    const planned = await journal.append({
+      forkId: FORK_ID,
+      type: 'fork.planned',
+      occurredAt: timestamp(1),
+      payload: { lineage: reboundLineage(), plan: plan() },
+    });
+    const targetBinding: AttemptBindingV1 = {
+      ...binding(),
+      profileId: 'profile-fork-upgraded',
+      planNodeId: 'stage-upgraded',
+    };
+    const fixture = createStoreFixture();
+    const persisted = fixture.store.listEvents(MISSION_ID);
+
+    expect(() =>
+      executionForkEventToMissionEvents(planned, contextFor(planned, targetBinding), persisted),
+    ).not.toThrow();
+    expect(() =>
+      executionForkEventToMissionEvents(planned, contextFor(planned, binding()), persisted),
+    ).toThrow(/immutable child lineage/);
+    expect(reboundLineage()).toMatchObject({
+      profileId: 'profile-fork',
+      sourceProfileId: 'profile-fork',
+      targetProfileId: 'profile-fork-upgraded',
+    });
+    fixture.store.close();
+  });
 });
 
 async function sourceLifecycle(
@@ -309,6 +341,26 @@ function lineage(): ExecutionForkLineageV1 {
     inheritedExternalEffectFrontier: [],
     externalEffectDecisions: [],
     createdAt: timestamp(1),
+  };
+}
+
+function reboundLineage(): ExecutionForkLineageV1 {
+  return {
+    ...lineage(),
+    sourceProfileId: 'profile-fork',
+    targetProfileId: 'profile-fork-upgraded',
+    targetStageId: 'stage-upgraded',
+    profileSelection: {
+      selectionId: 'profile-rebound-selection-fixture',
+      sourceProfileId: 'profile-fork',
+      targetProfileId: 'profile-fork-upgraded',
+      targetStageId: 'stage-upgraded',
+      targetProfileDefinitionId: 'profile-definition-upgraded',
+      plannerDecisionHash: 'a'.repeat(64),
+      authorityChange: 'unchanged',
+      evidenceRefs: ['event:planner-decision', 'event:profile-selected'],
+      selectedAt: timestamp(1),
+    },
   };
 }
 

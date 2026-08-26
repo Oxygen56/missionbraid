@@ -16,6 +16,7 @@ describe('versioned public API and package contract', () => {
     });
     expect(publicApi.defineAdapterV1).toBeTypeOf('function');
     expect(publicApi.runAdapterConformanceSuiteV1).toBeTypeOf('function');
+    expect(publicApi.createProcessProviderAdapterV1).toBeTypeOf('function');
     expect(publicApi.validatePackageManifestV1).toBeTypeOf('function');
     expect(Object.keys(publicApi)).not.toEqual(
       expect.arrayContaining([
@@ -64,6 +65,10 @@ describe('versioned public API and package contract', () => {
       './adapter-conformance': {
         types: './dist/src/adapter-conformance.d.ts',
         import: './dist/src/adapter-conformance.js',
+      },
+      './process-provider/v1': {
+        types: './dist/src/process-provider.d.ts',
+        import: './dist/src/process-provider.js',
       },
       './outcome-studio/v1': {
         types: './dist/src/outcome-studio.d.ts',

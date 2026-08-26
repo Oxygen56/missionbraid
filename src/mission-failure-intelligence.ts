@@ -262,7 +262,13 @@ export function projectDiagnosticBranchOutcome(
     hasDeterministicEvaluationBinding(options.fork, receipt, evaluationRefs);
 
   let result: DiagnosticBranchOutcomeV1['result'] = 'inconclusive';
-  if (forkSucceeded && receiptIsKernelBound && deterministicEvidence && receipt !== undefined) {
+  if (
+    forkSucceeded &&
+    receiptIsKernelBound &&
+    deterministicEvidence &&
+    hasRequiredInterventionEvidence(options.fork) &&
+    receipt !== undefined
+  ) {
     const verificationStatuses = receipt.verifications.map((verification) => verification.status);
     if (
       receipt.outcome === 'verified' &&
@@ -569,6 +575,12 @@ function collectContextFreshness(
       contextFactId: data.contextFactId,
       boundWorkspaceDigest: data.boundWorkspaceDigest,
       currentWorkspaceDigest: data.currentWorkspaceDigest,
+      ...(nonEmptyString(data.boundContextDigest)
+        ? { boundContextDigest: data.boundContextDigest }
+        : {}),
+      ...(nonEmptyString(data.currentContextDigest)
+        ? { currentContextDigest: data.currentContextDigest }
+        : {}),
       evidenceRefs: uniqueSorted([`event:${event.eventId}`, ...stringArray(data.evidenceRefs)]),
     });
   }
@@ -1039,6 +1051,36 @@ function hasDeterministicEvaluationBinding(
   ]);
   const receiptRefs = new Set(receipt.verifications.flatMap((item) => item.evidenceRefs));
   return evidenceRefs.every((reference) => forkRefs.has(reference) && receiptRefs.has(reference));
+}
+
+function hasRequiredInterventionEvidence(fork: ExecutionForkRecordV1): boolean {
+  if (fork.lineage.intervention.kind !== 'context') return true;
+  const resultRefs = fork.runtimeResult?.contextEvidenceRefs ?? [];
+  const receiptRefs = fork.receiptInput?.contextEvidenceRefs ?? [];
+  if (resultRefs.length === 0 || receiptRefs.length === 0) return false;
+  const evidenceByRef = new Map(
+    fork.runtimeEvidence.map((evidence) => [`evidence:${evidence.evidenceId}`, evidence]),
+  );
+  const allRefs = uniqueSorted([...resultRefs, ...receiptRefs]);
+  if (allRefs.some((reference) => !evidenceByRef.has(reference))) return false;
+  const contextEvidence = allRefs
+    .map((reference) => evidenceByRef.get(reference))
+    .filter((evidence): evidence is NonNullable<typeof evidence> => evidence !== undefined);
+  if (contextEvidence.length === 0) return false;
+  const intervention = fork.lineage.intervention;
+  return (
+    contextEvidence.every((evidence) => evidence.kind === 'model') &&
+    contextEvidence.some((evidence) => {
+      const refs = new Set(evidence.evidenceRefs);
+      const boundDigestRef = [...refs].find((ref) => ref.startsWith('context-bound-digest:'));
+      return (
+        refs.has('context-mode:refreshed') &&
+        refs.has(`context-current-digest:${intervention.afterDigest}`) &&
+        boundDigestRef !== undefined &&
+        boundDigestRef !== `context-bound-digest:${intervention.afterDigest}`
+      );
+    })
+  );
 }
 
 function detectionMatchesEvent(detection: RuntimeDetection, event: StoredEventV1): boolean {

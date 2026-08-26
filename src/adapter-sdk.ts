@@ -51,6 +51,8 @@ export interface AdapterManifestV1 {
   readonly schemaVersion: typeof ADAPTER_MANIFEST_SCHEMA_VERSION;
   readonly apiVersion: typeof ADAPTER_API_VERSION;
   readonly adapterId: string;
+  /** Real Harness identity reported in Profiles, Events, Forks, and Receipts. */
+  readonly harnessId: string;
   readonly displayName: string;
   readonly adapterVersion: string;
   readonly transport: AdapterTransportKindV1;
@@ -383,6 +385,7 @@ export function validateAdapterManifestV1(manifest: AdapterManifestV1): void {
     );
   }
   requireIdentifier(manifest.adapterId, 'manifest.adapterId');
+  requireIdentifier(manifest.harnessId, 'manifest.harnessId');
   requireNonEmpty(manifest.displayName, 'manifest.displayName');
   requireSemver(manifest.adapterVersion, 'manifest.adapterVersion');
   if (!adapterTransports.has(manifest.transport)) {

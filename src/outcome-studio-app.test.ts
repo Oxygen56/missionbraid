@@ -2,7 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { startMissionBraidApp, type AppEngine } from './app.js';
 import { createMissionOutcomeStudioView } from './mission-outcome-studio.js';
@@ -117,6 +117,115 @@ describe('Outcome Studio Workbench route', () => {
       const exported = await fetch(`${base}/export`);
       expect(exported.status).toBe(200);
       expect(await exported.json()).toEqual(collection);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('persists and reads a human Outcome Branch selection separately from verification', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'missionbraid-outcome-selection-app-'));
+    roots.push(root);
+    const selection = {
+      schemaVersion: 'missionbraid.dev/outcome-branch-selection/v1',
+      selectionId: 'outcome-selection-test',
+      comparisonId: 'comparison-test',
+      contractId: 'contract-test',
+      branchId: 'branch-verified',
+      receiptId: 'receipt-verified',
+      authorityKind: 'human',
+      authorityRef: 'developer:test',
+      decidedAt: '2026-08-26T00:00:00.000Z',
+      selectionHash: 'selection-hash-test',
+    } as const;
+    const selectOutcomeStudioBranch = vi.fn(async () => selection);
+    const engine = {
+      selectOutcomeStudioBranch,
+      outcomeStudioSelections: () => [selection],
+      claimNextCommand: () => undefined,
+      close: () => undefined,
+    } as unknown as AppEngine;
+    const app = await startMissionBraidApp({
+      stateDir: root,
+      port: 0,
+      engineFactory: () => engine,
+      discoverRuntimes: async () => [],
+    });
+    try {
+      const endpoint = `${app.url}/api/v1/missions/mission-selection/outcome-studio/selections`;
+      const created = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          branchId: selection.branchId,
+          authorityKind: selection.authorityKind,
+          authorityRef: selection.authorityRef,
+        }),
+      });
+      expect(created.status).toBe(201);
+      expect(await created.json()).toEqual(selection);
+      expect(selectOutcomeStudioBranch).toHaveBeenCalledWith(
+        'mission-selection',
+        selection.branchId,
+        selection.authorityRef,
+        selection.authorityKind,
+      );
+
+      const persisted = await fetch(endpoint);
+      expect(persisted.status).toBe(200);
+      expect(await persisted.json()).toEqual({
+        missionId: 'mission-selection',
+        selections: [selection],
+      });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('starts and reopens a persisted Kernel scenario rerun', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'missionbraid-outcome-rerun-app-'));
+    roots.push(root);
+    const rerun = {
+      runId: 'outcome-kernel-rerun-test',
+      scenarioId: 'scenario-test',
+      trials: [{ branchId: 'branch-trial-1', attemptId: 'attempt-trial-1' }],
+    };
+    const rerunOutcomeStudioScenario = vi.fn(async () => rerun);
+    const engine = {
+      rerunOutcomeStudioScenario,
+      outcomeStudioReruns: () => [rerun],
+      claimNextCommand: () => undefined,
+      close: () => undefined,
+    } as unknown as AppEngine;
+    const app = await startMissionBraidApp({
+      stateDir: root,
+      port: 0,
+      engineFactory: () => engine,
+      discoverRuntimes: async () => [],
+    });
+    try {
+      const endpoint = `${app.url}/api/v1/missions/mission-rerun/outcome-studio/scenarios/scenario-test/runs`;
+      const created = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          targetStageId: 'stage-qoder-upgraded',
+          targetProfileDefinitionId: 'profile-definition-qoder-upgraded',
+        }),
+      });
+      expect(created.status).toBe(201);
+      expect(await created.json()).toEqual(rerun);
+      expect(rerunOutcomeStudioScenario).toHaveBeenCalledWith('mission-rerun', 'scenario-test', {
+        targetStageId: 'stage-qoder-upgraded',
+        targetProfileDefinitionId: 'profile-definition-qoder-upgraded',
+      });
+
+      const reopened = await fetch(endpoint);
+      expect(reopened.status).toBe(200);
+      expect(await reopened.json()).toEqual({
+        missionId: 'mission-rerun',
+        scenarioId: 'scenario-test',
+        runs: [rerun],
+      });
     } finally {
       await app.close();
     }

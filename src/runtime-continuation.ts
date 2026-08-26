@@ -3,6 +3,12 @@ import { mkdir, realpath } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 import { sanitizeNativeArtifact, NativeArtifactStore } from './artifact-store.js';
+import {
+  contextPrompt,
+  readContextBinding,
+  type ContextBindingMaterialV1,
+  type ContextBindingSpecV1,
+} from './context-binding.js';
 import { CodexAdapter, type CodexRunRequest, type CodexSandbox } from './adapters/codex.js';
 import {
   ClaudeAdapter,
@@ -10,6 +16,7 @@ import {
   type ClaudeRunRequest,
 } from './adapters/claude.js';
 import { QoderAdapter, type QoderPermissionMode, type QoderRunRequest } from './adapters/qoder.js';
+import type { AdapterHostV1 } from './adapter-host.js';
 import type {
   RuntimeAdapter,
   RuntimeOutputLine,
@@ -17,8 +24,10 @@ import type {
   RuntimeRunResult,
 } from './adapters/types.js';
 import type { CheckpointInterventionV1 } from './composite-checkpoint.js';
+import type { ClaudeToolGateBindingV1 } from './claude-tool-gate.js';
 import type { ContractV1, ProfileV1 } from './domain.js';
 import type {
+  ExecutionForkProfileSelectionV1,
   RuntimeContinuationInputV1,
   RuntimeContinuationPortV1,
   RuntimeContinuationResultV1,
@@ -32,15 +41,15 @@ import type {
   AttemptStageSpecV1,
   CommandVerifierSpecV1,
   ResolvedMissionSpecV1,
-  SupportedHarnessV1,
 } from './spec.js';
+import { isSupportedHarnessV1 } from './spec.js';
 import { runCommandVerifier } from './verifier.js';
 import { createStageWorkspaceDelta, snapshotGitWorkspace } from './workspace.js';
 
 const DEFAULT_MAX_PROMPT_BYTES = 32 * 1024;
 const MAX_PROMPT_BYTES = 64 * 1024;
 
-type NativeRuntimeProtocol = 'codex-jsonl' | 'qoder-stream-json' | 'claude-stream-json';
+type NativeRuntimeProtocol = string;
 
 export interface RuntimeContinuationAdaptersV1 {
   readonly codex: RuntimeAdapter<CodexRunRequest>;
@@ -61,12 +70,20 @@ export interface NativeAdapterRuntimeContinuationOptionsV1 {
   readonly acceptedMissionSpec: ResolvedMissionSpecV1;
   readonly acceptedStage: AttemptStageSpecV1;
   readonly acceptedCheckpoint: RuntimeContinuationCheckpointBindingV1;
+  /** Required when acceptedProfileSelection rebinds away from the Checkpoint Profile. */
+  readonly acceptedSourceProfile?: ProfileV1;
   readonly acceptedProfile: ProfileV1;
+  readonly acceptedProfileSelection?: ExecutionForkProfileSelectionV1;
   readonly acceptedIntervention: CheckpointInterventionV1;
+  readonly acceptedContext?: ContextBindingSpecV1;
   /** Root for sanitized native artifacts and verifier provenance. */
   readonly controllerStateDir: string;
   readonly provenanceFile?: string;
   readonly adapters?: Partial<RuntimeContinuationAdaptersV1>;
+  /** Public Adapter host used for an external-Harness controller Execution Fork. */
+  readonly adapterHost?: AdapterHostV1;
+  /** Concrete controller-created native Tool Gateway binding for a mutable Claude Fork. */
+  readonly acceptedToolGateBinding?: ClaudeToolGateBindingV1;
   readonly maxPromptBytes?: number;
   readonly signal?: AbortSignal;
   readonly now?: () => Date;
@@ -80,7 +97,7 @@ export class RuntimeContinuationConfigurationError extends Error {
 }
 
 /**
- * Live execution-fork continuation backed by the existing native CLI adapters.
+ * Live execution-fork continuation backed by a native CLI or registered public Adapter.
  *
  * Native output is written only through NativeArtifactStore, which sanitizes
  * it before persistence. Kernel-facing evidence contains digests, structural
@@ -93,11 +110,16 @@ export class NativeAdapterRuntimeContinuationPort implements RuntimeContinuation
   readonly #missionSpec: ResolvedMissionSpecV1;
   readonly #stage: AttemptStageSpecV1;
   readonly #checkpoint: RuntimeContinuationCheckpointBindingV1;
+  readonly #sourceProfile: ProfileV1;
   readonly #profile: ProfileV1;
+  readonly #profileSelection: ExecutionForkProfileSelectionV1 | undefined;
   readonly #intervention: CheckpointInterventionV1;
+  readonly #context: ContextBindingSpecV1 | undefined;
   readonly #controllerStateDir: string;
   readonly #provenanceFile: string;
   readonly #adapters: RuntimeContinuationAdaptersV1;
+  readonly #adapterHost: AdapterHostV1 | undefined;
+  readonly #toolGateBinding: ClaudeToolGateBindingV1 | undefined;
   readonly #maxPromptBytes: number;
   readonly #signal: AbortSignal | undefined;
   readonly #now: () => Date;
@@ -126,16 +148,67 @@ export class NativeAdapterRuntimeContinuationPort implements RuntimeContinuation
       options.acceptedMissionSpec,
       options.acceptedStage,
       options.acceptedCheckpoint,
+      options.acceptedSourceProfile,
       options.acceptedProfile,
+      options.acceptedProfileSelection,
       options.acceptedIntervention,
     );
+    if (options.acceptedStage.profile.adapterId !== undefined) {
+      if (options.adapterHost === undefined) {
+        throw new RuntimeContinuationConfigurationError(
+          `External Harness ${options.acceptedStage.profile.harness} requires its registered Adapter host for Execution Fork`,
+        );
+      }
+      const manifest = options.adapterHost.manifest(options.acceptedStage.profile.adapterId);
+      if (manifest.harnessId !== options.acceptedStage.profile.harness) {
+        throw new RuntimeContinuationConfigurationError(
+          `Adapter ${manifest.adapterId} is bound to Harness ${manifest.harnessId}, not ${options.acceptedStage.profile.harness}`,
+        );
+      }
+      if (
+        manifest.transport === 'provider-backed' ||
+        options.acceptedStage.profile.providerWorkspaceRef !== undefined
+      ) {
+        throw new RuntimeContinuationConfigurationError(
+          `Execution Fork for Adapter ${manifest.adapterId} requires a local isolated worktree; provider-backed or opaque provider workspace execution is not supported and will not fall back to a built-in Harness`,
+        );
+      }
+    } else if (!isSupportedHarnessV1(options.acceptedStage.profile.harness)) {
+      throw new RuntimeContinuationConfigurationError(
+        `External Harness ${options.acceptedStage.profile.harness} requires an Adapter`,
+      );
+    }
+    if (
+      options.acceptedStage.breakpoint === 'mutable-tools' &&
+      options.acceptedToolGateBinding === undefined
+    ) {
+      throw new RuntimeContinuationConfigurationError(
+        'A mutable-tools Execution Fork requires a concrete native Tool Gateway binding',
+      );
+    }
+    if (
+      options.acceptedToolGateBinding !== undefined &&
+      (options.acceptedStage.profile.harness !== 'claude' ||
+        options.acceptedStage.breakpoint !== 'mutable-tools')
+    ) {
+      throw new RuntimeContinuationConfigurationError(
+        'A native Tool Gateway binding is valid only for a mutable Claude Execution Fork',
+      );
+    }
     this.#missionId = options.missionId;
     this.#contract = clone(options.acceptedContract);
     this.#missionSpec = clone(options.acceptedMissionSpec);
     this.#stage = clone(options.acceptedStage);
     this.#checkpoint = clone(options.acceptedCheckpoint);
+    this.#sourceProfile = clone(options.acceptedSourceProfile ?? options.acceptedProfile);
     this.#profile = clone(options.acceptedProfile);
+    this.#profileSelection =
+      options.acceptedProfileSelection === undefined
+        ? undefined
+        : clone(options.acceptedProfileSelection);
     this.#intervention = clone(options.acceptedIntervention);
+    this.#context =
+      options.acceptedContext === undefined ? undefined : clone(options.acceptedContext);
     this.#controllerStateDir = resolve(options.controllerStateDir);
     this.#provenanceFile = resolve(
       options.provenanceFile ?? join(this.#controllerStateDir, 'provenance.json'),
@@ -146,6 +219,8 @@ export class NativeAdapterRuntimeContinuationPort implements RuntimeContinuation
       qoder: options.adapters?.qoder ?? new QoderAdapter(),
       claude: options.adapters?.claude ?? new ClaudeAdapter(),
     };
+    this.#adapterHost = options.adapterHost;
+    this.#toolGateBinding = options.acceptedToolGateBinding;
     this.#maxPromptBytes = maxPromptBytes;
     this.#signal = options.signal;
     this.#now = options.now ?? (() => new Date());
@@ -161,11 +236,15 @@ export class NativeAdapterRuntimeContinuationPort implements RuntimeContinuation
     }
     await mkdir(this.#controllerStateDir, { recursive: true });
 
+    const beforeWorkspace = snapshotGitWorkspace(workspacePath, { now: this.#now });
+    const contextMaterial = await this.#loadContext(workspacePath, beforeWorkspace.workspaceDigest);
+    const contextEvidenceRefs: string[] = [];
     const prompt = buildBoundedPrompt(
       input,
       this.#contract,
       this.#stage,
       Math.min(this.#maxPromptBytes, promptByteBudget(this.#stage.profile.injectionBudgetTokens)),
+      contextMaterial === undefined ? undefined : contextPrompt(contextMaterial),
     );
     const runtimeRunId = `runtime-run-${sha256(
       stableJson({
@@ -187,12 +266,54 @@ export class NativeAdapterRuntimeContinuationPort implements RuntimeContinuation
     const toolExecutionEvidenceRefs: string[] = [];
     const verificationEvidenceRefs: string[] = [];
     const unresolvedItems: string[] = [];
-    const beforeWorkspace = snapshotGitWorkspace(workspacePath, { now: this.#now });
-    const protocol = protocolFor(this.#stage.profile.harness);
+    if (contextMaterial !== undefined) {
+      // A refreshed material intentionally has the current source as both its
+      // bound and current content. Preserve the parent checkpoint's digest in
+      // the evidence so the diagnostic result still proves a real old→new
+      // Context change. The Engine validates this parent digest against the
+      // cached snapshot before launching the child.
+      const evidenceBoundContextDigest =
+        contextMaterial.mode === 'refreshed' && this.#intervention.kind === 'context'
+          ? (this.#intervention.beforeDigest ?? contextMaterial.boundContextDigest)
+          : contextMaterial.boundContextDigest;
+      const contextEvidenceId = evidenceId(runtimeRunId, 'context-freshness');
+      await input.appendEvidence({
+        evidenceId: contextEvidenceId,
+        kind: 'model',
+        observedAt: this.#now().toISOString(),
+        contentDigest: digestRef({
+          contextFactId: contextMaterial.contextFactId,
+          mode: contextMaterial.mode,
+          boundWorkspaceDigest: contextMaterial.boundWorkspaceDigest,
+          currentWorkspaceDigest: contextMaterial.currentWorkspaceDigest,
+          boundContextDigest: evidenceBoundContextDigest,
+          currentContextDigest: contextMaterial.currentContextDigest,
+        }),
+        evidenceRefs: [
+          `context:${contextMaterial.contextFactId}`,
+          `context-mode:${contextMaterial.mode}`,
+          `context-bound-workspace:${contextMaterial.boundWorkspaceDigest}`,
+          `context-current-workspace:${contextMaterial.currentWorkspaceDigest}`,
+          `context-bound-digest:${evidenceBoundContextDigest}`,
+          `context-current-digest:${contextMaterial.currentContextDigest}`,
+        ],
+        summary:
+          contextMaterial.mode === 'refreshed'
+            ? 'The diagnostic Branch refreshed the declared Context source on the restored workspace frontier.'
+            : 'The Fork reused the declared cached Context snapshot.',
+      });
+      contextEvidenceRefs.push(`evidence:${contextEvidenceId}`);
+    }
+    const protocol =
+      this.#stage.profile.adapterId === undefined
+        ? protocolFor(this.#stage.profile.harness)
+        : (this.#adapterHost?.nativeProtocol(this.#stage.profile.adapterId) ?? 'adapter-v1');
 
     let runResult: RuntimeRunResult | undefined;
     try {
       runResult = await this.#runAdapter(
+        input,
+        runtimeRunId,
         workspacePath,
         prompt,
         async (line) => {
@@ -214,18 +335,33 @@ export class NativeAdapterRuntimeContinuationPort implements RuntimeContinuation
               runtimeRunId,
               harness: this.#stage.profile.harness,
               checkpointId: this.#checkpoint.checkpointId,
+              sourceProfileId: this.#sourceProfile.profileId,
               profileId: this.#profile.profileId,
               profileDigest: sha256(stableJson(this.#profile)),
               stageProfileDigest: sha256(stableJson(this.#stage.profile)),
               promptDigest: sha256(prompt),
+              profileSelection: this.#profileSelection ?? null,
             }),
-            evidenceRefs: [
+            evidenceRefs: uniqueSorted([
               `runtime:${runtimeRunId}`,
               `harness:${this.#stage.profile.harness}`,
               `protocol:${protocol}`,
-              'process:spawned',
-            ],
-            summary: 'The selected native Harness process started in the isolated worktree.',
+              this.#stage.profile.adapterId === undefined
+                ? 'process:spawned'
+                : `adapter:${this.#stage.profile.adapterId}:dispatched`,
+              ...(this.#profileSelection === undefined
+                ? []
+                : [
+                    `profile-rebound-selection:${this.#profileSelection.selectionId}`,
+                    `source-profile:${this.#profileSelection.sourceProfileId}`,
+                    `target-profile:${this.#profileSelection.targetProfileId}`,
+                    ...this.#profileSelection.evidenceRefs,
+                  ]),
+            ]),
+            summary:
+              this.#stage.profile.adapterId === undefined
+                ? 'The selected native Harness process started in the isolated worktree.'
+                : 'The selected external Adapter was dispatched against the isolated worktree.',
           });
         },
       );
@@ -312,9 +448,58 @@ export class NativeAdapterRuntimeContinuationPort implements RuntimeContinuation
       runtimeRunId,
       status,
       toolExecutionEvidenceRefs: uniqueSorted(toolExecutionEvidenceRefs),
+      ...(contextEvidenceRefs.length === 0
+        ? {}
+        : { contextEvidenceRefs: uniqueSorted(contextEvidenceRefs) }),
       verificationEvidenceRefs: uniqueSorted(verificationEvidenceRefs),
       unresolvedItems: uniqueSorted(unresolvedItems),
     };
+  }
+
+  async #loadContext(
+    workspacePath: string,
+    currentWorkspaceDigest: string,
+  ): Promise<ContextBindingMaterialV1 | undefined> {
+    if (this.#context === undefined) {
+      if (this.#intervention.kind === 'context') {
+        throw new RuntimeContinuationConfigurationError(
+          'A Context Intervention requires an accepted Mission Context binding',
+        );
+      }
+      return undefined;
+    }
+    const context = remapContextToWorkspace(
+      this.#context,
+      this.#missionSpec.workspace,
+      workspacePath,
+    );
+    const refreshing = this.#intervention.kind === 'context';
+    const material = await readContextBinding(context, {
+      workspacePath,
+      currentWorkspaceDigest,
+      mode: refreshing ? 'refreshed' : 'cached',
+    });
+    if (refreshing) {
+      if (
+        this.#intervention.targetRef !== `context:${context.factId}` &&
+        this.#intervention.targetRef !== context.factId
+      ) {
+        throw new RuntimeContinuationConfigurationError(
+          'Context Intervention target does not match the accepted Context binding',
+        );
+      }
+      if (this.#intervention.afterDigest !== material.currentContextDigest) {
+        throw new RuntimeContinuationConfigurationError(
+          'Context Intervention afterDigest does not match the current Context source',
+        );
+      }
+      // The child worktree may not contain the controller-owned ignored cache.
+      // The parent digest is therefore validated by MissionEngine at the
+      // source checkpoint boundary and carried explicitly in the Intervention.
+      // Do not compare it with refreshed material, whose bound content is
+      // intentionally the new source.
+    }
+    return material;
   }
 
   #assertInputBinding(input: RuntimeContinuationInputV1): void {
@@ -341,12 +526,54 @@ export class NativeAdapterRuntimeContinuationPort implements RuntimeContinuation
   }
 
   async #runAdapter(
+    input: RuntimeContinuationInputV1,
+    runtimeRunId: string,
     workspace: string,
     prompt: string,
     onOutput: RuntimeOutputObserver,
     onStart: () => Promise<void>,
   ): Promise<RuntimeRunResult> {
     const profile = this.#stage.profile;
+    if (profile.adapterId !== undefined) {
+      if (this.#adapterHost === undefined) {
+        throw new RuntimeContinuationConfigurationError(
+          `Adapter ${profile.adapterId} is unavailable for Execution Fork`,
+        );
+      }
+      await onStart();
+      return await this.#adapterHost.run({
+        identity: {
+          executionId: runtimeRunId,
+          missionId: input.missionId,
+          branchId: input.childBranchId,
+          attemptId: `fork-attempt-${input.forkId}`,
+          bindingId: `fork-binding-${input.forkId}`,
+        },
+        profile: {
+          profileId: this.#profile.profileId,
+          adapterId: profile.adapterId,
+          harness: profile.harness,
+          model: this.#profile.model,
+          configurationDigest: this.#profile.configurationDigest,
+          ...(this.#profile.reasoningEffort === undefined
+            ? {}
+            : { reasoningEffort: this.#profile.reasoningEffort }),
+          ...(this.#profile.permissionMode === undefined
+            ? {}
+            : { permissionMode: this.#profile.permissionMode }),
+        },
+        workspaceKey: `fork-workspace:${input.forkId}`,
+        localWorkspace: workspace,
+        instruction: prompt,
+        ...(this.#signal === undefined ? {} : { signal: this.#signal }),
+        onOutput,
+      });
+    }
+    if (!isSupportedHarnessV1(profile.harness)) {
+      throw new RuntimeContinuationConfigurationError(
+        `External Harness ${profile.harness} requires an Adapter`,
+      );
+    }
     switch (profile.harness) {
       case 'codex':
         return await this.#adapters.codex.run({
@@ -393,11 +620,19 @@ export class NativeAdapterRuntimeContinuationPort implements RuntimeContinuation
             : { permissionMode: claudePermissionMode(profile.permissionMode) }),
           noSessionPersistence: true,
           includeHookEvents: true,
+          ...(this.#toolGateBinding === undefined
+            ? {}
+            : {
+                settingsFile: this.#toolGateBinding.settingsFile,
+                tools: this.#toolGateBinding.tools,
+                verifiedHookGate: true,
+              }),
           ...(this.#signal === undefined ? {} : { signal: this.#signal }),
           onOutput,
           onStart,
         });
     }
+    throw new RuntimeContinuationConfigurationError(`Unsupported Harness ${profile.harness}`);
   }
 
   async #recordNativeOutput(
@@ -568,6 +803,7 @@ function buildBoundedPrompt(
   contract: ContractV1,
   stage: AttemptStageSpecV1,
   byteLimit: number,
+  contextText?: string,
 ): string {
   const constraints = (contract.constraints ?? []).map((value) => `- ${value}`).join('\n');
   const criteria = contract.acceptanceCriteria
@@ -591,6 +827,7 @@ function buildBoundedPrompt(
       `reasoningEffort=${profile.reasoningEffort ?? 'runtime-default'}`,
       `permissionMode=${profile.permissionMode ?? 'runtime-default'}`,
     ].join(', '),
+    contextText === undefined ? '' : contextText,
     `Accepted stage (${stage.stageId}): ${stage.instruction}`,
     [
       `Single accepted Intervention: ${input.intervention.interventionId}`,
@@ -630,7 +867,9 @@ function validateAcceptedBinding(
   missionSpec: ResolvedMissionSpecV1,
   stage: AttemptStageSpecV1,
   checkpoint: RuntimeContinuationCheckpointBindingV1,
+  sourceProfile: ProfileV1 | undefined,
   profile: ProfileV1,
+  profileSelection: ExecutionForkProfileSelectionV1 | undefined,
   intervention: CheckpointInterventionV1,
 ): void {
   for (const [name, value] of [
@@ -643,14 +882,19 @@ function validateAcceptedBinding(
   ] as const) {
     requireNonEmpty(value, name);
   }
-  if (
-    checkpoint.missionId !== missionId ||
-    checkpoint.contractId !== contract.contractId ||
-    checkpoint.profileId !== profile.profileId
-  ) {
+  if (checkpoint.missionId !== missionId || checkpoint.contractId !== contract.contractId) {
     throw new RuntimeContinuationConfigurationError(
-      'Accepted Checkpoint is not bound to the accepted Mission, Contract, and Profile',
+      'Accepted Checkpoint is not bound to the accepted Mission and Contract',
     );
+  }
+  if (profileSelection === undefined) {
+    if (checkpoint.profileId !== profile.profileId) {
+      throw new RuntimeContinuationConfigurationError(
+        'Accepted Checkpoint is not bound to the accepted Mission, Contract, and Profile',
+      );
+    }
+  } else {
+    validateProfileReboundBinding(checkpoint, sourceProfile, profile, stage, profileSelection);
   }
   if (
     contract.objective !== missionSpec.objective ||
@@ -715,7 +959,7 @@ function validateAcceptedBinding(
   }
   validateProfile(stage.profile);
   const expectedPermissionMode =
-    stage.profile.permissionMode ?? defaultPermissionMode(stage.profile.harness);
+    stage.profile.permissionMode ?? defaultPermissionMode(stage.profile);
   if (
     profile.harness !== stage.profile.harness ||
     profile.model !== stage.profile.model ||
@@ -753,6 +997,89 @@ function validateAcceptedBinding(
       'Intervention may only keep or narrow authority',
     );
   }
+}
+
+function validateProfileReboundBinding(
+  checkpoint: RuntimeContinuationCheckpointBindingV1,
+  sourceProfile: ProfileV1 | undefined,
+  targetProfile: ProfileV1,
+  targetStage: AttemptStageSpecV1,
+  selection: ExecutionForkProfileSelectionV1,
+): void {
+  if (
+    sourceProfile === undefined ||
+    sourceProfile.profileId !== checkpoint.profileId ||
+    selection.sourceProfileId !== checkpoint.profileId ||
+    selection.targetProfileId !== targetProfile.profileId ||
+    selection.sourceProfileId === selection.targetProfileId ||
+    selection.targetStageId !== targetStage.stageId ||
+    targetProfile.definition?.definitionId !== selection.targetProfileDefinitionId
+  ) {
+    throw new RuntimeContinuationConfigurationError(
+      'Accepted Profile-Rebound selection conflicts with the immutable source Checkpoint or target stage',
+    );
+  }
+  for (const [name, value] of [
+    ['profileSelection.selectionId', selection.selectionId],
+    ['profileSelection.targetProfileDefinitionId', selection.targetProfileDefinitionId],
+  ] as const) {
+    requireNonEmpty(value, name);
+  }
+  if (
+    !/^[a-f0-9]{64}$/.test(selection.plannerDecisionHash) ||
+    !Number.isFinite(Date.parse(selection.selectedAt)) ||
+    selection.evidenceRefs.length === 0 ||
+    selection.evidenceRefs.some((reference) => reference.trim().length === 0)
+  ) {
+    throw new RuntimeContinuationConfigurationError(
+      'Accepted Profile-Rebound selection lacks durable Planner evidence',
+    );
+  }
+  const authorityChange = executionForkProfileAuthorityChange(sourceProfile, targetProfile);
+  if (authorityChange === 'expanded' || selection.authorityChange !== authorityChange) {
+    throw new RuntimeContinuationConfigurationError(
+      'Accepted Profile-Rebound target may only keep or narrow the source Profile authority',
+    );
+  }
+}
+
+export function executionForkProfileAuthorityChange(
+  sourceProfile: ProfileV1,
+  targetProfile: ProfileV1,
+): 'unchanged' | 'narrowed' | 'expanded' {
+  if (sourceProfile.permissionMode === targetProfile.permissionMode) return 'unchanged';
+  const sourceRank = permissionAuthorityRank(sourceProfile.harness, sourceProfile.permissionMode);
+  const targetRank = permissionAuthorityRank(targetProfile.harness, targetProfile.permissionMode);
+  if (sourceRank === null || targetRank === null) return 'expanded';
+  return targetRank < sourceRank ? 'narrowed' : 'expanded';
+}
+
+function permissionAuthorityRank(harness: string, mode: string | undefined): number | null {
+  const normalized = `${harness}:${mode ?? ''}`;
+  if (['codex:read-only', 'qoder:plan', 'claude:plan', 'claude:manual'].includes(normalized)) {
+    return 0;
+  }
+  if (
+    [
+      'codex:workspace-write',
+      'qoder:accept_edits',
+      'qoder:auto',
+      'qoder:dont_ask',
+      'claude:acceptEdits',
+      'claude:auto',
+      'claude:dontAsk',
+    ].includes(normalized)
+  ) {
+    return 1;
+  }
+  if (
+    ['codex:danger-full-access', 'qoder:bypass_permissions', 'claude:bypassPermissions'].includes(
+      normalized,
+    )
+  ) {
+    return 2;
+  }
+  return null;
 }
 
 function validateProfile(profile: AttemptProfileSpecV1): void {
@@ -823,6 +1150,34 @@ async function mapVerifierToWorktree(
     }
   }
   return mappedVerifier;
+}
+
+function remapContextToWorkspace(
+  context: ContextBindingSpecV1,
+  sourceWorkspace: string,
+  targetWorkspace: string,
+): ContextBindingSpecV1 {
+  const sourceRoot = resolve(sourceWorkspace);
+  const targetRoot = resolve(targetWorkspace);
+  const sourcePath = resolve(context.source);
+  const snapshotPath = resolve(context.snapshot);
+  const sourceRelative = relative(sourceRoot, sourcePath);
+  const snapshotRelative = relative(sourceRoot, snapshotPath);
+  for (const [label, value] of [
+    ['Context source', sourceRelative],
+    ['Context snapshot', snapshotRelative],
+  ] as const) {
+    if (value === '..' || value.startsWith(`..${sep}`) || isAbsolute(value)) {
+      throw new RuntimeContinuationConfigurationError(
+        `${label} must remain inside the accepted source workspace`,
+      );
+    }
+  }
+  return {
+    factId: context.factId,
+    source: resolve(targetRoot, sourceRelative),
+    snapshot: resolve(targetRoot, snapshotRelative),
+  };
 }
 
 function mapSourcePathReferences(
@@ -936,7 +1291,7 @@ function isSuccessfulProcess(result: RuntimeRunResult): boolean {
   );
 }
 
-function protocolFor(harness: SupportedHarnessV1): NativeRuntimeProtocol {
+function protocolFor(harness: string): NativeRuntimeProtocol {
   switch (harness) {
     case 'codex':
       return 'codex-jsonl';
@@ -945,6 +1300,9 @@ function protocolFor(harness: SupportedHarnessV1): NativeRuntimeProtocol {
     case 'claude':
       return 'claude-stream-json';
   }
+  throw new RuntimeContinuationConfigurationError(
+    `External Harness ${harness} requires an Adapter protocol`,
+  );
 }
 
 /**
@@ -972,10 +1330,14 @@ function codexSandbox(value: string): CodexSandbox {
   throw new RuntimeContinuationConfigurationError(`Unsupported Codex sandbox ${value}`);
 }
 
-function defaultPermissionMode(harness: SupportedHarnessV1): string {
-  if (harness === 'codex') return 'workspace-write';
-  if (harness === 'qoder') return 'dont_ask';
-  return 'dontAsk';
+function defaultPermissionMode(profile: AttemptProfileSpecV1): string {
+  if (profile.adapterId !== undefined) return 'adapter-default';
+  if (profile.harness === 'codex') return 'workspace-write';
+  if (profile.harness === 'qoder') return 'dont_ask';
+  if (profile.harness === 'claude') return 'dontAsk';
+  throw new RuntimeContinuationConfigurationError(
+    `External Harness ${profile.harness} requires an Adapter`,
+  );
 }
 
 function qoderPermissionMode(value: string): QoderPermissionMode {

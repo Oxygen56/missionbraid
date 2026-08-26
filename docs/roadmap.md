@@ -1,12 +1,15 @@
 # MissionBraid Product Roadmap
 
-> **Plan:** ten major product iterations in total. Iterations 1–5 have
+> **Plan:** ten major product iterations in total. Iterations 1–6 have
 > same-host local evidence records; Iteration 5 covers all four Replay
 > semantics, while only its Execution Fork path continues a real workspace.
-> Iteration 6 has a controlled-interruption adaptive-Handoff record. Iterations
-> 7–9 have implemented Workbench/API slices with local tests, and Iteration 10
-> has an internal clean-install package record. Stronger real-runtime,
-> independent-external, cross-host, and production evidence remains open.
+> Iteration 6 has a controlled-interruption adaptive-Handoff record. Iteration
+> 7 now has one same-host stale-Context diagnostic record. Iteration 8 has a
+> retained same-host, controlled-Git-fixture record with real local
+> Qoder/Qwen3.8-Max and Claude Code/deepseek-v4-pro executions through the
+> Workbench HTTP flow. Iteration 9 has a local implementation slice, and Iteration 10 has
+> an internal clean-install package record. Independent external reproduction,
+> cross-host, and production evidence remains open.
 > The number describes dependency-complete product releases, not calendar
 > sprints.
 
@@ -18,10 +21,19 @@ from becoming disconnected pages backed by the same passive log.
 Every iteration strengthens one flagship user journey:
 
 ```text
-change Agent → bind effective Revision → run native Runtime → inspect
-→ revise / Branch when useful → evaluate → save regression → verify
-                              ↘ Handoff only when justified
+workspace changes while Agent runs → bind effective Revision → record stale
+Context evidence → declare a Context refresh → isolated new Attempt on the
+same Harness/Profile/Contract/authority → verifier → save regression → Receipt
+                                                  ↘ Handoff only when justified
 ```
+
+The stale-Context path is now proven once at the same-host local level in
+[the Iteration 7 record](../evidence/iteration-7-stale-context-2026-08-26.json),
+built on the validated Iteration 3 Flight Recorder and Iteration 5 Execution
+Fork. The broader Runtime, Handoff, Mission Plan, and CI capabilities remain
+part of the final scope and support this daily loop; provider-internal Context
+capture, original-session continuation, multi-layer attribution, general
+diagnosis accuracy, and production evidence remain open.
 
 ## Shared completion rule
 
@@ -51,8 +63,8 @@ engineering outputs but cannot complete an iteration by themselves.
 | 4. Tool gateway and live debugger               | A real mutable tool can be stopped before dispatch and changed or rejected                | Validated local slice                                           |
 | 5. Composite checkpoints, Fork, and Replay      | A retained execution boundary becomes an isolated executable comparison Branch            | Implemented locally; same-host proof                            |
 | 6. Adaptive planning and cross-Harness handoff  | Profiles are selected explainably and Handoff occurs only when a Runtime change is needed | Validated locally; controlled interruption                      |
-| 7. Failure intelligence and diagnostic Branches | Evidence and single-variable probes distinguish likely failure layers                     | Implemented local slice; real-runtime gate open                 |
-| 8. Multi-agent Mission Graph and live revisions | Parallel Agents stay attached to one changing Mission and stale work is invalidated       | Implemented plan/invalidation slice; multi-Agent E2E open       |
+| 7. Failure intelligence and diagnostic Branches | Evidence and single-variable probes distinguish likely failure layers                     | Same-host stale-Context proof; broader gate open                |
+| 8. Multi-agent Mission Graph and live revisions | Parallel Agents stay attached to one changing Mission and stale work is invalidated       | Same-host real-Runtime proof; controlled fixture                |
 | 9. Outcome, Eval, and Incident Studio           | Agent Revisions are compared, saved as regressions, and optionally exported to CI         | Implemented local slice; external CI E2E open                   |
 | 10. Open Runtime Workbench 1.0                  | External developers install, extend, and reproduce the complete workflow                  | Internal clean-install validated; independent reproduction open |
 
@@ -73,7 +85,7 @@ the same result without restating the task.
 - workspace baseline and checkpoint evidence;
 - bounded Handoff Capsule and target acknowledgement;
 - advisory workspace Effect identities;
-- independent command verifier and Outcome Receipt.
+- controller-run out-of-process command verifier and Outcome Receipt.
 
 ### Completion evidence
 
@@ -380,6 +392,8 @@ diagnostic Branch that changes one factor.
 - deterministic anomaly detectors for loops, repeated failures, stale context,
   permission conflicts, tool errors, workspace divergence, and verification
   failure;
+- declared Context-source fingerprints and cached/bound versus current
+  freshness evidence;
 - observed, inferred, confirmed, and unknown conclusion states;
 - candidate ordering and counter-evidence;
 - discriminating probes implemented as diagnostic Branches;
@@ -405,8 +419,21 @@ The repository contains a persisted-event Failure Evidence Graph, explicit
 observed/inferred/confirmed/unknown conclusions, counter-evidence, and a
 single-variable diagnostic-Fork request exposed through the Workbench API and
 UI. Local tests cover chain and Branch scoping, missing evidence, and request
-persistence. A real multi-layer Runtime failure and a diagnostic Branch that
-changes the conclusion are still required for the full iteration gate.
+persistence. The linked record proves one stale-Context path; broader
+multi-layer Runtime coverage and diagnosis measurement are still required for
+the full iteration gate.
+
+The [Iteration 7 stale-Context record](../evidence/iteration-7-stale-context-2026-08-26.json)
+proves one controlled real-Runtime case: stale cached Context caused verifier
+rejection; the Workbench then created an isolated child Branch and new Qoder
+Attempt/process with the same Harness/Profile, Contract, and authority plus a
+declared Context refresh intervention. The verifier passed and the saved
+regression scenario remained stable after restart. This is not continuation of
+the original native Session, and the structured invariants do not prove every
+hidden or unobserved input was identical. The refresh applies only to this
+diagnostic Attempt and is not yet portable or persisted for later Attempts.
+Only this stale-Context mechanism is confirmed; broader multi-layer coverage
+and honest diagnosis-accuracy measurement remain open.
 
 ## Iteration 8 — Multi-agent Mission Graph and live revisions
 
@@ -451,13 +478,35 @@ restarts the complete Mission after every requirement change.
 
 ### Current implementation evidence
 
-Mission Plan revisions, requirement-to-node invalidation, stale-frontier
-projection, join readiness, and a queryable node execution view are implemented
-and exposed through the local API and Workbench. Local tests cover ready,
-running, succeeded, stale, blocked, unknown, and waiting-join states. The
-repository has not yet recorded two independent native Agents executing
-distinct nodes through a live requirement change; that remains the real-runtime
-gate.
+The local API and Workbench can now start an explicit Mission Plan and submit a
+Contract revision while it runs. The Engine executes independent ready nodes
+concurrently in isolated Git worktrees; every Attempt carries its Contract
+revision, Plan revision, node version, Branch, and workspace binding. Only
+deterministically verified node Artifacts advance the frontier. A revision
+fences affected active work, keeps the unaffected verified result reusable,
+re-executes only the invalidated frontier, and creates a separate consolidation
+Attempt whose selected source commits are checked for immutability. The verified
+Receipt binds the latest Contract and Plan revisions.
+
+A controlled [integration test](../src/mission-plan-execution.test.ts) exercises
+that complete sequence through the same Adapter and child-process boundary used
+by native Runtimes, using deterministic CLI fixtures rather than authenticated
+provider executions. Projection tests
+also cover revision filtering, stale history, empty or mismatched verifier
+evidence, ready/running/succeeded/failed/blocked/unknown states, and join
+readiness.
+
+The retained [Iteration 8 multi-Agent revision record](../evidence/iteration-8-multi-agent-revision-local-2026-08-26.json)
+adds a same-host controlled Git fixture with real local Qoder/Qwen3.8-Max and
+Claude Code/deepseek-v4-pro. Through Workbench HTTP it creates and starts the
+Mission, revises the Contract while work is active, queries the result, and
+completes it. The changed node is interrupted and rerun, the unaffected
+verifier-backed Artifact is reused without rerunning Qoder, an independent
+consolidation Attempt consumes the selected Artifacts, the Receipt binds the
+latest Contract and Plan revisions, and restart reconstructs the same result.
+This record does not establish production use, cross-host or distributed
+execution, independent external reproduction, provider-internal state, or
+natural-failure behavior.
 
 ## Iteration 9 — Outcome, Eval, and Incident Studio
 
@@ -556,7 +605,7 @@ external reproduction.
 
 ### Current implementation evidence
 
-The [package smoke record](../evidence/iteration-10-package-smoke-local-2026-08-26.json)
+The [package smoke record](https://github.com/Oxygen56/missionbraid/blob/main/evidence/iteration-10-package-smoke-local-2026-08-26.json)
 shows a clean local tarball install, public exports (including Mission Plan
 runtime projection and Outcome Studio), third-party Adapter conformance, and
 an installed Workbench that starts and shuts down cleanly. Registry
@@ -585,7 +634,7 @@ understanding. The product first learns what each Runtime can actually expose
 and control.
 
 CI export is delayed until the Workbench can bind an effective Agent Revision,
-real execution evidence, independent outcome criteria, and stochastic trial
+real execution evidence, separately versioned outcome criteria, and stochastic trial
 semantics. This keeps CI as an output of Agent development rather than a second
 product center.
 

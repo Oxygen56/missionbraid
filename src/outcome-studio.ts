@@ -90,6 +90,12 @@ interface AgentRevisionCoreV1 {
   readonly policyEvidence: readonly AgentRevisionPolicyEvidenceV1[];
 }
 
+interface AgentRevisionIdentityCoreV1 {
+  readonly schemaVersion: typeof AGENT_REVISION_SCHEMA_VERSION;
+  readonly dimensions: readonly AgentRevisionDimensionEvidenceV1[];
+  readonly policyEvidence: readonly AgentRevisionPolicyEvidenceV1[];
+}
+
 export interface AgentRevisionV1 extends AgentRevisionCoreV1 {
   readonly revisionId: string;
   readonly revisionHash: string;
@@ -341,7 +347,26 @@ export interface CreateIncidentScenarioInputV1 {
   readonly interventionId: string;
   readonly artifacts: readonly IncidentArtifactInputV1[];
   readonly expectedEvidence: readonly IncidentExpectedEvidenceV1[];
+  readonly executionPlan?: IncidentScenarioExecutionPlanInputV1;
   readonly createdAt: string;
+}
+
+export interface IncidentScenarioExecutionPlanInputV1 {
+  readonly runner: CriterionRunnerRefV1;
+  readonly evaluationSuite: EvaluationSuiteV1;
+  readonly sourceProfileId: string;
+  readonly sourceProfileDigest: string;
+  readonly requiresDistinctAgentRevision: boolean;
+  readonly evidenceRefs: readonly string[];
+}
+
+export interface IncidentScenarioExecutionPlanV1 {
+  readonly runner: CriterionRunnerRefV1;
+  readonly evaluationSuite: EvaluationSuiteV1;
+  readonly sourceProfileId: string;
+  readonly sourceProfileDigest: string;
+  readonly requiresDistinctAgentRevision: boolean;
+  readonly evidenceRefs: readonly string[];
 }
 
 export interface RedactedIncidentArtifactV1 {
@@ -365,6 +390,7 @@ interface IncidentScenarioCoreV1 {
   readonly interventionId: string;
   readonly artifacts: readonly RedactedIncidentArtifactV1[];
   readonly expectedEvidence: readonly IncidentExpectedEvidenceV1[];
+  readonly executionPlan: IncidentScenarioExecutionPlanV1 | null;
   readonly createdAt: string;
 }
 
@@ -381,6 +407,17 @@ export interface OutcomeEffectEvidenceV1 {
   readonly evidenceRefs: readonly string[];
 }
 
+export interface OutcomeRuntimeProfileBindingV1 {
+  readonly sourceProfileId: string;
+  readonly targetProfileId: string;
+  readonly targetStageId: string;
+  readonly targetProfileDefinitionId: string;
+  readonly profileSelectionId: string;
+  readonly plannerDecisionHash: string;
+  readonly authorityChange: 'unchanged' | 'narrowed';
+  readonly evidenceRefs: readonly string[];
+}
+
 export interface BranchAcceptanceV1 {
   readonly branchId: string;
   readonly decision: 'accepted' | 'rejected';
@@ -393,6 +430,7 @@ export interface IssueStudioOutcomeReceiptInputV1 {
   readonly branch: OutcomeBranchRecordV1;
   readonly effects: readonly OutcomeEffectEvidenceV1[];
   readonly acceptance?: BranchAcceptanceV1;
+  readonly runtimeProfileBinding?: OutcomeRuntimeProfileBindingV1;
   readonly outcomePolicyVersion: string;
   readonly issuedAt: string;
 }
@@ -416,6 +454,7 @@ interface StudioOutcomeReceiptCoreV1 {
     readonly evidenceRefs: readonly string[];
   }[];
   readonly effects: readonly OutcomeEffectEvidenceV1[];
+  readonly runtimeProfileBinding?: OutcomeRuntimeProfileBindingV1;
   readonly unresolvedItems: readonly string[];
   readonly completion: {
     readonly agentReported: AgentReportedCompletionV1;
@@ -448,6 +487,7 @@ interface OutcomeCiResultCoreV1 {
   readonly branchId: string;
   readonly agentRevisionId: string;
   readonly evaluationSuiteId: string;
+  readonly runtimeProfileBinding?: OutcomeRuntimeProfileBindingV1;
   readonly expectationResults: readonly {
     readonly criterionId: string;
     readonly expectedStatus: CriterionStatusV1;
@@ -467,6 +507,50 @@ interface OutcomeCiResultCoreV1 {
 export interface OutcomeCiResultV1 extends OutcomeCiResultCoreV1 {
   readonly resultId: string;
   readonly resultHash: string;
+}
+
+export interface OutcomeCiEnforcementV1 {
+  readonly resultId: string;
+  readonly status: 'passed' | 'failed';
+  readonly exitCode: 0 | 1;
+  readonly reasons: readonly string[];
+}
+
+export interface OutcomeBranchSelectionV1 {
+  readonly schemaVersion: 'missionbraid.dev/outcome-branch-selection/v1';
+  readonly selectionId: string;
+  readonly comparisonId: string;
+  readonly contractId: string;
+  readonly branchId: string;
+  readonly receiptId: string;
+  readonly authorityKind: 'human' | 'external-authority';
+  readonly authorityRef: string;
+  readonly decidedAt: string;
+  readonly selectionHash: string;
+}
+
+export interface RerunIncidentScenarioInputV1 {
+  readonly scenario: IncidentScenarioV1;
+  readonly registry: OutcomeStudioRegistry;
+  readonly target: BranchEvaluationTargetV1;
+  readonly lineageBranchIds: readonly string[];
+  readonly dimensions: readonly BranchDimensionEvidenceInputV1[];
+  readonly agentReported: AgentReportedCompletionV1;
+  readonly effects: readonly OutcomeEffectEvidenceV1[];
+  readonly runtimeProfileBinding?: OutcomeRuntimeProfileBindingV1;
+  readonly outcomePolicyVersion: string;
+  readonly issuedAt: string;
+}
+
+export interface IncidentScenarioRerunV1 {
+  readonly scenarioId: string;
+  readonly sourceAgentRevisionId: string;
+  readonly targetAgentRevisionId: string;
+  readonly targetProfileId: string;
+  readonly runtimeProfileBinding?: OutcomeRuntimeProfileBindingV1;
+  readonly evaluation: BranchEvaluationV1;
+  readonly receipt: StudioOutcomeReceiptV1;
+  readonly ciResult: OutcomeCiResultV1;
 }
 
 export class OutcomeStudioValidationError extends TypeError {}
@@ -502,7 +586,11 @@ export function createAgentRevision(input: CreateAgentRevisionInputV1): AgentRev
     dimensions,
     policyEvidence,
   };
-  const revisionHash = digest(core);
+  // Attempt and Profile identities are provenance bindings, not behavioral
+  // content.  A retried Attempt with identical effective inputs must retain the
+  // same Agent Revision, while a Prompt, Context, tool, model, permission, or
+  // environment digest change must create a new Revision.
+  const revisionHash = digest(agentRevisionIdentityCore(core));
   return {
     ...core,
     revisionId: `revision-${revisionHash}`,
@@ -512,7 +600,9 @@ export function createAgentRevision(input: CreateAgentRevisionInputV1): AgentRev
 
 export function verifyAgentRevision(revision: AgentRevisionV1): void {
   const { revisionId: _revisionId, revisionHash: _revisionHash, ...core } = revision;
-  const expected = digest(core);
+  requireNonEmpty(revision.profileId, 'profileId');
+  requireNonEmpty(revision.attemptBindingId, 'attemptBindingId');
+  const expected = digest(agentRevisionIdentityCore(core));
   if (revision.revisionHash !== expected || revision.revisionId !== `revision-${expected}`) {
     throw new OutcomeStudioIntegrityError('Agent Revision identity does not match its content');
   }
@@ -810,6 +900,11 @@ export function createIncidentScenario(input: CreateIncidentScenarioInputV1): In
   if (expectedEvidence.length === 0) {
     throw new OutcomeStudioValidationError('Incident expectedEvidence must not be empty');
   }
+  const executionPlan = normalizeIncidentExecutionPlan(
+    input.executionPlan,
+    input.contractId,
+    input.evaluationSuiteId,
+  );
   const core: IncidentScenarioCoreV1 = {
     schemaVersion: INCIDENT_SCENARIO_SCHEMA_VERSION,
     scenarioRevision: requireNonEmpty(input.scenarioRevision, 'scenarioRevision'),
@@ -820,6 +915,7 @@ export function createIncidentScenario(input: CreateIncidentScenarioInputV1): In
     interventionId: requireNonEmpty(input.interventionId, 'interventionId'),
     artifacts,
     expectedEvidence,
+    executionPlan,
     createdAt: requireIsoTimestamp(input.createdAt, 'createdAt'),
   };
   const scenarioHash = digest(core);
@@ -832,6 +928,17 @@ export function verifyIncidentScenario(scenario: IncidentScenarioV1): void {
     if (actual !== artifact.sha256 || artifact.artifactId !== `incident-artifact-${actual}`) {
       throw new OutcomeStudioIntegrityError(
         `Incident artifact ${artifact.kind} identity does not match its content`,
+      );
+    }
+  }
+  if (scenario.executionPlan !== undefined && scenario.executionPlan !== null) {
+    verifyEvaluationSuite(scenario.executionPlan.evaluationSuite);
+    if (
+      scenario.executionPlan.evaluationSuite.contractId !== scenario.contractId ||
+      scenario.executionPlan.evaluationSuite.suiteId !== scenario.evaluationSuiteId
+    ) {
+      throw new OutcomeStudioIntegrityError(
+        'Incident execution plan does not match its Contract and Evaluation Suite',
       );
     }
   }
@@ -881,6 +988,9 @@ export function issueStudioOutcomeReceipt(
     eventThroughSeq: branch.eventThroughSeq,
     criteria,
     effects,
+    ...(input.runtimeProfileBinding === undefined
+      ? {}
+      : { runtimeProfileBinding: normalizeRuntimeProfileBinding(input.runtimeProfileBinding) }),
     unresolvedItems,
     completion: {
       agentReported: branch.agentReported,
@@ -901,6 +1011,13 @@ export function verifyStudioOutcomeReceipt(receipt: StudioOutcomeReceiptV1): voi
   const expected = digest(core);
   if (receipt.receiptHash !== expected || receipt.receiptId !== `outcome-receipt-${expected}`) {
     throw new OutcomeStudioIntegrityError('Outcome Receipt identity does not match its content');
+  }
+  if (
+    receipt.runtimeProfileBinding !== undefined &&
+    stableCanonicalJson(normalizeRuntimeProfileBinding(receipt.runtimeProfileBinding)) !==
+      stableCanonicalJson(receipt.runtimeProfileBinding)
+  ) {
+    throw new OutcomeStudioIntegrityError('Outcome Receipt Runtime Profile binding is invalid');
   }
 }
 
@@ -943,6 +1060,9 @@ export function createOutcomeCiResult(input: CreateOutcomeCiResultInputV1): Outc
     branchId: input.receipt.branchId,
     agentRevisionId: input.receipt.agentRevisionId,
     evaluationSuiteId: input.receipt.evaluationSuiteId,
+    ...(input.receipt.runtimeProfileBinding === undefined
+      ? {}
+      : { runtimeProfileBinding: input.receipt.runtimeProfileBinding }),
     expectationResults,
     regression,
     status: allMatched && input.receipt.completion.verified === 'verified' ? 'passed' : 'failed',
@@ -954,6 +1074,202 @@ export function createOutcomeCiResult(input: CreateOutcomeCiResultInputV1): Outc
   };
   const resultHash = digest(core);
   return { ...core, resultId: `ci-result-${resultHash}`, resultHash };
+}
+
+export function verifyOutcomeCiResult(result: OutcomeCiResultV1): void {
+  const { resultId: _resultId, resultHash: _resultHash, ...core } = result;
+  const expectedHash = digest(core);
+  if (result.resultHash !== expectedHash || result.resultId !== `ci-result-${expectedHash}`) {
+    throw new OutcomeStudioIntegrityError('Outcome CI result identity does not match its content');
+  }
+  if (
+    result.authority !== 'evidence-export-only' ||
+    result.deploymentAuthorized !== false ||
+    result.organizationalApprovalGranted !== false ||
+    result.publicationAuthorized !== false
+  ) {
+    throw new OutcomeStudioPolicyError('Outcome CI result cannot grant release authority');
+  }
+  if (result.expectationResults.length === 0) {
+    throw new OutcomeStudioIntegrityError('Outcome CI result has no criterion expectations');
+  }
+  if (
+    result.runtimeProfileBinding !== undefined &&
+    stableCanonicalJson(normalizeRuntimeProfileBinding(result.runtimeProfileBinding)) !==
+      stableCanonicalJson(result.runtimeProfileBinding)
+  ) {
+    throw new OutcomeStudioIntegrityError('Outcome CI Runtime Profile binding is invalid');
+  }
+  requireUnique(
+    result.expectationResults.map((expectation) => expectation.criterionId),
+    'Outcome CI result criterion IDs',
+  );
+  const anyUnknown = result.expectationResults.some(
+    (expectation) =>
+      expectation.actualStatus === 'unknown' || expectation.actualStatus === 'missing',
+  );
+  const allMatched = result.expectationResults.every(
+    (expectation) => expectation.matched && expectation.actualStatus === expectation.expectedStatus,
+  );
+  const expectedRegression = anyUnknown ? 'inconclusive' : allMatched ? 'retained' : 'returned';
+  if (result.regression !== expectedRegression) {
+    throw new OutcomeStudioIntegrityError('Outcome CI regression conclusion is inconsistent');
+  }
+  if (result.status === 'passed' && (!allMatched || result.regression !== 'retained')) {
+    throw new OutcomeStudioPolicyError(
+      'Outcome CI cannot pass with failed, missing, unknown, or mismatched expectations',
+    );
+  }
+}
+
+export function enforceOutcomeCiResult(result: OutcomeCiResultV1): OutcomeCiEnforcementV1 {
+  verifyOutcomeCiResult(result);
+  const reasons = uniqueSorted([
+    ...(result.status === 'passed' ? [] : [`status:${result.status}`]),
+    ...(result.regression === 'retained' ? [] : [`regression:${result.regression}`]),
+    ...result.expectationResults
+      .filter(
+        (expectation) =>
+          !expectation.matched ||
+          expectation.actualStatus === 'unknown' ||
+          expectation.actualStatus === 'missing',
+      )
+      .map((expectation) => `criterion:${expectation.criterionId}:${expectation.actualStatus}`),
+  ]);
+  return {
+    resultId: result.resultId,
+    status: reasons.length === 0 ? 'passed' : 'failed',
+    exitCode: reasons.length === 0 ? 0 : 1,
+    reasons,
+  };
+}
+
+export function selectVerifiedOutcomeBranch(input: {
+  readonly comparison: BranchComparisonV1;
+  readonly receipt: StudioOutcomeReceiptV1;
+  readonly authorityKind: 'human' | 'external-authority';
+  readonly authorityRef: string;
+  readonly decidedAt: string;
+}): OutcomeBranchSelectionV1 {
+  verifyStudioOutcomeReceipt(input.receipt);
+  if (!input.comparison.branchIds.includes(input.receipt.branchId)) {
+    throw new OutcomeStudioPolicyError('Selected Branch is absent from the comparison');
+  }
+  if (
+    input.comparison.contractId !== input.receipt.contractId ||
+    input.comparison.suiteId !== input.receipt.evaluationSuiteId
+  ) {
+    throw new OutcomeStudioPolicyError('Selection does not match the comparison evidence');
+  }
+  if (input.receipt.completion.verified !== 'verified') {
+    throw new OutcomeStudioPolicyError('An unverified Branch cannot be selected');
+  }
+  if (!['human', 'external-authority'].includes(input.authorityKind)) {
+    throw new OutcomeStudioPolicyError('A model cannot select an Outcome Branch');
+  }
+  const core = {
+    schemaVersion: 'missionbraid.dev/outcome-branch-selection/v1' as const,
+    comparisonId: input.comparison.comparisonId,
+    contractId: input.comparison.contractId,
+    branchId: input.receipt.branchId,
+    receiptId: input.receipt.receiptId,
+    authorityKind: input.authorityKind,
+    authorityRef: requireNonEmpty(input.authorityRef, 'authorityRef'),
+    decidedAt: requireIsoTimestamp(input.decidedAt, 'decidedAt'),
+  };
+  const selectionHash = digest(core);
+  return {
+    ...core,
+    selectionId: `outcome-selection-${selectionHash}`,
+    selectionHash,
+  };
+}
+
+export function verifyOutcomeBranchSelection(selection: OutcomeBranchSelectionV1): void {
+  const { selectionId: _selectionId, selectionHash: _selectionHash, ...core } = selection;
+  const expectedHash = digest(core);
+  if (
+    selection.selectionHash !== expectedHash ||
+    selection.selectionId !== `outcome-selection-${expectedHash}`
+  ) {
+    throw new OutcomeStudioIntegrityError(
+      'Outcome Branch selection identity does not match its content',
+    );
+  }
+  if (!['human', 'external-authority'].includes(selection.authorityKind)) {
+    throw new OutcomeStudioPolicyError('A model cannot select an Outcome Branch');
+  }
+}
+
+export async function rerunIncidentScenario(
+  input: RerunIncidentScenarioInputV1,
+): Promise<IncidentScenarioRerunV1> {
+  verifyIncidentScenario(input.scenario);
+  const executionPlan = input.scenario.executionPlan;
+  if (executionPlan === null) {
+    throw new OutcomeStudioPolicyError('Incident Scenario has no executable rerun plan');
+  }
+  verifyAgentRevision(input.target.agentRevision);
+  if (input.target.contractId !== input.scenario.contractId) {
+    throw new OutcomeStudioPolicyError('Incident rerun target uses a different Contract');
+  }
+  if (input.target.scenarioId !== input.scenario.scenarioId) {
+    throw new OutcomeStudioPolicyError('Incident rerun target is not bound to the Scenario');
+  }
+  if (
+    executionPlan.requiresDistinctAgentRevision &&
+    input.target.agentRevision.revisionId === input.scenario.sourceAgentRevisionId
+  ) {
+    throw new OutcomeStudioPolicyError(
+      'Incident rerun requires an upgraded Agent Revision distinct from its source',
+    );
+  }
+  const evaluation = await input.registry.evaluateBranch(
+    executionPlan.evaluationSuite,
+    input.target,
+  );
+  const branch: OutcomeBranchRecordV1 = {
+    branchId: input.target.branchId,
+    contractId: input.target.contractId,
+    lineageBranchIds: input.lineageBranchIds,
+    checkpointId: input.target.checkpointId,
+    eventHeadHash: input.target.eventHeadHash,
+    eventThroughSeq: input.target.eventThroughSeq,
+    agentRevision: input.target.agentRevision,
+    evaluation,
+    dimensions: input.dimensions,
+    agentReported: input.agentReported,
+  };
+  // Normalize before issuing the Receipt so malformed branch evidence cannot
+  // be hidden behind a successful evaluator result.
+  normalizeBranchRecord(branch);
+  const receipt = issueStudioOutcomeReceipt({
+    branch,
+    effects: input.effects,
+    ...(input.runtimeProfileBinding === undefined
+      ? {}
+      : { runtimeProfileBinding: input.runtimeProfileBinding }),
+    outcomePolicyVersion: input.outcomePolicyVersion,
+    issuedAt: input.issuedAt,
+  });
+  const ciResult = createOutcomeCiResult({
+    scenario: input.scenario,
+    receipt,
+    generatedAt: input.issuedAt,
+  });
+  verifyOutcomeCiResult(ciResult);
+  return {
+    scenarioId: input.scenario.scenarioId,
+    sourceAgentRevisionId: input.scenario.sourceAgentRevisionId,
+    targetAgentRevisionId: input.target.agentRevision.revisionId,
+    targetProfileId: input.target.agentRevision.profileId,
+    ...(input.runtimeProfileBinding === undefined
+      ? {}
+      : { runtimeProfileBinding: normalizeRuntimeProfileBinding(input.runtimeProfileBinding) }),
+    evaluation,
+    receipt,
+    ciResult,
+  };
 }
 
 function normalizeRevisionDimension(
@@ -996,6 +1312,50 @@ function normalizeRevisionDimension(
         : requireNonEmpty(input.contentDigest, `dimensions[${index}].contentDigest`),
     evidenceRefs,
     reason,
+  };
+}
+
+function agentRevisionIdentityCore(core: AgentRevisionCoreV1): AgentRevisionIdentityCoreV1 {
+  return {
+    schemaVersion: core.schemaVersion,
+    dimensions: core.dimensions,
+    policyEvidence: core.policyEvidence,
+  };
+}
+
+function normalizeIncidentExecutionPlan(
+  input: IncidentScenarioExecutionPlanInputV1 | undefined,
+  contractId: string,
+  evaluationSuiteId: string,
+): IncidentScenarioExecutionPlanV1 | null {
+  if (input === undefined) return null;
+  verifyEvaluationSuite(input.evaluationSuite);
+  if (
+    input.evaluationSuite.contractId !== contractId ||
+    input.evaluationSuite.suiteId !== evaluationSuiteId
+  ) {
+    throw new OutcomeStudioPolicyError(
+      'Incident execution plan must embed the controlling Contract-bound Evaluation Suite',
+    );
+  }
+  if (typeof input.requiresDistinctAgentRevision !== 'boolean') {
+    throw new OutcomeStudioValidationError(
+      'executionPlan.requiresDistinctAgentRevision must be boolean',
+    );
+  }
+  return {
+    runner: {
+      kind: requireNonEmpty(input.runner.kind, 'executionPlan.runner.kind'),
+      version: requireNonEmpty(input.runner.version, 'executionPlan.runner.version'),
+    },
+    evaluationSuite: input.evaluationSuite,
+    sourceProfileId: requireNonEmpty(input.sourceProfileId, 'executionPlan.sourceProfileId'),
+    sourceProfileDigest: requireNonEmpty(
+      input.sourceProfileDigest,
+      'executionPlan.sourceProfileDigest',
+    ),
+    requiresDistinctAgentRevision: input.requiresDistinctAgentRevision,
+    evidenceRefs: normalizeRefs(input.evidenceRefs, 'executionPlan.evidenceRefs'),
   };
 }
 
@@ -1352,6 +1712,50 @@ function normalizeOutcomeEffect(
     status: input.status,
     resolution: input.resolution,
     evidenceRefs: normalizeRefs(input.evidenceRefs, `effects[${index}].evidenceRefs`, true),
+  };
+}
+
+function normalizeRuntimeProfileBinding(
+  input: OutcomeRuntimeProfileBindingV1,
+): OutcomeRuntimeProfileBindingV1 {
+  const sourceProfileId = requireNonEmpty(
+    input.sourceProfileId,
+    'runtimeProfileBinding.sourceProfileId',
+  );
+  const targetProfileId = requireNonEmpty(
+    input.targetProfileId,
+    'runtimeProfileBinding.targetProfileId',
+  );
+  if (sourceProfileId === targetProfileId) {
+    throw new OutcomeStudioPolicyError(
+      'Outcome Runtime Profile binding must identify a distinct target Profile',
+    );
+  }
+  if (!/^[a-f0-9]{64}$/.test(input.plannerDecisionHash)) {
+    throw new OutcomeStudioValidationError(
+      'runtimeProfileBinding.plannerDecisionHash must be a complete Planner hash',
+    );
+  }
+  if (input.authorityChange !== 'unchanged' && input.authorityChange !== 'narrowed') {
+    throw new OutcomeStudioPolicyError(
+      'Outcome Runtime Profile binding cannot expand Runtime authority',
+    );
+  }
+  return {
+    sourceProfileId,
+    targetProfileId,
+    targetStageId: requireNonEmpty(input.targetStageId, 'runtimeProfileBinding.targetStageId'),
+    targetProfileDefinitionId: requireNonEmpty(
+      input.targetProfileDefinitionId,
+      'runtimeProfileBinding.targetProfileDefinitionId',
+    ),
+    profileSelectionId: requireNonEmpty(
+      input.profileSelectionId,
+      'runtimeProfileBinding.profileSelectionId',
+    ),
+    plannerDecisionHash: input.plannerDecisionHash,
+    authorityChange: input.authorityChange,
+    evidenceRefs: normalizeRefs(input.evidenceRefs, 'runtimeProfileBinding.evidenceRefs'),
   };
 }
 

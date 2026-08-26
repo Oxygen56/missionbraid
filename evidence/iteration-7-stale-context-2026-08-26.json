@@ -1,0 +1,225 @@
+{
+  "schemaVersion": "missionbraid.dev/evidence/iteration-7-stale-context/v1",
+  "evidenceLevel": "same-host-local-real-runtime-controlled-fixture",
+  "generatedAt": "2026-08-26T09:25:34.686Z",
+  "missionId": "mission-cbbc6825-0915-405e-918b-e73f88fc0017",
+  "harness": "qoder",
+  "implementation": {
+    "gitRevision": "82cdcde2aeffa9276fbaa1f0aff52e8334dd3b2f",
+    "committedTree": "bb8c7f1d054b45d9d365b3596a93ab50ae52a85c",
+    "worktreeState": "dirty",
+    "cleanCloneUsed": false,
+    "freshBuildUsed": false,
+    "sourceTreeDigest": "sha256:838d26627d78476eaaed0ce4a00930dfda5e136bb3ef6faf012ac3bbca8e4bab",
+    "sourceFileCount": 239,
+    "distributionDigest": "sha256:f33ce65ff02b0d1b520ac30044794c5db05a48cb16b281379f746675e091dabb"
+  },
+  "environment": {
+    "nodeVersion": "v26.4.0",
+    "qoderVersion": "1.1.6",
+    "chromeVersion": "Google Chrome 151.0.7922.174"
+  },
+  "identities": {
+    "contractId": "contract-7398919df3d7ca6b632c26549f5b",
+    "rootBranchId": "branch-root-939c04c2-38b0-4b03-ae9d-c0e666c4ab00",
+    "initialAttemptId": "attempt-eece95a2-4a75-4ec6-a3eb-c62fa88084f1",
+    "initialReceiptId": "receipt-d86027ef-d69d-4d0f-bc14-d28c7bbaa1c9",
+    "checkpointId": "checkpoint-e2876df6df32df9df39440a9676332c0b64a73f4ee422d4e469351a2f206ecae",
+    "failureCandidateId": "failure-candidate-d809bed1ef17cb0158ba2ae195e9187c",
+    "forkId": "execution-fork-b76ed5cff7f0f3662f249c999b6b50805e52c7af727633879ce466396a98c91a",
+    "childAttemptId": "fork-attempt-execution-fork-b76ed5cff7f0f3662f249c999b6b50805e52c7af727633879ce466396a98c91a",
+    "childBranchId": "branch-fork-b4700329-b878-4cb5-a08e-641d981a0b88",
+    "diagnosticReceiptId": "receipt-bd3bfe14-539e-499e-8038-b0481a08ec74",
+    "initialEffectIds": ["effect-attempt-eece95a2-4a75-4ec6-a3eb-c62fa88084f1"],
+    "diagnosticEffectIds": [
+      "effect-attempt-eece95a2-4a75-4ec6-a3eb-c62fa88084f1",
+      "effect-cea5dd27c1a997c150ecc46fa56534473dda1a8453434db89a0575d54d27c5d1"
+    ],
+    "toolFailureCandidateId": "failure-candidate-6c12485e5d87aa8aeb82d28d915d36ab",
+    "honestUnknownCandidateId": "failure-candidate-dba8bc3420f8301ec256a72ef44d1a81",
+    "capsuleId": null
+  },
+  "workspace": {
+    "boundDigest": "ea99003d9ad2bbabd168c54da2a7a412436381fcc96d23b012bfa67339d74db8",
+    "currentDigest": "ed2653643b5790c5cb299ff734e5d31d6a86c69c2a3858757329ccee4e467e9d",
+    "boundContextDigest": "sha256:4e0fbb0819ce5a8c7ac39b89793ce3d87cc0ede8ff2cad39ca235cb417955982",
+    "currentContextDigest": "sha256:3e9dfb37d1f300ca04d0a5d6fb32496302bba964bc7d95aa61d1e30f1343a7e4",
+    "checkpointDigest": "ea1735eabcdd11248816f93aab6e2b63be3aa97611eb4785aac4d67769a73af7",
+    "childBaselineDigest": "ea1735eabcdd11248816f93aab6e2b63be3aa97611eb4785aac4d67769a73af7",
+    "childFutureDigest": "9de09b98f931854b53797a04cbad4035033cb9226f219b6b6742cbaca653e10f",
+    "refreshedContextDigest": "sha256:3e9dfb37d1f300ca04d0a5d6fb32496302bba964bc7d95aa61d1e30f1343a7e4",
+    "parentChangedPaths": ["agent-config.json"],
+    "childChangedPaths": ["agent-config.json"]
+  },
+  "runtimeProfile": {
+    "profileId": "profile-snapshot-942d4cb05dc9d3ffc2d272f5c903",
+    "harness": "qoder",
+    "model": "Qwen3.8-Max",
+    "reasoningEffort": "medium",
+    "permissionMode": "bypass_permissions"
+  },
+  "initial": {
+    "status": "failed",
+    "attemptStatus": "succeeded",
+    "runtimeProcessFinished": true,
+    "receiptOutcome": "rejected",
+    "receiptId": "receipt-d86027ef-d69d-4d0f-bc14-d28c7bbaa1c9",
+    "criterion": {
+      "criterionId": "mission-outcome",
+      "evidenceRefs": [
+        "verifier:c539f292744bd0e91ff318b8c5bd17fe4967513023760f50bca0b6867af34261",
+        "stdout:sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderr:sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      ],
+      "status": "failed"
+    },
+    "staleContextCandidate": "failure-candidate-d809bed1ef17cb0158ba2ae195e9187c",
+    "toolFailureCandidate": "failure-candidate-6c12485e5d87aa8aeb82d28d915d36ab",
+    "proposalReady": true,
+    "verifierFailed": true
+  },
+  "multiLayerFailureEvidence": {
+    "context": {
+      "candidateId": "failure-candidate-d809bed1ef17cb0158ba2ae195e9187c",
+      "layer": "context",
+      "statusBeforeDiagnostic": "inferred",
+      "evidenceRefs": [
+        "agent-behavior-source",
+        "context-snapshot:artifact-cc3e01e6657b7652c1d3f455728a99f6c2dd103a4f1a242ba7145458c72ea336",
+        "context-source:artifact-ee0f8893bee2c25b722f68aa5dd24f2041d23c954c014844838a6728c9aefd18",
+        "event-78a4437b-9ff4-43a4-9825-9143efe95209",
+        "event:event-78a4437b-9ff4-43a4-9825-9143efe95209",
+        "workspace:ed2653643b5790c5cb299ff734e5d31d6a86c69c2a3858757329ccee4e467e9d"
+      ],
+      "recommendedAction": "Refresh only the bound context snapshot on a diagnostic Branch."
+    },
+    "tool": {
+      "candidateId": "failure-candidate-6c12485e5d87aa8aeb82d28d915d36ab",
+      "layer": "tool",
+      "status": "observed",
+      "exitCode": 17,
+      "nativeFactIds": ["semantic-fact-bbd1059b8d8fa93cd6c2f94292e4422d"],
+      "sourceRuntimeEventIds": ["runtime-event-bc952025b1a42d7ffbcd6d38e921b522"],
+      "nativeArtifactIds": [
+        "artifact-d128cd73abd136f4d759cbc3612022262d5ed235d9bdff36f34f2bea699376c3"
+      ],
+      "evidenceRefs": [
+        "artifact-d128cd73abd136f4d759cbc3612022262d5ed235d9bdff36f34f2bea699376c3",
+        "runtime-event-bc952025b1a42d7ffbcd6d38e921b522",
+        "semantic-fact-bbd1059b8d8fa93cd6c2f94292e4422d",
+        "semantic-fact-bffbdf8624ea73f874facfc23c840982"
+      ],
+      "recommendedAction": "Change only this tool input or implementation on a diagnostic Branch."
+    },
+    "distinctCandidateIds": true,
+    "distinctEvidencePaths": true
+  },
+  "diagnostic": {
+    "forkId": "execution-fork-b76ed5cff7f0f3662f249c999b6b50805e52c7af727633879ce466396a98c91a",
+    "parentCheckpointId": "checkpoint-e2876df6df32df9df39440a9676332c0b64a73f4ee422d4e469351a2f206ecae",
+    "childBranchId": "branch-fork-b4700329-b878-4cb5-a08e-641d981a0b88",
+    "sameRuntimeProfile": true,
+    "sameContract": true,
+    "intervention": {
+      "interventionId": "intervention-ui-3666c2fa-b874-4316-bea7-2445aafa83cf",
+      "kind": "context",
+      "targetRef": "context:agent-behavior-source",
+      "beforeDigest": "sha256:4e0fbb0819ce5a8c7ac39b89793ce3d87cc0ede8ff2cad39ca235cb417955982",
+      "afterDigest": "sha256:3e9dfb37d1f300ca04d0a5d6fb32496302bba964bc7d95aa61d1e30f1343a7e4",
+      "description": "A declared context Intervention changes the stale-context evidence; Contract, Profile, authority, workspace, and run-state differences are evaluated from recorded evidence rather than assumed equal.",
+      "authorityChange": "unchanged"
+    },
+    "contextEvidenceRefs": ["evidence:evidence-bbf88c822b962af961d15f5970671eeb"],
+    "outcome": "mechanism-confirmed",
+    "receiptId": "receipt-bd3bfe14-539e-499e-8038-b0481a08ec74",
+    "receiptOutcome": "verified",
+    "criterion": {
+      "criterionId": "mission-outcome",
+      "evidenceRefs": [
+        "criterion:mission-outcome",
+        "evidence:evidence-db7b631a37736d10b043fda6b4023e2c",
+        "invocation:7572959bd1f9621b5b42e4b34bfc6fb9f4e18a172155127e1fb971fdedb022ea",
+        "stderr:sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout:sha256:78d0682bc2e42185f1c206e3006a2c996a6356bf0c0cbb6656e00297ccd43dbf",
+        "verification:passed"
+      ],
+      "status": "passed"
+    },
+    "unresolvedItems": []
+  },
+  "evidenceAblation": {
+    "decisiveDiagnosticOutcomeId": "diagnostic-outcome-7261d229ebb9a729849ec08d935a5b3a",
+    "candidateId": "failure-candidate-d809bed1ef17cb0158ba2ae195e9187c",
+    "fullStatus": "confirmed",
+    "withoutDiagnosticOutcomeStatus": "inferred",
+    "terminalVerifierSymptomStatus": "observed",
+    "upstreamStatusWithoutLayerEvidence": "unknown",
+    "honestUnknownCandidateId": "failure-candidate-dba8bc3420f8301ec256a72ef44d1a81",
+    "honestUnknownMissingEvidence": [
+      "Evidence connecting the terminal failure symptom to model, context, tool, Harness, environment, or MissionBraid"
+    ]
+  },
+  "verifier": {
+    "kind": "deterministic-command",
+    "initialStatus": "failed",
+    "initialEvidenceRefs": [
+      "verifier:c539f292744bd0e91ff318b8c5bd17fe4967513023760f50bca0b6867af34261",
+      "stdout:sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr:sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    ],
+    "diagnosticStatus": "passed",
+    "diagnosticEvidenceRefs": [
+      "criterion:mission-outcome",
+      "evidence:evidence-db7b631a37736d10b043fda6b4023e2c",
+      "invocation:7572959bd1f9621b5b42e4b34bfc6fb9f4e18a172155127e1fb971fdedb022ea",
+      "stderr:sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout:sha256:78d0682bc2e42185f1c206e3006a2c996a6356bf0c0cbb6656e00297ccd43dbf",
+      "verification:passed"
+    ]
+  },
+  "controlledComparison": {
+    "declaredChangedVariable": "context:agent-behavior-source",
+    "sameContractId": true,
+    "sameRuntimeProfileId": true,
+    "authorityChange": "unchanged",
+    "childBaselineMatchesCheckpoint": true,
+    "parentChangedPaths": ["agent-config.json"],
+    "childChangedPaths": ["agent-config.json"],
+    "necessarilyDifferentRunState": [
+      "branchId",
+      "attemptId",
+      "runtimeProcess",
+      "timestamps",
+      "eventHistory"
+    ]
+  },
+  "productEntry": {
+    "missionCreatedThroughApi": true,
+    "checkpointCreatedThroughWorkbench": true,
+    "diagnosticSubmittedThroughWorkbench": true,
+    "regressionSavedThroughWorkbench": true
+  },
+  "regressionScenario": {
+    "saved": true,
+    "ciResults": 1,
+    "scenarioIdentities": [
+      {
+        "scenarioId": "scenario-f6f8d5df178644904de44ed13bc5fb59e1dbed27312294589302c44d9f5cfa9a",
+        "scenarioHash": "f6f8d5df178644904de44ed13bc5fb59e1dbed27312294589302c44d9f5cfa9a"
+      }
+    ],
+    "ciResultIdentities": [
+      {
+        "resultId": "ci-result-87788d678cc68d831eb6aa1c82198e640f35a8e451a17ad2290f514b8893e0f2",
+        "resultHash": "87788d678cc68d831eb6aa1c82198e640f35a8e451a17ad2290f514b8893e0f2"
+      }
+    ]
+  },
+  "restart": {
+    "stableHeadHash": true,
+    "stableReceipt": true,
+    "stableDiagnosis": true,
+    "stableScenario": true
+  },
+  "claimBoundary": "This is same-host local evidence from a real Qoder Runtime using Qwen3.8-Max, source-linked native Context and tool evidence, a deterministic verifier, the Workbench checkpoint/diagnostic path, evidence-ablation reprojection, and restart reconstruction. The controlled exit-17 tool probe is a real but deliberately induced tool failure and is not claimed as the Mission outcome cause. The Context diagnostic uses the same Contract, Runtime Profile, and authority while declaring Context refresh as the product variable; Branch, Attempt, process, timestamps, and event history necessarily differ. Removing the decisive diagnostic outcome downgrades the Context conclusion, while retaining only the terminal verifier symptom leaves the upstream mechanism unknown. The fixture controls the visible Context Snapshot and instruction boundary. The child is a fresh isolated Attempt, not native session resume or fork. This record does not claim provider-internal Context capture, general diagnosis accuracy or recall, portable persistence of the refreshed cache for later Attempts, production reliability, or independent external reproduction."
+}

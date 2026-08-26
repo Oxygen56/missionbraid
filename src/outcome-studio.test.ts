@@ -13,8 +13,14 @@ import {
   createEvaluationSuite,
   createIncidentScenario,
   createOutcomeCiResult,
+  enforceOutcomeCiResult,
   issueStudioOutcomeReceipt,
+  rerunIncidentScenario,
+  selectVerifiedOutcomeBranch,
   verifyAgentRevision,
+  verifyOutcomeBranchSelection,
+  verifyOutcomeCiResult,
+  verifyStudioOutcomeReceipt,
   type AgentRevisionDimensionInputV1,
   type AgentRevisionV1,
   type BranchEvaluationV1,
@@ -50,16 +56,29 @@ describe('Outcome, Eval, and Incident Studio core', () => {
       ),
       policyEvidence: [{ name: 'planner', version: 'v1', evidenceRefs: ['policy:planner:v1'] }],
     });
+    const retry = createAgentRevision({
+      profileId: 'profile-reobserved',
+      attemptBindingId: 'binding-retry',
+      dimensions,
+      policyEvidence: [{ name: 'planner', version: 'v1', evidenceRefs: ['policy:planner:v1'] }],
+    });
 
     expect(revision.dimensions.map((dimension) => dimension.dimension).sort()).toEqual(
       [...AGENT_REVISION_DIMENSIONS].sort(),
     );
     expect(reordered).toEqual(revision);
+    expect(retry.revisionId).toBe(revision.revisionId);
+    expect(retry.attemptBindingId).not.toBe(revision.attemptBindingId);
     expect(changed.revisionId).not.toBe(revision.revisionId);
     expect(revision.revisionHash).toMatch(/^[a-f0-9]{64}$/);
-    expect(() => verifyAgentRevision({ ...revision, profileId: 'tampered' })).toThrow(
-      OutcomeStudioIntegrityError,
-    );
+    expect(() =>
+      verifyAgentRevision({
+        ...revision,
+        dimensions: revision.dimensions.map((dimension, index) =>
+          index === 0 ? { ...dimension, contentDigest: 'sha256:tampered' } : dimension,
+        ),
+      }),
+    ).toThrow(OutcomeStudioIntegrityError);
   });
 
   it('keeps Agent-reported, verified, and human-accepted completion independent', async () => {
@@ -323,6 +342,7 @@ describe('Outcome, Eval, and Incident Studio core', () => {
     const receipt = issueStudioOutcomeReceipt({
       branch,
       effects: [resolvedEffect()],
+      runtimeProfileBinding: runtimeProfileBinding(),
       outcomePolicyVersion: 'outcome-policy-v1',
       issuedAt: NOW,
     });
@@ -361,11 +381,232 @@ describe('Outcome, Eval, and Incident Studio core', () => {
       deploymentAuthorized: false,
       organizationalApprovalGranted: false,
       publicationAuthorized: false,
+      runtimeProfileBinding: runtimeProfileBinding(),
     });
     expect(returned).toMatchObject({ status: 'failed', regression: 'returned' });
     expect(passed.resultHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(enforceOutcomeCiResult(passed)).toMatchObject({ status: 'passed', exitCode: 0 });
+    expect(enforceOutcomeCiResult(returned)).toMatchObject({ status: 'failed', exitCode: 1 });
+    expect(() => verifyOutcomeCiResult({ ...passed, regression: 'returned' })).toThrow(
+      OutcomeStudioIntegrityError,
+    );
+    expect(() =>
+      verifyStudioOutcomeReceipt({
+        ...receipt,
+        runtimeProfileBinding: {
+          ...receipt.runtimeProfileBinding!,
+          targetProfileId: 'profile-target-tampered',
+        },
+      }),
+    ).toThrow(OutcomeStudioIntegrityError);
+    expect(() =>
+      verifyOutcomeCiResult({
+        ...passed,
+        runtimeProfileBinding: {
+          ...passed.runtimeProfileBinding!,
+          targetProfileId: 'profile-target-tampered',
+        },
+      }),
+    ).toThrow(OutcomeStudioIntegrityError);
+  });
+
+  it('reruns an executable incident with predeclared repeated trials on a distinct Agent Revision', async () => {
+    const contract = contractWith(['tests-pass']);
+    const suite = createEvaluationSuite({
+      contract,
+      suiteVersion: 'incident-regression-v2',
+      outcomePolicyVersion: 'outcome-policy-v1',
+      criteria: [
+        {
+          criterionId: 'tests-pass',
+          required: true,
+          mode: 'stochastic-model',
+          runner: { kind: 'real-runtime-trial', version: 'v1' },
+          evaluators: [{ kind: 'deterministic-trial-audit', version: 'v1', role: 'authoritative' }],
+          trialCount: 3,
+          threshold: {
+            metric: 'pass-rate',
+            operator: 'gte',
+            value: 2 / 3,
+            minimumKnownTrials: 3,
+          },
+        },
+      ],
+    });
+    const sourceRevision = revisionFixture('incident-source');
+    const upgradedRevision = revisionFixture('incident-upgraded', 'sha256:model-v2');
+    const scenario = createIncidentScenario({
+      ...incidentInput({
+        contractId: contract.contractId,
+        evaluationSuiteId: suite.suiteId,
+        sourceAgentRevisionId: sourceRevision.revisionId,
+      }),
+      executionPlan: {
+        runner: { kind: 'mission-runtime-regression', version: 'v1' },
+        evaluationSuite: suite,
+        sourceProfileId: sourceRevision.profileId,
+        sourceProfileDigest: 'sha256:profile-source',
+        requiresDistinctAgentRevision: true,
+        evidenceRefs: ['checkpoint:source', `suite:${suite.suiteId}`],
+      },
+    });
+    const registry = new OutcomeStudioRegistry();
+    let trials = 0;
+    registry.registerRunner({
+      kind: 'real-runtime-trial',
+      version: 'v1',
+      mode: 'stochastic-model',
+      run: async ({ trialIndex }) => {
+        trials += 1;
+        return {
+          outcome: trialIndex === 1 ? 'failed' : 'passed',
+          score: trialIndex === 1 ? 0 : 1,
+          evidenceRefs: [`runtime-attempt:${trialIndex}`, `verifier:${trialIndex}`],
+          retainedArtifactRefs: [`artifact:trial:${trialIndex}`],
+        };
+      },
+    });
+    registry.registerEvaluator({
+      kind: 'deterministic-trial-audit',
+      version: 'v1',
+      basis: 'deterministic',
+      evaluate: async ({ trials: observations }) => ({
+        status: observations.every((trial) => trial.evidenceRefs.length > 0) ? 'passed' : 'unknown',
+        evidenceRefs: ['audit:all-trials-retained'],
+      }),
+    });
+    const target = {
+      ...evaluationTarget('branch-upgraded', contract.contractId, upgradedRevision),
+      scenarioId: scenario.scenarioId,
+    };
+    const rerun = await rerunIncidentScenario({
+      scenario,
+      registry,
+      target,
+      lineageBranchIds: ['branch-source', target.branchId],
+      dimensions: BRANCH_COMPARISON_DIMENSIONS.map((dimension) => ({
+        dimension,
+        fidelity: 'known' as const,
+        digest: `sha256:upgraded-${dimension}`,
+        evidenceRefs: [`runtime:${dimension}`],
+      })),
+      agentReported: { status: 'reported-success', evidenceRefs: ['runtime:process-exit-0'] },
+      effects: [resolvedEffect()],
+      outcomePolicyVersion: 'outcome-policy-v1',
+      issuedAt: NOW,
+    });
+
+    expect(trials).toBe(3);
+    expect(rerun.evaluation.criteria[0]?.thresholdEvaluation).toMatchObject({
+      status: 'passed',
+      knownTrials: 3,
+      totalTrials: 3,
+      observedValue: 2 / 3,
+    });
+    expect(rerun.receipt.completion.verified).toBe('verified');
+    expect(enforceOutcomeCiResult(rerun.ciResult)).toMatchObject({ exitCode: 0 });
+    await expect(
+      rerunIncidentScenario({
+        scenario,
+        registry,
+        target: { ...target, agentRevision: sourceRevision },
+        lineageBranchIds: ['branch-source', target.branchId],
+        dimensions: BRANCH_COMPARISON_DIMENSIONS.map((dimension) => ({
+          dimension,
+          fidelity: 'known' as const,
+          digest: `sha256:source-${dimension}`,
+          evidenceRefs: [`runtime:${dimension}`],
+        })),
+        agentReported: { status: 'not-reported', evidenceRefs: [] },
+        effects: [],
+        outcomePolicyVersion: 'outcome-policy-v1',
+        issuedAt: NOW,
+      }),
+    ).rejects.toThrow(OutcomeStudioPolicyError);
+  });
+
+  it('records human Branch selection separately and rejects selection of an unverified Branch', async () => {
+    const contract = contractWith(['tests-pass']);
+    const suite = deterministicSuite(contract);
+    const revisionA = revisionFixture('selection-a');
+    const revisionB = revisionFixture('selection-b', 'sha256:model-v2');
+    const passedRegistry = deterministicRegistry('passed');
+    const failedRegistry = deterministicRegistry('failed');
+    const evaluationA = await failedRegistry.evaluateBranch(
+      suite,
+      evaluationTarget('branch-selection-a', contract.contractId, revisionA),
+    );
+    const evaluationB = await passedRegistry.evaluateBranch(
+      suite,
+      evaluationTarget('branch-selection-b', contract.contractId, revisionB),
+    );
+    const branchA = branchRecord(
+      'branch-selection-a',
+      contract.contractId,
+      revisionA,
+      evaluationA,
+      'reported-success',
+    );
+    const branchB = branchRecord(
+      'branch-selection-b',
+      contract.contractId,
+      revisionB,
+      evaluationB,
+      'reported-success',
+    );
+    const comparison = compareContractBranches([branchA, branchB]);
+    const rejected = issueStudioOutcomeReceipt({
+      branch: branchA,
+      effects: [],
+      outcomePolicyVersion: 'outcome-policy-v1',
+      issuedAt: NOW,
+    });
+    const verified = issueStudioOutcomeReceipt({
+      branch: branchB,
+      effects: [],
+      outcomePolicyVersion: 'outcome-policy-v1',
+      issuedAt: NOW,
+    });
+    expect(() =>
+      selectVerifiedOutcomeBranch({
+        comparison,
+        receipt: rejected,
+        authorityKind: 'human',
+        authorityRef: 'developer:local',
+        decidedAt: NOW,
+      }),
+    ).toThrow(OutcomeStudioPolicyError);
+    const selection = selectVerifiedOutcomeBranch({
+      comparison,
+      receipt: verified,
+      authorityKind: 'human',
+      authorityRef: 'developer:local',
+      decidedAt: NOW,
+    });
+    expect(selection).toMatchObject({
+      branchId: branchB.branchId,
+      comparisonId: comparison.comparisonId,
+      receiptId: verified.receiptId,
+      authorityKind: 'human',
+    });
+    expect(() =>
+      verifyOutcomeBranchSelection({ ...selection, branchId: branchA.branchId }),
+    ).toThrow(OutcomeStudioIntegrityError);
   });
 });
+
+function runtimeProfileBinding() {
+  return {
+    sourceProfileId: 'profile-source',
+    targetProfileId: 'profile-target',
+    targetStageId: 'stage-target',
+    targetProfileDefinitionId: 'profile-definition-target',
+    profileSelectionId: 'profile-selection-target',
+    plannerDecisionHash: 'a'.repeat(64),
+    authorityChange: 'unchanged' as const,
+    evidenceRefs: ['event:planner-decision', 'event:profile-selected'],
+  };
+}
 
 function contractWith(criterionIds: readonly string[]): ContractV1 {
   return {

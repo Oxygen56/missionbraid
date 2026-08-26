@@ -139,6 +139,35 @@ describe('Failure Intelligence', () => {
     );
   });
 
+  it('uses Context content digests before workspace digests to avoid false stale findings', () => {
+    const sameContextDifferentWorkspace: ContextFreshnessEvidenceV1 = {
+      evidenceId: 'context-freshness-same-content',
+      contextFactId: 'context-fact-2',
+      boundWorkspaceDigest: digest('old-workspace'),
+      currentWorkspaceDigest: digest('changed-code-only'),
+      boundContextDigest: digest('same-context'),
+      currentContextDigest: digest('same-context'),
+      evidenceRefs: ['context-snapshot-2'],
+    };
+    const changedContext: ContextFreshnessEvidenceV1 = {
+      ...sameContextDifferentWorkspace,
+      evidenceId: 'context-freshness-changed-content',
+      boundContextDigest: digest('old-context'),
+      currentContextDigest: digest('new-context'),
+    };
+
+    const graph = deriveFailureIntelligence({
+      persistedRuntimeFacts: [],
+      contextFreshness: [sameContextDifferentWorkspace, changedContext],
+    });
+
+    const staleCandidates = graph.candidates.filter((item) => item.detector === 'stale-context');
+    expect(staleCandidates).toHaveLength(1);
+    expect(staleCandidates[0]?.supportingEvidenceRefs).toContain(
+      'context-freshness-changed-content',
+    );
+  });
+
   it('keeps counter-evidence and missing evidence visible instead of forcing a root cause', () => {
     const graph = deriveFailureIntelligence({
       persistedRuntimeFacts: [
@@ -168,6 +197,33 @@ describe('Failure Intelligence', () => {
     expect(graph.diagnosticBranchProposals).toEqual([]);
   });
 
+  it('keeps the upstream mechanism unknown when only a terminal verifier symptom is known', () => {
+    const graph = deriveFailureIntelligence({
+      persistedRuntimeFacts: [],
+      verifications: [verification('verification-only-failure', 'failed')],
+    });
+
+    expect(graph.candidates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          detector: 'verification-failure',
+          layer: 'missionbraid',
+          status: 'observed',
+        }),
+        expect.objectContaining({
+          detector: 'unattributed',
+          layer: 'unknown',
+          status: 'unknown',
+          supportingEvidenceRefs: expect.arrayContaining(['verification-only-failure']),
+        }),
+      ]),
+    );
+    expect(
+      graph.candidates.find((candidate) => candidate.detector === 'unattributed')
+        ?.recommendedAction,
+    ).toContain('Collect the missing layer-specific evidence');
+  });
+
   it('never treats boundary-only evidence as an executable diagnostic Branch', () => {
     const graph = deriveFailureIntelligence({
       persistedRuntimeFacts: [],
@@ -183,8 +239,11 @@ describe('Failure Intelligence', () => {
     expect(proposal).toMatchObject({
       execution: 'proposal-only',
       ready: false,
-      preserve: ['outcome-contract', 'all-other-observable-inputs'],
+      preserve: ['outcome-contract', 'checkpointed-comparison-boundary'],
     });
+    expect(proposal?.expectedDiscriminator).toContain(
+      'differences are evaluated from recorded evidence rather than assumed equal',
+    );
     expect(proposal?.missingPreconditions).toContain(
       'The supplied boundary evidence is not a restorable composite Checkpoint',
     );

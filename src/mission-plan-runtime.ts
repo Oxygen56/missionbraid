@@ -77,6 +77,7 @@ export interface ProjectMissionPlanRuntimeInputV1 {
 export function projectMissionPlanRuntime(
   input: ProjectMissionPlanRuntimeInputV1,
 ): MissionPlanRuntimeProjectionV1 {
+  const nodesById = new Map(input.plan.nodes.map((node) => [node.nodeId, node]));
   const incoming = new Map<string, string[]>();
   const outgoing = new Map<string, string[]>();
   for (const edge of input.plan.edges) {
@@ -84,21 +85,45 @@ export function projectMissionPlanRuntime(
     add(outgoing, edge.fromNodeId, edge.toNodeId);
   }
 
-  const activeByNode = group(input.activeAttempts ?? []);
-  const finishedByNode = group(input.finishedAttempts ?? []);
+  const activeByNode = group(
+    (input.activeAttempts ?? []).filter((attempt) =>
+      attemptMatchesCurrentRevision(attempt, input.plan, nodesById),
+    ),
+  );
+  const finishedByNode = group(
+    (input.finishedAttempts ?? []).filter((attempt) =>
+      attemptMatchesCurrentRevision(attempt, input.plan, nodesById),
+    ),
+  );
   const artifactsByNode = new Map<string, PlanArtifactV1[]>();
-  for (const artifact of input.artifacts ?? [])
+  for (const artifact of input.artifacts ?? []) {
+    if (!artifactMatchesCurrentRevision(artifact, input.plan, nodesById)) continue;
     add(artifactsByNode, artifact.producedByNodeId, artifact);
+  }
+
+  // An invalidation is relevant to this view only when it produced the
+  // current Contract revision and came from either this Plan revision or its
+  // direct parent.  Parent invalidations remain visible as history, but they
+  // must not make a newly planned node with the same nodeId permanently stale.
+  const relevantInvalidations = (input.invalidations ?? []).filter(
+    (invalidation) =>
+      invalidation.missionId === input.plan.missionId &&
+      invalidation.targetContractRevisionId === input.plan.contractRevisionId &&
+      (invalidation.sourcePlanRevisionId === input.plan.planRevisionId ||
+        invalidation.sourcePlanRevisionId === input.plan.parentPlanRevisionId),
+  );
 
   const invalidationIdsByNode = new Map<string, string[]>();
-  for (const invalidation of input.invalidations ?? []) {
+  for (const invalidation of relevantInvalidations) {
     for (const nodeId of invalidation.invalidatedNodeIds) {
       add(invalidationIdsByNode, nodeId, invalidation.invalidationId);
     }
   }
 
   const staleNodes = new Set(
-    (input.invalidations ?? []).flatMap((invalidation) => invalidation.invalidatedNodeIds),
+    relevantInvalidations
+      .filter((invalidation) => invalidation.sourcePlanRevisionId === input.plan.planRevisionId)
+      .flatMap((invalidation) => invalidation.invalidatedNodeIds),
   );
   const projections = input.plan.nodes.map((node) => {
     const predecessorIds = [...(incoming.get(node.nodeId) ?? [])].sort();
@@ -188,9 +213,7 @@ export function projectMissionPlanRuntime(
     completedNodeIds: byStatus('succeeded'),
     joinNodeIds: nodes.filter((node) => node.kind === 'join').map((node) => node.nodeId),
     unknownNodeIds: byStatus('unknown'),
-    invalidationIds: [
-      ...new Set((input.invalidations ?? []).map((item) => item.invalidationId)),
-    ].sort(),
+    invalidationIds: [...new Set(relevantInvalidations.map((item) => item.invalidationId))].sort(),
     authority: 'derived-plan-evidence-only',
   };
 }
@@ -207,12 +230,16 @@ function resolveStatus(
 ): MissionPlanNodeExecutionStatusV1 {
   if (item.stale) return 'stale';
   if (item.active.length > 0) return 'running';
+  // A current-revision artifact may have been explicitly adopted from an
+  // unaffected parent Plan. Its deterministic reuse evidence is the terminal
+  // proof; creating a fake current-revision Agent Attempt would misrepresent
+  // what actually ran.
+  if (item.artifacts.some((artifact) => hasPassedArtifactVerifier(artifact))) return 'succeeded';
   if (item.finished.some((attempt) => attempt.terminalStatus === 'failed')) return 'failed';
   if (item.finished.some((attempt) => attempt.terminalStatus === 'abandoned')) return 'unknown';
-  if (item.finished.length > 0 && item.artifacts.length > 0) return 'succeeded';
   // A finished Attempt without a PlanArtifact is not proof of failure.  It is
   // intentionally left unknown until a verifier-backed artifact is recorded.
-  if (item.finished.length > 0 && item.artifacts.length === 0) return 'unknown';
+  if (item.finished.length > 0) return 'unknown';
   if (item.node.kind === 'join') {
     if (predecessorStatuses.some((status) => status === 'failed' || status === 'stale'))
       return 'blocked';
@@ -256,6 +283,46 @@ function group<T extends { readonly nodeId: string }>(items: readonly T[]): Map<
   const result = new Map<string, T[]>();
   for (const item of items) add(result, item.nodeId, item);
   return result;
+}
+
+function attemptMatchesCurrentRevision(
+  attempt: ActivePlanAttemptV1,
+  plan: MissionPlanRevisionV1,
+  nodesById: ReadonlyMap<string, MissionPlanRevisionV1['nodes'][number]>,
+): boolean {
+  const node = nodesById.get(attempt.nodeId);
+  return (
+    node !== undefined &&
+    attempt.planRevisionId === plan.planRevisionId &&
+    attempt.contractRevisionId === plan.contractRevisionId &&
+    attempt.nodeVersion === node.nodeVersion
+  );
+}
+
+function artifactMatchesCurrentRevision(
+  artifact: PlanArtifactV1,
+  plan: MissionPlanRevisionV1,
+  nodesById: ReadonlyMap<string, MissionPlanRevisionV1['nodes'][number]>,
+): boolean {
+  const node = nodesById.get(artifact.producedByNodeId);
+  return (
+    node !== undefined &&
+    artifact.missionId === plan.missionId &&
+    artifact.planId === plan.planId &&
+    artifact.planRevisionId === plan.planRevisionId &&
+    artifact.contractRevisionId === plan.contractRevisionId &&
+    artifact.producerNodeVersion === node.nodeVersion
+  );
+}
+
+function hasPassedArtifactVerifier(artifact: PlanArtifactV1): boolean {
+  return artifact.verifierEvidence.some(
+    (evidence) =>
+      evidence.evaluator === 'deterministic' &&
+      evidence.subjectId === artifact.artifactId &&
+      evidence.subjectDigest === artifact.artifactDigest &&
+      ('passed' in evidence.result ? evidence.result.passed : evidence.result.status === 'passed'),
+  );
 }
 
 function add<T>(map: Map<string, T[]>, key: string, value: T): void {

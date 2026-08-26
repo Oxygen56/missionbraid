@@ -73,6 +73,55 @@ describe('native runtime evidence', () => {
     expect(first.correlationIds).toEqual(['session-1']);
   });
 
+  it('preserves public Adapter native event identity, sequence, hint, time, and fidelity', () => {
+    const normalized = normalizeRuntimeOutput(
+      {
+        runtime: 'codex',
+        sequence: 1,
+        streamSequence: 1,
+        stream: 'stdout',
+        line: '{"nativeEventType":"workspace.file-written"}',
+        value: {
+          adapterId: 'consumer.fixture',
+          runId: 'run-fixture',
+          sequence: 7,
+          sourceId: 'provider-source',
+          nativeEventType: 'workspace.file-written',
+          semanticHint: 'workspace',
+          observedAt: '2026-08-26T00:00:00.000Z',
+          fidelity: 'derived',
+        },
+        receivedAt: '2026-08-26T00:00:01.000Z',
+      },
+      {
+        missionId: 'mission-1',
+        branchId: 'branch-1',
+        attemptId: 'attempt-1',
+        bindingId: 'binding-1',
+        planNodeId: 'stage-1',
+        sourceProtocol: 'consumer-fixture/v1',
+      },
+      {
+        artifactId: 'artifact-adapter',
+        sha256: 'a'.repeat(64),
+        relativePath: 'sha256/aa/adapter.json',
+        mediaType: 'application/json',
+        byteLength: 2,
+        sanitized: true,
+        redactionCount: 0,
+      },
+    );
+
+    expect(normalized).toMatchObject({
+      sourceId: 'attempt-1:consumer-fixture/v1:consumer.fixture:run-fixture:provider-source',
+      sourceSequence: 7,
+      nativeEventType: 'workspace.file-written',
+      semanticKind: 'workspace',
+      nativeOccurredAt: '2026-08-26T00:00:00.000Z',
+      fidelity: 'derived',
+    });
+  });
+
   it('keeps unstructured provider semantics explicit instead of guessing', () => {
     const result = sanitizeNativeArtifact('plain provider output');
     expect(result.mediaType).toBe('text/plain');

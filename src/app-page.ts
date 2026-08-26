@@ -254,8 +254,116 @@ export const APP_HTML = String.raw`<!doctype html>
                     Three-stage Capsule handoff
                   </small>
                 </label>
+
+                <input id="route-mission-plan" name="route" type="radio" value="mission-plan" />
+                <label
+                  for="route-mission-plan"
+                  class="route-option route-option-braid route-option-wide"
+                >
+                  <strong>
+                    Qoder <span aria-hidden="true">∥</span> Claude
+                    <span aria-hidden="true">→</span> Qoder
+                  </strong>
+                  <small data-i18n="form.multiAgentPlan">
+                    Two independent workers and one consolidation Agent
+                  </small>
+                </label>
+
+                <div id="external-adapter-routes" class="external-adapter-routes"></div>
               </div>
             </fieldset>
+
+            <label id="provider-workspace-field" class="field compact-field" hidden>
+              <span data-i18n="form.providerWorkspaceLabel">Provider workspace reference</span>
+              <input
+                id="provider-workspace-ref"
+                type="text"
+                autocomplete="off"
+                spellcheck="false"
+                data-i18n-placeholder="form.providerWorkspacePlaceholder"
+                placeholder="provider-workspace:project"
+              />
+              <small data-i18n="form.providerWorkspaceHint">
+                Required only for a provider-backed Adapter.
+              </small>
+            </label>
+
+            <section id="plan-composer" class="plan-composer" hidden>
+              <div class="plan-composer-heading">
+                <div>
+                  <p class="eyebrow" data-i18n="form.planEyebrow">Mission Plan</p>
+                  <h3 data-i18n="form.planHeading">Define two independently verified workstreams</h3>
+                </div>
+                <span data-i18n="form.planBadge">2 workers + 1 consolidation</span>
+              </div>
+              <p class="plan-composer-hint" data-i18n="form.planHint">
+                The two workers start from the same baseline in isolated branches. The
+                consolidation Agent receives only their verified artifacts.
+              </p>
+              <div class="plan-composer-grid">
+                <article class="plan-workstream-card">
+                  <div class="plan-workstream-heading">
+                    <strong data-i18n="form.planWorkerA">Workstream A</strong>
+                    <span>Qoder</span>
+                  </div>
+                  <label class="field compact-field">
+                    <span data-i18n="form.planRequirementLabel">Requirement</span>
+                    <textarea
+                      id="plan-workstream-a-requirement"
+                      rows="3"
+                      data-i18n-placeholder="form.planRequirementAPlaceholder"
+                      placeholder="What should this Agent deliver independently?"
+                    ></textarea>
+                  </label>
+                  <label class="field compact-field">
+                    <span data-i18n="form.planOutputsLabel">Allowed output paths · one per line</span>
+                    <textarea id="plan-workstream-a-outputs" rows="2">workstream-a.txt</textarea>
+                  </label>
+                  <label class="field compact-field">
+                    <span data-i18n="form.planVerifierArgsLabel">Verifier arguments · one per line</span>
+                    <textarea id="plan-workstream-a-verifier-args" rows="2">test</textarea>
+                  </label>
+                </article>
+
+                <article class="plan-workstream-card">
+                  <div class="plan-workstream-heading">
+                    <strong data-i18n="form.planWorkerB">Workstream B</strong>
+                    <span>Claude Code</span>
+                  </div>
+                  <label class="field compact-field">
+                    <span data-i18n="form.planRequirementLabel">Requirement</span>
+                    <textarea
+                      id="plan-workstream-b-requirement"
+                      rows="3"
+                      data-i18n-placeholder="form.planRequirementBPlaceholder"
+                      placeholder="What separate result should this Agent deliver?"
+                    ></textarea>
+                  </label>
+                  <label class="field compact-field">
+                    <span data-i18n="form.planOutputsLabel">Allowed output paths · one per line</span>
+                    <textarea id="plan-workstream-b-outputs" rows="2">workstream-b.txt</textarea>
+                  </label>
+                  <label class="field compact-field">
+                    <span data-i18n="form.planVerifierArgsLabel">Verifier arguments · one per line</span>
+                    <textarea id="plan-workstream-b-verifier-args" rows="2">test</textarea>
+                  </label>
+                </article>
+              </div>
+
+              <article class="plan-consolidation-card">
+                <div>
+                  <strong data-i18n="form.planConsolidation">Consolidation Agent</strong>
+                  <small data-i18n="form.planConsolidationHint">
+                    Qoder integrates both verified source artifacts; the Completion criteria above
+                    verify the final result.
+                  </small>
+                </div>
+                <label class="field compact-field">
+                  <span data-i18n="form.planOutputsLabel">Allowed output paths · one per line</span>
+                  <textarea id="plan-consolidation-outputs" rows="2">integrated.txt</textarea>
+                </label>
+              </article>
+            </section>
 
             <details class="profile-editor" open>
               <summary data-i18n="form.profileSummary">Runtime Profile</summary>
@@ -342,7 +450,9 @@ export const APP_HTML = String.raw`<!doctype html>
 
             <div id="form-status" class="form-status" role="status" aria-live="polite"></div>
             <button id="create-mission" class="primary-button" type="submit">
-              <span data-i18n="form.createAndRun">Create and run Mission</span>
+              <span id="create-mission-label" data-i18n="form.createAndRun">
+                Create and run Mission
+              </span>
               <span aria-hidden="true">↗</span>
             </button>
           </form>
@@ -1152,6 +1262,201 @@ h3 {
   color: var(--cobalt);
 }
 
+.mission-plan-workbench {
+  padding: 22px clamp(17px, 3vw, 31px) 25px;
+  border-bottom: 1px solid var(--line);
+  background:
+    linear-gradient(145deg, rgba(49, 91, 214, 0.08), transparent 42%),
+    #f8faff;
+}
+
+.mission-plan-heading,
+.mission-plan-node-heading,
+.mission-plan-consolidation-heading {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.mission-plan-heading h3,
+.mission-plan-consolidation-heading h4,
+.mission-plan-requirements h4,
+.mission-plan-nodes > h4 {
+  margin: 0;
+  font-family: var(--display);
+}
+
+.mission-plan-heading h3 {
+  font-size: 1.15rem;
+}
+
+.mission-plan-version-grid,
+.mission-plan-node-grid,
+.mission-plan-consolidation-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 13px;
+}
+
+.mission-plan-version,
+.mission-plan-node,
+.mission-plan-consolidation,
+.mission-plan-receipt {
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--white);
+}
+
+.mission-plan-version strong,
+.mission-plan-node-id,
+.mission-plan-evidence-id {
+  overflow-wrap: anywhere;
+  font-family: var(--mono);
+  font-size: 0.62rem;
+}
+
+.mission-plan-version span {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.56rem;
+  overflow-wrap: anywhere;
+}
+
+.mission-plan-run-row {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.mission-plan-requirements,
+.mission-plan-nodes,
+.mission-plan-consolidation-section {
+  margin-top: 21px;
+}
+
+.mission-plan-requirements > p,
+.mission-plan-consolidation-section > p {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 0.68rem;
+  line-height: 1.5;
+}
+
+.mission-plan-requirement-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 11px;
+}
+
+.mission-plan-requirement {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 0.58rem;
+  font-weight: 750;
+}
+
+.mission-plan-requirement textarea,
+.mission-plan-revision-reason {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: var(--white);
+  color: var(--ink);
+  font: 0.65rem/1.45 var(--sans);
+  resize: vertical;
+}
+
+.mission-plan-revision-actions {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto;
+  gap: 9px;
+  align-items: end;
+  margin-top: 10px;
+}
+
+.mission-plan-node-heading h5,
+.mission-plan-consolidation-heading h5 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 0.88rem;
+}
+
+.mission-plan-status {
+  flex: 0 0 auto;
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: #eef1f5;
+  color: var(--muted);
+  font-size: 0.54rem;
+  font-weight: 800;
+}
+
+.mission-plan-status.is-running,
+.mission-plan-status.is-ready {
+  background: var(--wash-blue);
+  color: var(--cobalt);
+}
+
+.mission-plan-status.is-succeeded {
+  background: #e9f8f0;
+  color: #197149;
+}
+
+.mission-plan-status.is-stale,
+.mission-plan-status.is-failed {
+  background: var(--wash-orange);
+  color: #9b4226;
+}
+
+.mission-plan-facts {
+  display: grid;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.mission-plan-fact {
+  display: grid;
+  grid-template-columns: minmax(82px, 0.35fr) minmax(0, 1fr);
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.61rem;
+  line-height: 1.45;
+}
+
+.mission-plan-fact strong {
+  color: var(--ink);
+  font-size: 0.58rem;
+}
+
+.mission-plan-evidence {
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+}
+
+.mission-plan-evidence p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.59rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.mission-plan-evidence.is-reused {
+  color: #197149;
+}
+
 .continuity-workbench {
   padding: 22px clamp(17px, 3vw, 31px) 24px;
   border-bottom: 1px solid var(--line);
@@ -1936,6 +2241,10 @@ h3 {
   gap: 5px;
 }
 
+.external-adapter-routes {
+  display: contents;
+}
+
 .route-options input {
   position: absolute;
   width: 1px;
@@ -1991,6 +2300,99 @@ h3 {
 
 .route-option-wide {
   grid-column: 1 / -1;
+}
+
+.plan-composer {
+  display: grid;
+  gap: 11px;
+  padding: 12px;
+  border: 1px solid rgba(49, 91, 214, 0.34);
+  border-radius: 12px;
+  background: linear-gradient(145deg, var(--wash-blue), #fbfcfe 55%, var(--wash-orange));
+}
+
+.plan-composer[hidden] {
+  display: none;
+}
+
+.plan-composer-heading,
+.plan-workstream-heading,
+.plan-consolidation-card {
+  display: flex;
+  gap: 10px;
+  align-items: start;
+  justify-content: space-between;
+}
+
+.plan-composer-heading h3 {
+  margin: 2px 0 0;
+  font-family: var(--display);
+  font-size: 1rem;
+  line-height: 1.15;
+}
+
+.plan-composer-heading > span {
+  flex: 0 0 auto;
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--white);
+  font-family: var(--mono);
+  font-size: 0.52rem;
+}
+
+.plan-composer-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.66rem;
+  line-height: 1.45;
+}
+
+.plan-composer-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.plan-workstream-card,
+.plan-consolidation-card {
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.plan-workstream-card {
+  display: grid;
+  gap: 8px;
+}
+
+.plan-workstream-heading strong,
+.plan-consolidation-card strong {
+  font-family: var(--display);
+  font-size: 0.9rem;
+}
+
+.plan-workstream-heading span {
+  color: var(--cobalt);
+  font-family: var(--mono);
+  font-size: 0.58rem;
+}
+
+.plan-consolidation-card > div {
+  display: grid;
+  gap: 3px;
+}
+
+.plan-consolidation-card small {
+  max-width: 31ch;
+  color: var(--muted);
+  font-size: 0.58rem;
+  line-height: 1.35;
+}
+
+.plan-consolidation-card .field {
+  width: min(46%, 240px);
 }
 
 .route-summary {
@@ -2338,6 +2740,18 @@ h3 {
     grid-template-columns: 1fr;
   }
 
+  .plan-composer-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .plan-consolidation-card {
+    display: grid;
+  }
+
+  .plan-consolidation-card .field {
+    width: 100%;
+  }
+
   .intelligence-grid {
     grid-template-columns: 1fr;
   }
@@ -2346,6 +2760,10 @@ h3 {
   .checkpoint-list,
   .fork-list,
   .fork-intervention,
+  .mission-plan-version-grid,
+  .mission-plan-node-grid,
+  .mission-plan-consolidation-grid,
+  .mission-plan-revision-actions,
   .mode-grid {
     grid-template-columns: 1fr;
   }
@@ -2424,6 +2842,7 @@ function preferredLocale() {
 const state = {
   locale: preferredLocale(),
   runtimes: [],
+  adapters: [],
   missions: [],
   selectedMissionId: null,
   detail: null,
@@ -2454,7 +2873,12 @@ const elements = {
   form: document.querySelector('#mission-form'),
   formStatus: document.querySelector('#form-status'),
   createButton: document.querySelector('#create-mission'),
+  createButtonLabel: document.querySelector('#create-mission-label'),
+  planComposer: document.querySelector('#plan-composer'),
   routeSummary: document.querySelector('#route-summary'),
+  externalAdapterRoutes: document.querySelector('#external-adapter-routes'),
+  providerWorkspaceField: document.querySelector('#provider-workspace-field'),
+  providerWorkspaceRef: document.querySelector('#provider-workspace-ref'),
   languageButtons: document.querySelectorAll('[data-locale]'),
 };
 
@@ -2472,6 +2896,7 @@ const STATUS_LABEL_KEYS = {
 
 const RUNTIME_STATUS_LABEL_KEYS = {
   'ready-supported': 'runtime.status.ready-supported',
+  'adapter-loaded': 'runtime.status.adapter-loaded',
   'installed-unavailable': 'runtime.status.installed-unavailable',
   'installed-unsupported': 'runtime.status.installed-unsupported',
   'needs-bootstrap': 'runtime.status.needs-bootstrap',
@@ -2538,6 +2963,8 @@ const KIND_LABEL_KEYS = {
   'tool.gate.result': 'event.tool.gate.result',
   'runtime.event': 'event.runtime.event',
   'runtime.effective_profile_reported': 'event.runtime.effective_profile_reported',
+  'context.freshness': 'event.context.freshness',
+  'context.prompt_budget_exceeded': 'event.context.prompt_budget_exceeded',
   'command.accepted': 'event.command.accepted',
   'command.status_changed': 'event.command.status_changed',
   'verification.completed': 'event.verification.completed',
@@ -2820,7 +3247,9 @@ function statusBadge(status) {
 }
 
 function runtimeCardClass(entry) {
-  if (entry.status === 'ready-supported') return 'runtime-card is-ready';
+  if (entry.status === 'ready-supported' || entry.status === 'adapter-loaded') {
+    return 'runtime-card is-ready';
+  }
   if (entry.status === 'installed-unavailable' || entry.status === 'needs-bootstrap') {
     return 'runtime-card is-unavailable';
   }
@@ -2876,7 +3305,8 @@ function renderRuntimes() {
     replaceWithMessage(elements.runtimeList, 'loading-note', t('runtime.loading'));
     return;
   }
-  if (state.runtimes.length === 0) {
+  const runtimeEntries = state.runtimes.concat(state.adapters.map(adapterRuntimeEntry));
+  if (runtimeEntries.length === 0) {
     replaceWithMessage(
       elements.runtimeList,
       'empty-note',
@@ -2885,7 +3315,7 @@ function renderRuntimes() {
     return;
   }
   const fragment = document.createDocumentFragment();
-  state.runtimes.forEach(function (entry) {
+  runtimeEntries.forEach(function (entry) {
     const card = createElement('article', runtimeCardClass(entry));
     const head = createElement('div', 'runtime-card-head');
     const name = createElement(
@@ -2925,7 +3355,9 @@ async function loadRuntimes() {
   try {
     const payload = await requestJson('/api/v1/runtimes');
     state.runtimes = arrayFromPayload(payload, 'runtimes');
+    state.adapters = arrayFromPayload(payload, 'adapters');
     state.runtimesLoading = false;
+    renderAdapterRoutes();
     renderRuntimes();
   } catch (error) {
     state.runtimesLoading = false;
@@ -3163,6 +3595,22 @@ function timelineDescription(entry) {
   }
   if (entry.kind === 'context.controller_prompt') {
     return t('timeline.description.controllerContext');
+  }
+  if (entry.kind === 'context.freshness') {
+    return t('timeline.description.contextFreshness', {
+      state:
+        data.boundContextDigest && data.currentContextDigest
+          ? data.boundContextDigest === data.currentContextDigest
+            ? t('timeline.contextFresh')
+            : t('timeline.contextStale')
+          : t('intelligence.unknown'),
+    });
+  }
+  if (entry.kind === 'context.prompt_budget_exceeded') {
+    return t('timeline.description.contextPromptBudgetExceeded', {
+      bytes: data.promptBytes ?? t('intelligence.unknown'),
+      budget: data.promptBudgetBytes ?? t('intelligence.unknown'),
+    });
   }
   return t('timeline.description.kernelFallback');
 }
@@ -3563,8 +4011,13 @@ function renderRuntimeIntelligence(mission, timeline) {
       records: definitions,
       identityKeys: ['definitionId', 'harness'],
       facts: function (record) {
+        const adapter = recordValue(record.adapter) || {};
         return [
           ['intelligence.field.harness', displayValue(record.harness)],
+          ['intelligence.field.adapterId', displayValue(adapter.adapterId)],
+          ['intelligence.field.adapterVersion', displayValue(adapter.adapterVersion)],
+          ['intelligence.field.transport', displayValue(adapter.transport)],
+          ['intelligence.field.nativeProtocol', displayValue(adapter.nativeProtocol)],
           ['intelligence.field.requestedModel', displayValue(record.requestedModel)],
           ['intelligence.field.reasoning', displayValue(record.requestedReasoningEffort)],
           ['intelligence.field.permission', displayValue(record.permissionCeiling)],
@@ -3578,8 +4031,13 @@ function renderRuntimeIntelligence(mission, timeline) {
       identityKeys: ['profileId', 'harness'],
       facts: function (record) {
         const effective = recordValue(record.effective) || {};
+        const adapter = recordValue(record.adapter) || {};
         return [
           ['intelligence.field.harness', displayValue(record.harness)],
+          ['intelligence.field.adapterId', displayValue(adapter.adapterId)],
+          ['intelligence.field.adapterVersion', displayValue(adapter.adapterVersion)],
+          ['intelligence.field.transport', displayValue(adapter.transport)],
+          ['intelligence.field.nativeProtocol', displayValue(adapter.nativeProtocol)],
           [
             'intelligence.field.effectiveModel',
             runtimeFieldValue(effective.model || record.model),
@@ -3611,6 +4069,7 @@ function renderRuntimeIntelligence(mission, timeline) {
       records: observations,
       identityKeys: ['observationId', 'harness'],
       facts: function (record) {
+        const runtimeBinding = recordValue(record.runtimeBinding) || {};
         return [
           ['intelligence.field.harness', displayValue(record.harness)],
           ['intelligence.field.availability', displayValue(record.availability)],
@@ -3631,6 +4090,9 @@ function renderRuntimeIntelligence(mission, timeline) {
           ['intelligence.field.attempt', displayValue(record.attemptId)],
           ['intelligence.field.branch', displayValue(record.branchId)],
           ['intelligence.field.profile', displayValue(record.profileId)],
+          ['intelligence.field.adapterId', displayValue(runtimeBinding.adapterId)],
+          ['intelligence.field.adapterVersion', displayValue(runtimeBinding.adapterVersion)],
+          ['intelligence.field.transport', displayValue(runtimeBinding.transport)],
           ['intelligence.field.contract', displayValue(record.contractId)],
           ['intelligence.field.planNode', displayValue(record.planNodeId)],
           ['intelligence.field.authority', displayValue(record.authority)],
@@ -4365,6 +4827,7 @@ function renderForkIntervention(missionId, checkpoint, enabled) {
   form.append(createElement('h5', '', t('continuity.interventionHeading')));
 
   const kind = document.createElement('select');
+  kind.dataset.interventionField = 'kind';
   [
     ['guidance', 'continuity.kind.guidance'],
     ['context', 'continuity.kind.context'],
@@ -4381,14 +4844,20 @@ function renderForkIntervention(missionId, checkpoint, enabled) {
 
   const target = document.createElement('input');
   target.type = 'text';
+  target.dataset.interventionField = 'target';
   target.placeholder = t('continuity.targetPlaceholder');
   target.autocomplete = 'off';
   const digest = document.createElement('input');
   digest.type = 'text';
+  digest.dataset.interventionField = 'afterDigest';
   digest.placeholder = t('continuity.digestPlaceholder');
   digest.autocomplete = 'off';
   digest.spellcheck = false;
+  const beforeDigest = document.createElement('input');
+  beforeDigest.type = 'hidden';
+  beforeDigest.dataset.interventionField = 'beforeDigest';
   const authority = document.createElement('select');
+  authority.dataset.interventionField = 'authority';
   [
     ['unchanged', 'continuity.authorityUnchanged'],
     ['narrowed', 'continuity.authorityNarrowed'],
@@ -4399,6 +4868,7 @@ function renderForkIntervention(missionId, checkpoint, enabled) {
     authority.append(option);
   });
   const description = document.createElement('textarea');
+  description.dataset.interventionField = 'description';
   description.rows = 2;
   description.placeholder = t('continuity.descriptionPlaceholder');
 
@@ -4412,6 +4882,7 @@ function renderForkIntervention(missionId, checkpoint, enabled) {
       description,
       'intervention-description',
     ),
+    beforeDigest,
   );
 
   const actionRow = createElement('div', 'fork-action-row');
@@ -4455,6 +4926,7 @@ function renderForkIntervention(missionId, checkpoint, enabled) {
           interventionId: interventionId,
           kind: kind.value,
           targetRef: targetRef,
+          ...(beforeDigest.value.trim() ? { beforeDigest: beforeDigest.value.trim() } : {}),
           afterDigest: afterDigest,
           description: detail,
           authorityChange: authority.value,
@@ -4704,6 +5176,31 @@ function diagnosticKindForVariable(variable) {
   }
 }
 
+function contextFreshnessForDiagnostic(projection, candidate) {
+  const input = recordValue(projection?.failureIntelligenceInput);
+  const freshness = Array.isArray(input?.contextFreshness) ? input.contextFreshness : [];
+  const candidateRefs = new Set(
+    Array.isArray(candidate?.supportingEvidenceRefs) ? candidate.supportingEvidenceRefs : [],
+  );
+  return freshness.find(function (item) {
+    const value = recordValue(item);
+    if (!value) return false;
+    return [value.evidenceId, value.contextFactId]
+      .concat(Array.isArray(value.evidenceRefs) ? value.evidenceRefs : [])
+      .some(function (ref) {
+        return candidateRefs.has(ref);
+      });
+  });
+}
+
+function setInterventionField(form, field, value) {
+  const control = form.querySelector('[data-intervention-field="' + field + '"]');
+  if (!control || value === undefined || value === null) return;
+  control.value = String(value);
+  control.dispatchEvent(new Event('input', { bubbles: true }));
+  control.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
 function renderFailureIntelligence(detail, missionId) {
   const projection = recordValue(detail.failureIntelligence);
   if (!projection) return null;
@@ -4777,14 +5274,35 @@ function renderFailureIntelligence(detail, missionId) {
               return;
             }
             form.dataset.diagnosticCandidateId = String(value.candidateId || '');
-            const controls = form.querySelectorAll('input, select, textarea');
-            if (controls[0]) controls[0].value = kind;
-            if (controls[1]) controls[1].value = String(proposalValue.changedVariable?.key || '');
-            if (controls[3]) controls[3].value = String(value.title || '');
+            setInterventionField(form, 'kind', kind);
+            setInterventionField(
+              form,
+              'target',
+              kind === 'context'
+                ? 'context:' + String(contextFreshnessForDiagnostic(projection, value)?.contextFactId || '')
+                : String(proposalValue.changedVariable?.key || ''),
+            );
+            setInterventionField(
+              form,
+              'description',
+              String(
+                proposalValue.expectedDiscriminator ||
+                  value.recommendedAction ||
+                  value.title ||
+                  '',
+              ),
+            );
+            setInterventionField(form, 'authority', 'unchanged');
+            if (kind === 'context') {
+              const context = contextFreshnessForDiagnostic(projection, value);
+              setInterventionField(form, 'afterDigest', context?.currentContextDigest);
+              setInterventionField(form, 'beforeDigest', context?.boundContextDigest);
+            }
             const status = form.querySelector('.continuity-status');
             if (status) status.textContent = t('failureIntelligence.diagnosticPrepared');
             form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            if (controls[1]) controls[1].focus();
+            const target = form.querySelector('[data-intervention-field="target"]');
+            if (target) target.focus();
           });
           item.append(button);
         }
@@ -4814,6 +5332,16 @@ function renderFailureIntelligence(detail, missionId) {
 function renderOutcomeStudio(detail, missionId) {
   const view = recordValue(detail.outcomeStudio);
   if (!view) return null;
+  const scenarioCollection = recordValue(detail.outcomeStudioScenarios) || {};
+  const savedScenarios = Array.isArray(scenarioCollection.scenarios)
+    ? scenarioCollection.scenarios
+    : [];
+  const reruns = Array.isArray(detail.outcomeStudioReruns) ? detail.outcomeStudioReruns : [];
+  const selections = Array.isArray(detail.outcomeStudioSelections)
+    ? detail.outcomeStudioSelections
+    : [];
+  const planner = recordValue(detail.executionPlanner) || {};
+  const plannerCandidates = Array.isArray(planner.candidates) ? planner.candidates : [];
   const section = createElement('section', 'runtime-intelligence outcome-studio');
   const heading = createElement('div', 'intelligence-heading');
   heading.append(
@@ -4859,7 +5387,9 @@ function renderOutcomeStudio(detail, missionId) {
   card.append(summary);
   const comparison = recordValue(view.comparison);
   const incident = recordValue(view.incidentScenario);
-  const ci = recordValue(view.ciResult);
+  const studioReceipt = recordValue(view.studioReceipt);
+  const latestRerun = reruns.length === 0 ? null : recordValue(reruns[reruns.length - 1]);
+  const ci = recordValue(view.ciResult) || recordValue(latestRerun?.ciResult);
   const unknown = Array.isArray(view.unknown) ? view.unknown : [];
   const side = createElement('article', 'intelligence-card');
   side.append(
@@ -4878,12 +5408,191 @@ function renderOutcomeStudio(detail, missionId) {
     ),
   );
   grid.append(card, side);
+
+  const scenarioCard = createElement('article', 'intelligence-card is-wide');
+  const scenarioHeading = createElement('div', 'intelligence-card-heading');
+  scenarioHeading.append(
+    createElement('h4', '', t('outcomeStudio.savedScenarios')),
+    createElement('span', '', String(savedScenarios.length)),
+  );
+  scenarioCard.append(scenarioHeading);
+  if (savedScenarios.length === 0) {
+    scenarioCard.append(createElement('p', 'empty-note', t('outcomeStudio.noScenarios')));
+  } else {
+    const records = createElement('div', '');
+    savedScenarios.forEach(function (scenarioRecord) {
+      const scenario = recordValue(scenarioRecord) || {};
+      const scenarioRuns = reruns
+        .map(recordValue)
+        .filter(function (run) {
+          return run && run.scenarioId === scenario.scenarioId;
+        });
+      const latest = scenarioRuns.length === 0 ? null : scenarioRuns[scenarioRuns.length - 1];
+      const latestCi = recordValue(latest?.ciResult);
+      const latestEvaluation = recordValue(latest?.evaluation);
+      const evaluatedCriteria = Array.isArray(latestEvaluation?.criteria)
+        ? latestEvaluation.criteria
+        : [];
+      const threshold = recordValue(recordValue(evaluatedCriteria[0])?.thresholdEvaluation);
+      const plan = recordValue(scenario.executionPlan);
+      const planSuite = recordValue(plan?.evaluationSuite);
+      const plannedCriteria = Array.isArray(planSuite?.criteria) ? planSuite.criteria : [];
+      const plannedCriterion = recordValue(plannedCriteria[0]);
+      const plannedThreshold = recordValue(plannedCriterion?.threshold);
+      const trials = Array.isArray(latest?.trials) ? latest.trials : [];
+      const item = createElement('article', 'intelligence-record');
+      item.append(
+        createElement(
+          'p',
+          'intelligence-record-title',
+          scenario.scenarioId || t('outcomeStudio.notReady'),
+        ),
+      );
+      const facts = createElement('dl', 'intelligence-facts');
+      facts.append(
+        fact(
+          t('outcomeStudio.ci'),
+          latestCi
+            ? String(latestCi.status) + ' · ' + String(latestCi.regression)
+            : t('outcomeStudio.noRuns'),
+        ),
+        fact(
+          t('outcomeStudio.threshold'),
+          threshold
+            ? String(threshold.observedValue) +
+                ' / ' +
+                String(threshold.threshold) +
+                ' · ' +
+                String(threshold.status)
+            : plannedThreshold
+              ? String(plannedThreshold.metric) +
+                ' ≥ ' +
+                String(plannedThreshold.value) +
+                ' · ' +
+                t('outcomeStudio.trialCount', {
+                  count: String(plannedCriterion?.trialCount || 0),
+                })
+              : t('outcomeStudio.notReady'),
+        ),
+        fact(t('outcomeStudio.kernelTrials'), String(trials.length)),
+        fact(
+          t('outcomeStudio.targetProfile'),
+          latest
+            ? compactId(latest.sourceProfileId) + ' → ' + compactId(latest.targetProfileId)
+            : t('outcomeStudio.notReady'),
+        ),
+      );
+      item.append(facts);
+      trials.forEach(function (trialRecord) {
+        const trial = recordValue(trialRecord) || {};
+        item.append(
+          createElement(
+            'p',
+            'operation-note',
+            String(Number(trial.trialIndex || 0) + 1) +
+              ' · ' +
+              compactId(trial.branchId) +
+              ' · ' +
+              compactId(trial.attemptId) +
+              ' · ' +
+              compactId(trial.receiptId) +
+              ' · ' +
+              String(trial.receiptOutcome || 'unknown') +
+              ' · ' +
+              compactId(trial.targetProfileId),
+          ),
+        );
+      });
+      const targetSelect = createElement('select', 'continuity-input');
+      targetSelect.setAttribute('aria-label', t('outcomeStudio.chooseTargetProfile'));
+      plannerCandidates.forEach(function (candidateRecord) {
+        const candidate = recordValue(candidateRecord) || {};
+        const definition = recordValue(candidate.profileDefinition) || {};
+        if (
+          typeof candidate.stageId !== 'string' ||
+          typeof definition.definitionId !== 'string'
+        ) {
+          return;
+        }
+        const option = document.createElement('option');
+        option.value = JSON.stringify([candidate.stageId, definition.definitionId]);
+        option.textContent =
+          candidate.stageId +
+          ' · ' +
+          String(definition.harness || '') +
+          ' · ' +
+          String(definition.requestedModel || '');
+        if (
+          latest === null &&
+          candidateRecord === plannerCandidates[plannerCandidates.length - 1]
+        ) {
+          option.selected = true;
+        } else if (
+          latest &&
+          latest.targetStageId === candidate.stageId &&
+          latest.targetProfileDefinitionId === definition.definitionId
+        ) {
+          option.selected = true;
+        }
+        targetSelect.append(option);
+      });
+      item.append(targetSelect);
+      const runButton = createElement(
+        'button',
+        'continuity-action',
+        t('outcomeStudio.runScenario'),
+      );
+      runButton.type = 'button';
+      runButton.disabled =
+        typeof scenario.scenarioId !== 'string' ||
+        targetSelect.options.length === 0 ||
+        detail.capabilities?.rerunOutcomeStudioScenario !== true;
+      runButton.addEventListener('click', async function () {
+        if (typeof scenario.scenarioId !== 'string') {
+          showPageAlert(t('outcomeStudio.rerunUnavailable'));
+          return;
+        }
+        runButton.disabled = true;
+        showPageAlert(t('outcomeStudio.rerunRunning'));
+        try {
+          const selectedTarget = JSON.parse(targetSelect.value);
+          if (selectedTarget.length !== 2 || !selectedTarget[0] || !selectedTarget[1]) {
+            throw new Error(t('outcomeStudio.chooseTargetProfile'));
+          }
+          await requestJson(
+            '/api/v1/missions/' +
+              encodeURIComponent(missionId) +
+              '/outcome-studio/scenarios/' +
+              encodeURIComponent(scenario.scenarioId) +
+              '/runs',
+            {
+              method: 'POST',
+              body: JSON.stringify({
+                targetStageId: selectedTarget[0],
+                targetProfileDefinitionId: selectedTarget[1],
+              }),
+            },
+          );
+          await loadDetail(missionId, { quiet: true });
+          showPageAlert(t('outcomeStudio.rerunFinished'));
+        } catch (error) {
+          showPageAlert(messageText(errorMessage(error, t('outcomeStudio.rerunUnavailable'))));
+          runButton.disabled = false;
+        }
+      });
+      item.append(runButton);
+      records.append(item);
+    });
+    scenarioCard.append(records);
+  }
+  grid.append(scenarioCard);
+
   const actions = createElement('div', 'detail-actions');
   const save = createElement('button', 'continuity-action', t('outcomeStudio.saveScenario'));
   save.type = 'button';
-  save.disabled = !(incident && ci);
+  save.disabled = !incident;
   save.addEventListener('click', async function () {
-    if (!(incident && ci)) {
+    if (!incident) {
       showPageAlert(t('outcomeStudio.scenarioUnavailable'));
       return;
     }
@@ -4893,11 +5602,52 @@ function renderOutcomeStudio(detail, missionId) {
         '/api/v1/missions/' + encodeURIComponent(missionId) + '/outcome-studio/scenarios',
         { method: 'POST', body: JSON.stringify({ branchId: branch?.branchId || undefined }) },
       );
+      await loadDetail(missionId, { quiet: true });
       showPageAlert(t('outcomeStudio.scenarioSaved'));
     } catch (error) {
       showPageAlert(messageText(errorMessage(error, t('outcomeStudio.scenarioUnavailable'))));
     } finally {
-      save.disabled = !(incident && ci);
+      save.disabled = !incident;
+    }
+  });
+  const selected = selections.some(function (selectionRecord) {
+    const selection = recordValue(selectionRecord);
+    return selection && selection.branchId === branch?.branchId;
+  });
+  const select = createElement(
+    'button',
+    'continuity-action is-secondary',
+    selected ? t('outcomeStudio.branchSelected') : t('outcomeStudio.selectBranch'),
+  );
+  select.type = 'button';
+  select.disabled =
+    selected ||
+    !comparison ||
+    studioReceipt?.completion?.verified !== 'verified' ||
+    typeof branch?.branchId !== 'string';
+  select.addEventListener('click', async function () {
+    if (typeof branch?.branchId !== 'string') {
+      showPageAlert(t('outcomeStudio.selectionUnavailable'));
+      return;
+    }
+    select.disabled = true;
+    try {
+      await requestJson(
+        '/api/v1/missions/' + encodeURIComponent(missionId) + '/outcome-studio/selections',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            branchId: branch.branchId,
+            authorityKind: 'human',
+            authorityRef: 'workbench:local-user',
+          }),
+        },
+      );
+      await loadDetail(missionId, { quiet: true });
+      showPageAlert(t('outcomeStudio.branchSelected'));
+    } catch (error) {
+      showPageAlert(messageText(errorMessage(error, t('outcomeStudio.selectionUnavailable'))));
+      select.disabled = false;
     }
   });
   const exportButton = createElement('button', 'continuity-action is-secondary', t('outcomeStudio.exportScenarios'));
@@ -4906,9 +5656,8 @@ function renderOutcomeStudio(detail, missionId) {
     window.location.href =
       '/api/v1/missions/' + encodeURIComponent(missionId) + '/outcome-studio/scenarios/export';
   });
-  actions.append(save, exportButton);
-  section.append(actions);
-  section.prepend(heading);
+  actions.append(select, save, exportButton);
+  section.append(heading, grid, actions);
   return section;
 }
 
@@ -5085,6 +5834,536 @@ function renderContinuityWorkbench(detail, missionId, receipt) {
   return section;
 }
 
+const PLAN_NODE_STATUS_KEYS = {
+  ready: 'missionPlan.ready',
+  running: 'missionPlan.running',
+  succeeded: 'missionPlan.succeeded',
+  failed: 'missionPlan.failed',
+  stale: 'missionPlan.stale',
+  blocked: 'missionPlan.blocked',
+  'waiting-join': 'missionPlan.waitingJoin',
+  unknown: 'missionPlan.unknown',
+};
+
+const PLAN_NODE_KIND_KEYS = {
+  task: 'missionPlan.kind.task',
+  review: 'missionPlan.kind.review',
+  diagnostic: 'missionPlan.kind.diagnostic',
+  branch: 'missionPlan.kind.branch',
+  join: 'missionPlan.kind.join',
+};
+
+function planStageId(node) {
+  const value = recordValue(node) || {};
+  const evidenceRefs = Array.isArray(value.provenanceEvidenceRefs)
+    ? value.provenanceEvidenceRefs
+    : [];
+  const reference = evidenceRefs.find(function (candidate) {
+    return typeof candidate === 'string' && candidate.startsWith('stage:');
+  });
+  return reference ? reference.slice('stage:'.length) : value.nodeId;
+}
+
+function planFact(labelKey, value) {
+  const row = createElement('div', 'mission-plan-fact');
+  const label = createElement('strong', '', t(labelKey));
+  const content = createElement('span', '', displayValue(value));
+  if (typeof value === 'string') content.title = value;
+  row.append(label, content);
+  return row;
+}
+
+function planStatus(status) {
+  const normalized = PLAN_NODE_STATUS_KEYS[status] ? status : 'unknown';
+  return createElement(
+    'span',
+    'mission-plan-status is-' + normalized,
+    t(PLAN_NODE_STATUS_KEYS[normalized]),
+  );
+}
+
+function planNodeHarness(node, attempts, detail) {
+  const latestAttempt = attempts.at(-1);
+  if (latestAttempt && typeof latestAttempt.harness === 'string') return latestAttempt.harness;
+  const planner = recordValue(detail.executionPlanner) || {};
+  const candidates = Array.isArray(planner.candidates) ? planner.candidates : [];
+  const stageId = planStageId(node);
+  const candidate = candidates.find(function (item) {
+    const value = recordValue(item);
+    return value && value.stageId === stageId;
+  });
+  const profile = candidate ? recordValue(candidate.profileDefinition) : null;
+  return profile && typeof profile.harness === 'string'
+    ? profile.harness
+    : t('intelligence.unknown');
+}
+
+function contractWithRequirementStatements(contract, requirements) {
+  const value = recordValue(contract) || {};
+  const byId = new Map(
+    requirements.map(function (requirement) {
+      return [requirement.requirementId, requirement.statement];
+    }),
+  );
+  const acceptanceCriteria = Array.isArray(value.acceptanceCriteria)
+    ? value.acceptanceCriteria.map(function (criterion) {
+        const criterionValue = recordValue(criterion) || {};
+        const criterionId = criterionValue.criterionId;
+        const statement =
+          typeof criterionId === 'string' ? byId.get('acceptance-' + criterionId) : undefined;
+        return statement === undefined ? criterionValue : { ...criterionValue, description: statement };
+      })
+    : [];
+  const constraints = Array.isArray(value.constraints)
+    ? value.constraints.map(function (constraint, index) {
+        return byId.get('constraint-' + String(index + 1)) ?? constraint;
+      })
+    : [];
+  return {
+    ...value,
+    objective: byId.get('objective') ?? value.objective,
+    constraints: constraints,
+    acceptanceCriteria: acceptanceCriteria,
+  };
+}
+
+function renderPlanRequirementEditor(planView, missionId) {
+  const contractRevision = recordValue(planView.contractRevision) || {};
+  const requirements = Array.isArray(contractRevision.requirements)
+    ? contractRevision.requirements.map(function (requirement) {
+        return recordValue(requirement) || {};
+      })
+    : [];
+  const section = createElement('section', 'mission-plan-requirements');
+  section.append(
+    createElement('h4', '', t('missionPlan.requirementsHeading')),
+    createElement('p', '', t('missionPlan.requirementsDescription')),
+  );
+  if (requirements.length === 0) return section;
+
+  const form = createElement('form', '');
+  const list = createElement('div', 'mission-plan-requirement-list');
+  const inputs = requirements.map(function (requirement) {
+    const label = createElement('label', 'mission-plan-requirement');
+    label.append(
+      createElement(
+        'span',
+        '',
+        t('missionPlan.requirementStatement', {
+          id: requirement.requirementId || t('intelligence.unknown'),
+          kind: requirement.kind || t('intelligence.unknown'),
+        }),
+      ),
+    );
+    const input = document.createElement('textarea');
+    input.rows = 2;
+    input.value = typeof requirement.statement === 'string' ? requirement.statement : '';
+    input.dataset.requirementId = String(requirement.requirementId || '');
+    label.append(input);
+    list.append(label);
+    return input;
+  });
+  const reason = document.createElement('input');
+  reason.type = 'text';
+  reason.className = 'mission-plan-revision-reason';
+  reason.placeholder = t('missionPlan.revisionReasonPlaceholder');
+  const submit = createElement('button', 'continuity-action', t('missionPlan.submitRevision'));
+  submit.type = 'submit';
+  const actions = createElement('div', 'mission-plan-revision-actions');
+  actions.append(reason, submit);
+  const status = createElement('p', 'continuity-status', '');
+  status.setAttribute('aria-live', 'polite');
+  form.append(list, actions, status);
+  form.addEventListener('submit', async function (event) {
+    event.preventDefault();
+    const nextRequirements = requirements.map(function (requirement, index) {
+      return { ...requirement, statement: inputs[index].value.trim() };
+    });
+    const revisionReason = reason.value.trim();
+    if (
+      revisionReason.length === 0 ||
+      nextRequirements.some(function (requirement) {
+        return requirement.statement.length === 0;
+      })
+    ) {
+      status.textContent = t('missionPlan.revisionRequired');
+      return;
+    }
+    const changed = nextRequirements.some(function (requirement, index) {
+      return requirement.statement !== requirements[index].statement;
+    });
+    if (!changed) {
+      status.textContent = t('missionPlan.revisionUnchanged');
+      return;
+    }
+    submit.disabled = true;
+    status.textContent = t('missionPlan.revisionSaving');
+    try {
+      const nextContract = contractWithRequirementStatements(
+        contractRevision.contract,
+        nextRequirements,
+      );
+      await requestJson(
+        '/api/v1/missions/' + encodeURIComponent(missionId) + '/contract-revisions',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            contract: nextContract,
+            requirements: nextRequirements,
+            reason: revisionReason,
+            evidenceRefs: ['workbench:contract-revision'],
+          }),
+        },
+      );
+      status.textContent = t('missionPlan.revisionSaved');
+      showPageAlert(translated('missionPlan.revisionSaved'));
+      await loadDetail(missionId, { quiet: true });
+    } catch (error) {
+      status.textContent = messageText(errorMessage(error, 'missionPlan.revisionFailed'));
+      showPageAlert(errorMessage(error, 'missionPlan.revisionFailed'));
+    } finally {
+      if (submit.isConnected) submit.disabled = false;
+    }
+  });
+  section.append(form);
+  return section;
+}
+
+function renderPlanNode(node, runtimeNode, execution, detail) {
+  const nodeValue = recordValue(node) || {};
+  const nodeId = String(nodeValue.nodeId || '');
+  const attempts = execution.attempts.filter(function (attempt) {
+    const value = recordValue(attempt);
+    return value && value.nodeId === nodeId;
+  });
+  const artifacts = execution.artifacts.filter(function (record) {
+    const value = recordValue(record);
+    const artifact = value ? recordValue(value.artifact) : null;
+    return artifact && artifact.producedByNodeId === nodeId;
+  });
+  const fences = execution.fences.filter(function (fence) {
+    const value = recordValue(fence);
+    return value && value.nodeId === nodeId;
+  });
+  const status = runtimeNode && typeof runtimeNode.status === 'string'
+    ? runtimeNode.status
+    : 'unknown';
+  const card = createElement('article', 'mission-plan-node');
+  const heading = createElement('div', 'mission-plan-node-heading');
+  const headingText = createElement('div');
+  headingText.append(
+    createElement('h5', '', nodeValue.title || nodeId || t('intelligence.unknown')),
+    createElement('p', 'mission-plan-node-id', nodeId),
+  );
+  heading.append(headingText, planStatus(status));
+  const facts = createElement('div', 'mission-plan-facts');
+  facts.append(
+    planFact('missionPlan.field.kind', t(PLAN_NODE_KIND_KEYS[nodeValue.kind] || 'missionPlan.unknown')),
+    planFact('missionPlan.field.harness', planNodeHarness(nodeValue, attempts, detail)),
+    planFact('missionPlan.field.stage', planStageId(nodeValue)),
+    planFact('missionPlan.field.nodeVersion', nodeValue.nodeVersion),
+    planFact('missionPlan.field.requirements', nodeValue.requirementIds),
+  );
+  card.append(heading, facts);
+
+  const attemptEvidence = createElement('div', 'mission-plan-evidence');
+  if (attempts.length === 0) {
+    attemptEvidence.append(
+      planFact('missionPlan.field.attempt', t('missionPlan.notStarted')),
+      planFact('missionPlan.field.branch', t('missionPlan.notStarted')),
+    );
+  } else {
+    attempts.forEach(function (attempt) {
+      const value = recordValue(attempt) || {};
+      attemptEvidence.append(
+        planFact(
+          'missionPlan.field.attempt',
+          displayValue(value.attemptId) + ' · ' + displayValue(value.status),
+        ),
+        planFact('missionPlan.field.branch', value.branchId),
+        planFact(
+          'missionPlan.field.binding',
+          displayValue(value.contractRevisionId) + ' · ' + displayValue(value.planRevisionId),
+        ),
+      );
+    });
+  }
+  card.append(attemptEvidence);
+
+  const artifactEvidence = createElement(
+    'div',
+    'mission-plan-evidence' +
+      (artifacts.some(function (record) {
+        return Boolean(recordValue(record)?.reusedFromArtifactId);
+      })
+        ? ' is-reused'
+        : ''),
+  );
+  if (artifacts.length === 0) {
+    artifactEvidence.append(planFact('missionPlan.field.artifact', t('missionPlan.noArtifact')));
+  } else {
+    artifacts.forEach(function (record) {
+      const value = recordValue(record) || {};
+      const artifact = recordValue(value.artifact) || {};
+      const reused = typeof value.reusedFromArtifactId === 'string';
+      artifactEvidence.append(
+        planFact('missionPlan.field.artifact', artifact.artifactId),
+        createElement(
+          'p',
+          '',
+          reused
+            ? t('missionPlan.reusedFrom', { artifactId: value.reusedFromArtifactId })
+            : t('missionPlan.artifactOriginal'),
+        ),
+        planFact('missionPlan.field.changedPaths', value.changedPaths),
+      );
+      if (reused) {
+        artifactEvidence.append(createElement('p', '', t('missionPlan.artifactReused')));
+      }
+    });
+  }
+  card.append(artifactEvidence);
+
+  const fenceEvidence = createElement('div', 'mission-plan-evidence');
+  if (fences.length === 0) {
+    fenceEvidence.append(planFact('missionPlan.field.fence', t('missionPlan.noFence')));
+  } else {
+    fences.forEach(function (fence) {
+      const value = recordValue(fence) || {};
+      fenceEvidence.append(
+        planFact('missionPlan.field.fence', value.fenceId),
+        createElement(
+          'p',
+          '',
+          t('missionPlan.fenceSummary', {
+            reason: value.reason || t('intelligence.unknown'),
+            action: value.action || t('intelligence.unknown'),
+          }),
+        ),
+      );
+    });
+  }
+  card.append(fenceEvidence);
+  return card;
+}
+
+function sourceHistoryPreserved(consolidation) {
+  const value = recordValue(consolidation) || {};
+  const before = recordValue(value.sourceCommitsBefore);
+  const after = recordValue(value.sourceCommitsAfter);
+  if (!before || !after) return null;
+  const entries = Object.entries(before);
+  return entries.length > 0 && entries.every(function (entry) {
+    return after[entry[0]] === entry[1];
+  });
+}
+
+function receiptMatchesPlan(receipt, planView) {
+  const value = recordValue(receipt);
+  const contractRevision = recordValue(planView.contractRevision) || {};
+  const planRevision = recordValue(planView.planRevision) || {};
+  return Boolean(
+    value &&
+      value.outcome === 'verified' &&
+      value.contractRevisionId === contractRevision.contractRevisionId &&
+      value.planRevisionId === planRevision.planRevisionId,
+  );
+}
+
+function renderPlanConsolidation(planView, execution, receipt) {
+  const section = createElement('section', 'mission-plan-consolidation-section');
+  section.append(createElement('h4', '', t('missionPlan.consolidationHeading')));
+  const grid = createElement('div', 'mission-plan-consolidation-grid');
+  if (execution.consolidations.length === 0) {
+    const pending = createElement('article', 'mission-plan-consolidation');
+    pending.append(createElement('p', '', t('missionPlan.consolidationPending')));
+    grid.append(pending);
+  } else {
+    execution.consolidations.forEach(function (consolidation) {
+      const value = recordValue(consolidation) || {};
+      const plan = recordValue(value.plan) || {};
+      const outcome = recordValue(value.outcome);
+      const preserved = sourceHistoryPreserved(value);
+      const card = createElement('article', 'mission-plan-consolidation');
+      const heading = createElement('div', 'mission-plan-consolidation-heading');
+      heading.append(
+        createElement(
+          'h5',
+          '',
+          t('missionPlan.consolidationId', {
+            id: plan.consolidationId || t('intelligence.unknown'),
+          }),
+        ),
+        planStatus(outcome && outcome.conclusion === 'confirmed' ? 'succeeded' : 'running'),
+      );
+      const facts = createElement('div', 'mission-plan-facts');
+      facts.append(
+        planFact('missionPlan.field.attempt', recordValue(plan.attempt)?.attemptId),
+        planFact('missionPlan.field.branch', recordValue(plan.branch)?.branchId),
+        planFact('missionPlan.consolidationSources', value.sourceArtifactIds),
+        planFact(
+          'missionPlan.consolidationStatus',
+          outcome ? outcome.conclusion : t('missionPlan.running'),
+        ),
+        planFact(
+          'missionPlan.sourceHistory',
+          preserved === true
+            ? t('missionPlan.sourceHistoryPreserved')
+            : t('missionPlan.sourceHistoryUnknown'),
+        ),
+      );
+      card.append(heading, facts);
+      grid.append(card);
+    });
+  }
+
+  const receiptCard = createElement('article', 'mission-plan-receipt');
+  receiptCard.append(createElement('h5', '', t('missionPlan.receiptHeading')));
+  const receiptValue = recordValue(receipt);
+  if (!receiptValue) {
+    receiptCard.append(createElement('p', '', t('missionPlan.receiptPending')));
+  } else {
+    receiptCard.append(
+      planFact('missionPlan.receiptHeading', receiptValue.receiptId),
+      createElement(
+        'p',
+        '',
+        receiptMatchesPlan(receiptValue, planView)
+          ? t('missionPlan.receiptCurrent')
+          : t('missionPlan.receiptDifferent'),
+      ),
+      planFact(
+        'missionPlan.field.binding',
+        displayValue(receiptValue.contractRevisionId) +
+          ' · ' +
+          displayValue(receiptValue.planRevisionId),
+      ),
+    );
+  }
+  grid.append(receiptCard);
+  section.append(grid);
+  return section;
+}
+
+function renderMissionPlanWorkbench(
+  detail,
+  planView,
+  missionId,
+  operationRunning,
+  operationQueued,
+  receipt,
+) {
+  const contractRevision = recordValue(planView.contractRevision) || {};
+  const planRevision = recordValue(planView.planRevision) || {};
+  const nodes = Array.isArray(planRevision.nodes) ? planRevision.nodes : [];
+  const runtime = recordValue(detail.missionPlanRuntime) || {};
+  const runtimeNodes = Array.isArray(runtime.nodes) ? runtime.nodes : [];
+  const executionValue = recordValue(planView.execution) || {};
+  const execution = {
+    attempts: Array.isArray(executionValue.attempts) ? executionValue.attempts : [],
+    artifacts: Array.isArray(executionValue.artifacts) ? executionValue.artifacts : [],
+    fences: Array.isArray(executionValue.fences) ? executionValue.fences : [],
+    consolidations: Array.isArray(executionValue.consolidations)
+      ? executionValue.consolidations
+      : [],
+  };
+  const section = createElement('section', 'mission-plan-workbench');
+  section.dataset.missionPlanWorkbench = missionId;
+  const heading = createElement('div', 'mission-plan-heading');
+  const headingText = createElement('div');
+  headingText.append(
+    createElement('p', 'eyebrow', t('missionPlan.eyebrow')),
+    createElement('h3', '', t('missionPlan.heading')),
+    createElement('p', 'continuity-description', t('missionPlan.description')),
+  );
+  heading.append(headingText);
+  section.append(heading);
+
+  const versions = createElement('div', 'mission-plan-version-grid');
+  versions.append(
+    createElement(
+      'article',
+      'mission-plan-version',
+      t('missionPlan.contractIdentity', {
+        number: contractRevision.revisionNumber ?? '—',
+        id: contractRevision.contractRevisionId ?? '—',
+      }),
+    ),
+    createElement(
+      'article',
+      'mission-plan-version',
+      t('missionPlan.planIdentity', {
+        number: planRevision.revisionNumber ?? '—',
+        id: planRevision.planRevisionId ?? '—',
+      }),
+    ),
+  );
+  section.append(versions);
+
+  const capabilities = recordValue(detail.capabilities) || {};
+  const explicitPlan = nodes.some(function (node) {
+    return recordValue(recordValue(node)?.workspace)?.access === 'isolated-writable';
+  });
+  const canExecute = capabilities.executeMissionPlan === true && explicitPlan;
+  const currentReceipt = receiptMatchesPlan(receipt, planView);
+  const runRow = createElement('div', 'mission-plan-run-row');
+  const run = createElement(
+    'button',
+    'continuity-action',
+    operationRunning
+      ? t('missionPlan.runRunning')
+      : currentReceipt
+        ? t('missionPlan.runComplete')
+        : t('missionPlan.run'),
+  );
+  run.type = 'button';
+  run.disabled = operationRunning || operationQueued || currentReceipt || !canExecute;
+  const runStatus = createElement(
+    'p',
+    'continuity-status',
+    canExecute ? '' : t('missionPlan.runUnavailable'),
+  );
+  runStatus.setAttribute('aria-live', 'polite');
+  run.addEventListener('click', async function () {
+    run.disabled = true;
+    runStatus.textContent = t('missionPlan.runRunning');
+    showPageAlert(null);
+    try {
+      await requestJson(
+        '/api/v1/missions/' + encodeURIComponent(missionId) + '/plan/execute',
+        { method: 'POST', body: JSON.stringify({}) },
+      );
+      runStatus.textContent = t('missionPlan.runAccepted');
+      showPageAlert(translated('missionPlan.runAccepted'));
+      await loadDetail(missionId, { quiet: true });
+    } catch (error) {
+      runStatus.textContent = messageText(errorMessage(error, 'missionPlan.runFailed'));
+      showPageAlert(errorMessage(error, 'missionPlan.runFailed'));
+    } finally {
+      if (run.isConnected) run.disabled = operationRunning || operationQueued || !canExecute;
+    }
+  });
+  runRow.append(run, runStatus);
+  section.append(runRow, renderPlanRequirementEditor(planView, missionId));
+
+  const nodeSection = createElement('section', 'mission-plan-nodes');
+  nodeSection.append(
+    createElement('h4', '', t('missionPlan.nodesHeading')),
+    createElement('p', 'empty-note', t('missionPlan.nodeCount', { count: nodes.length })),
+  );
+  const nodeGrid = createElement('div', 'mission-plan-node-grid');
+  nodes.forEach(function (node) {
+    const nodeValue = recordValue(node) || {};
+    const runtimeNode = runtimeNodes.find(function (candidate) {
+      return recordValue(candidate)?.nodeId === nodeValue.nodeId;
+    });
+    nodeGrid.append(renderPlanNode(nodeValue, recordValue(runtimeNode), execution, detail));
+  });
+  nodeSection.append(nodeGrid);
+  section.append(nodeSection, renderPlanConsolidation(planView, execution, receipt));
+  return section;
+}
+
 function renderDetail() {
   if (!state.detail) {
     replaceWithMessage(elements.missionDetail, 'empty-note', t('mission.detailLoading'));
@@ -5118,6 +6397,12 @@ function renderDetail() {
         ? 'interrupted'
         : status;
   const contract = mission.contract && typeof mission.contract === 'object' ? mission.contract : {};
+  const planView = recordValue(detail.missionPlan);
+  const planRevision = recordValue(planView?.planRevision);
+  const explicitPlanNodes = Array.isArray(planRevision?.nodes) ? planRevision.nodes : [];
+  const hasExplicitPlan = explicitPlanNodes.some(function (node) {
+    return recordValue(recordValue(node)?.workspace)?.access === 'isolated-writable';
+  });
   const objective =
     typeof contract.objective === 'string'
       ? contract.objective
@@ -5161,7 +6446,7 @@ function renderDetail() {
   verify.addEventListener('click', function () {
     runMissionAction('verify', verify);
   });
-  actions.append(resume, verify);
+  if (!hasExplicitPlan) actions.append(resume, verify);
   hero.append(titleRow, objectiveNode);
   if (operationInterrupted) {
     hero.append(
@@ -5179,65 +6464,7 @@ function renderDetail() {
   if (operationQueued || status === 'queued') {
     hero.append(createElement('p', 'operation-note', t('mission.commandQueued')));
   }
-  hero.append(actions);
-
-  const planView = detail.missionPlan && typeof detail.missionPlan === 'object' ? detail.missionPlan : null;
-  if (planView) {
-    const planSection = createElement('section', 'continuity-group');
-    planSection.append(
-      createElement('p', 'eyebrow', t('missionPlan.eyebrow')),
-      createElement('h3', '', t('missionPlan.heading')),
-      createElement(
-        'p',
-        'continuity-description',
-        t('missionPlan.revision', {
-          contract: String(planView.contractRevision?.revisionNumber ?? '—'),
-          plan: String(planView.planRevision?.revisionNumber ?? '—'),
-        }),
-      ),
-    );
-    const nodes = Array.isArray(planView.planRevision?.nodes) ? planView.planRevision.nodes : [];
-    planSection.append(
-      createElement('p', 'empty-note', t('missionPlan.nodeCount', { count: nodes.length })),
-    );
-    const runtime = detail.missionPlanRuntime && typeof detail.missionPlanRuntime === 'object'
-      ? detail.missionPlanRuntime
-      : null;
-    if (runtime) {
-      const runtimeRecord = recordValue(runtime) || {};
-      const runtimeFacts = [
-        [t('missionPlan.ready'), runtimeRecord.readyNodeIds],
-        [t('missionPlan.running'), runtimeRecord.runningNodeIds],
-        [t('missionPlan.stale'), runtimeRecord.staleNodeIds],
-        [t('missionPlan.blocked'), runtimeRecord.blockedNodeIds],
-        [t('missionPlan.unknown'), runtimeRecord.unknownNodeIds],
-      ]
-        .map(([label, value]) => String(label) + ': ' + displayValue(value))
-        .join(' · ');
-      planSection.append(
-        createElement('p', 'continuity-label', t('missionPlan.runtimeSummary')),
-        createElement('p', 'empty-note', runtimeFacts),
-      );
-    }
-    const revise = createElement('button', 'continuity-action', t('missionPlan.revise'));
-    revise.type = 'button';
-    revise.addEventListener('click', async function () {
-      const reason = window.prompt(t('missionPlan.revisionReason'));
-      if (!reason) return;
-      try {
-        const contract = planView.contractRevision.contract;
-        await requestJson('/api/v1/missions/' + encodeURIComponent(missionId) + '/contract-revisions', {
-          method: 'POST', headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ contract, requirements: planView.contractRevision.requirements, reason }),
-        });
-        await loadDetail(missionId, { quiet: true });
-      } catch (error) {
-        showPageAlert(messageText(errorMessage(error, t('missionPlan.revisionFailed'))));
-      }
-    });
-    planSection.append(revise);
-    hero.append(planSection);
-  }
+  if (!hasExplicitPlan) hero.append(actions);
 
   const timeline = timelineFromDetail(detail);
   const timelineSection = createElement('section', 'timeline-section');
@@ -5283,6 +6510,18 @@ function renderDetail() {
   const receipt = receiptFromDetail(detail, mission);
   if (receipt) timelineSection.append(renderReceipt(receipt));
   content.append(hero);
+  if (planView) {
+    content.append(
+      renderMissionPlanWorkbench(
+        detail,
+        planView,
+        missionId,
+        operationRunning,
+        operationQueued,
+        receipt,
+      ),
+    );
+  }
   const toolGates = renderToolGates(detail.toolGates, missionId);
   if (toolGates) content.append(toolGates);
   content.append(renderContinuityWorkbench(detail, missionId, receipt));
@@ -5411,12 +6650,34 @@ function openEventStream(missionId) {
   });
 }
 
-function routeStages(route) {
+function routeStages(route, planDefinition) {
+  const externalAdapter = adapterForRoute(route);
+  if (externalAdapter) {
+    const providerWorkspaceRef = fieldValue('#provider-workspace-ref');
+    if (externalAdapter.transport === 'provider-backed' && !providerWorkspaceRef) {
+      throw localizedError('validation.providerWorkspaceRequired');
+    }
+    return [
+      {
+        stageId: 'adapter-primary',
+        harness: externalAdapter.harnessId,
+        adapterId: externalAdapter.adapterId,
+        model: 'default',
+        permissionMode: 'adapter-default',
+        injectionBudgetTokens: 1600,
+        ...(providerWorkspaceRef ? { providerWorkspaceRef: providerWorkspaceRef } : {}),
+      },
+    ];
+  }
   const usesCodex =
     route === 'codex' || route === 'codex-qoder' || route === 'codex-qoder-claude';
   const usesQoder =
-    route === 'qoder' || route === 'codex-qoder' || route === 'codex-qoder-claude';
-  const usesClaude = route === 'claude' || route === 'codex-qoder-claude';
+    route === 'qoder' ||
+    route === 'codex-qoder' ||
+    route === 'codex-qoder-claude' ||
+    route === 'mission-plan';
+  const usesClaude =
+    route === 'claude' || route === 'codex-qoder-claude' || route === 'mission-plan';
   const codexModel = usesCodex
     ? requiredValue('#codex-model', 'validation.codexModelRequired')
     : '';
@@ -5462,6 +6723,52 @@ function routeStages(route) {
       ? { breakpoint: 'mutable-tools' }
       : {}),
   };
+  if (route === 'mission-plan') {
+    if (!planDefinition) throw localizedError('validation.planRequirementsRequired');
+    return [
+      {
+        stageId: 'qoder-workstream',
+        harness: qoder.harness,
+        model: qoder.model,
+        reasoningEffort: qoder.reasoningEffort,
+        permissionMode: qoder.permissionMode,
+        injectionBudgetTokens: qoder.injectionBudgetTokens,
+        instruction:
+          'Complete only Workstream A. Contract requirement: ' +
+          planDefinition.requirementA +
+          '. Change only these declared output paths: ' +
+          planDefinition.outputsA.join(', ') +
+          '. Leave the isolated worktree ready for its deterministic verifier.',
+      },
+      {
+        stageId: 'claude-workstream',
+        harness: claude.harness,
+        model: claude.model,
+        reasoningEffort: claude.reasoningEffort,
+        permissionMode: claude.permissionMode,
+        injectionBudgetTokens: claude.injectionBudgetTokens,
+        instruction:
+          'Complete only Workstream B. Contract requirement: ' +
+          planDefinition.requirementB +
+          '. Change only these declared output paths: ' +
+          planDefinition.outputsB.join(', ') +
+          '. Leave the isolated worktree ready for its deterministic verifier.',
+        ...(claude.breakpoint ? { breakpoint: claude.breakpoint } : {}),
+      },
+      {
+        stageId: 'qoder-consolidation',
+        harness: qoder.harness,
+        model: qoder.model,
+        reasoningEffort: qoder.reasoningEffort,
+        permissionMode: qoder.permissionMode,
+        injectionBudgetTokens: qoder.injectionBudgetTokens,
+        instruction:
+          'Integrate both controller-materialized, verified source artifacts. Do not alter their source files. Change only these consolidation output paths: ' +
+          planDefinition.consolidationOutputs.join(', ') +
+          '. Leave the integrated worktree ready for the final deterministic verifier.',
+      },
+    ];
+  }
   if (route === 'codex') return [codex];
   if (route === 'qoder') {
     return [
@@ -5497,8 +6804,88 @@ function selectedRoute() {
   return checked ? checked.value : 'codex-qoder';
 }
 
+function adapterForRoute(route) {
+  if (typeof route !== 'string' || !route.startsWith('adapter:')) return null;
+  const adapterId = route.slice('adapter:'.length);
+  return (
+    state.adapters.find(function (adapter) {
+      return adapter && adapter.adapterId === adapterId;
+    }) || null
+  );
+}
+
+function adapterRuntimeEntry(manifest) {
+  const names = {
+    observe: 'observe',
+    interrupt: 'interrupt',
+    steer: 'steer',
+    'pre-tool-gate': 'pre_tool_gate',
+    resume: 'resume',
+    'native-fork': 'native_fork',
+    'workspace-restore': 'workspace_restore',
+    'external-effect-control': 'external_effect_control',
+  };
+  const declarations = {};
+  Object.keys(names).forEach(function (name) {
+    const declaration = recordValue(manifest.capabilities && manifest.capabilities[name]);
+    if (!declaration) return;
+    declarations[names[name]] = {
+      status: declaration.status,
+      control: declaration.fidelity === 'unsupported' ? 'none' : declaration.fidelity,
+      detail: declaration.detail,
+    };
+  });
+  return {
+    id: manifest.harnessId,
+    displayName: manifest.displayName,
+    version: manifest.adapterVersion,
+    status: 'adapter-loaded',
+    path: manifest.adapterId + ' · ' + manifest.transport,
+    capabilityDeclarations: declarations,
+  };
+}
+
+function renderAdapterRoutes() {
+  const selected = selectedRoute();
+  const fragment = document.createDocumentFragment();
+  state.adapters.forEach(function (adapter, index) {
+    if (!adapter || typeof adapter.adapterId !== 'string') return;
+    const input = createElement('input');
+    const id = 'route-adapter-' + String(index);
+    input.id = id;
+    input.name = 'route';
+    input.type = 'radio';
+    input.value = 'adapter:' + adapter.adapterId;
+    input.checked = input.value === selected;
+    input.addEventListener('change', renderRouteSummary);
+    const label = createElement('label', 'route-option route-option-wide');
+    label.setAttribute('for', id);
+    label.append(
+      createElement('strong', '', adapter.displayName || adapter.harnessId || adapter.adapterId),
+      createElement(
+        'small',
+        '',
+        (adapter.harnessId || adapter.adapterId) + ' · ' + (adapter.transport || 'adapter'),
+      ),
+    );
+    fragment.append(input, label);
+  });
+  elements.externalAdapterRoutes.replaceChildren(fragment);
+  if (selected.startsWith('adapter:') && !adapterForRoute(selected)) {
+    const fallback = elements.form.querySelector('#route-braid');
+    if (fallback) fallback.checked = true;
+  }
+  renderRouteSummary();
+}
+
 function renderRouteSummary() {
   const route = selectedRoute();
+  const externalAdapter = adapterForRoute(route);
+  const isMissionPlan = route === 'mission-plan';
+  elements.planComposer.hidden = !isMissionPlan;
+  const createLabelKey = isMissionPlan ? 'form.createPlan' : 'form.createAndRun';
+  elements.createButtonLabel.setAttribute('data-i18n', createLabelKey);
+  elements.createButtonLabel.textContent = t(createLabelKey);
   const codexModel = fieldValue('#codex-model') || t('route.modelUnset');
   const codexReasoning = fieldValue('#codex-reasoning') || t('route.reasoningUnset');
   const qoderModel = fieldValue('#qoder-model') || t('route.modelUnset');
@@ -5511,34 +6898,64 @@ function renderRouteSummary() {
       profile === 'codex'
         ? route === 'codex' || route === 'codex-qoder' || route === 'codex-qoder-claude'
         : profile === 'qoder'
-          ? route === 'qoder' || route === 'codex-qoder' || route === 'codex-qoder-claude'
-          : route === 'claude' || route === 'codex-qoder-claude';
+          ? route === 'qoder' ||
+            route === 'codex-qoder' ||
+            route === 'codex-qoder-claude' ||
+            isMissionPlan
+          : route === 'claude' || route === 'codex-qoder-claude' || isMissionPlan;
     editor.hidden = !visible;
   });
+  elements.providerWorkspaceField.hidden =
+    !externalAdapter || externalAdapter.transport !== 'provider-backed';
   const parts = [];
-  if (route === 'codex' || route === 'codex-qoder' || route === 'codex-qoder-claude') {
+  if (externalAdapter) {
     parts.push({
-      className: 'route-thread route-thread-codex',
-      text: 'Codex · ' + codexModel + ' · ' + codexReasoning,
+      className: 'route-thread',
+      text:
+        (externalAdapter.displayName || externalAdapter.adapterId) +
+        ' · ' +
+        externalAdapter.harnessId,
     });
-  }
-  if (route === 'codex-qoder' || route === 'codex-qoder-claude') {
-    parts.push({ className: 'route-arrow', text: '→' });
-  }
-  if (route === 'qoder' || route === 'codex-qoder' || route === 'codex-qoder-claude') {
+  } else if (isMissionPlan) {
     parts.push({
       className: 'route-thread route-thread-qoder',
       text: 'Qoder · ' + qoderModel + ' · ' + qoderReasoning,
     });
-  }
-  if (route === 'codex-qoder-claude') {
-    parts.push({ className: 'route-arrow', text: '→' });
-  }
-  if (route === 'claude' || route === 'codex-qoder-claude') {
+    parts.push({ className: 'route-arrow', text: '∥' });
     parts.push({
       className: 'route-thread route-thread-claude',
       text: 'Claude · ' + claudeModel + ' · ' + claudeReasoning,
     });
+    parts.push({ className: 'route-arrow', text: '→' });
+    parts.push({
+      className: 'route-thread route-thread-qoder',
+      text: 'Qoder · ' + t('route.consolidation'),
+    });
+  } else {
+    if (route === 'codex' || route === 'codex-qoder' || route === 'codex-qoder-claude') {
+      parts.push({
+        className: 'route-thread route-thread-codex',
+        text: 'Codex · ' + codexModel + ' · ' + codexReasoning,
+      });
+    }
+    if (route === 'codex-qoder' || route === 'codex-qoder-claude') {
+      parts.push({ className: 'route-arrow', text: '→' });
+    }
+    if (route === 'qoder' || route === 'codex-qoder' || route === 'codex-qoder-claude') {
+      parts.push({
+        className: 'route-thread route-thread-qoder',
+        text: 'Qoder · ' + qoderModel + ' · ' + qoderReasoning,
+      });
+    }
+    if (route === 'codex-qoder-claude') {
+      parts.push({ className: 'route-arrow', text: '→' });
+    }
+    if (route === 'claude' || route === 'codex-qoder-claude') {
+      parts.push({
+        className: 'route-thread route-thread-claude',
+        text: 'Claude · ' + claudeModel + ' · ' + claudeReasoning,
+      });
+    }
   }
   const fragment = document.createDocumentFragment();
   parts.forEach(function (part) {
@@ -5570,6 +6987,133 @@ function fieldValue(selector) {
   return field && typeof field.value === 'string' ? field.value.trim() : '';
 }
 
+function fieldLines(selector) {
+  const field = elements.form.querySelector(selector);
+  return String(field ? field.value : '')
+    .split(/\r?\n/)
+    .map(function (value) {
+      return value.trim();
+    })
+    .filter(function (value) {
+      return value.length > 0;
+    });
+}
+
+function requiredLines(selector, errorKey) {
+  const values = fieldLines(selector);
+  if (values.length === 0) throw localizedError(errorKey);
+  return values;
+}
+
+function readMissionPlanDefinition() {
+  return {
+    requirementA: requiredValue(
+      '#plan-workstream-a-requirement',
+      'validation.planRequirementsRequired',
+    ),
+    requirementB: requiredValue(
+      '#plan-workstream-b-requirement',
+      'validation.planRequirementsRequired',
+    ),
+    outputsA: requiredLines('#plan-workstream-a-outputs', 'validation.planOutputsRequired'),
+    outputsB: requiredLines('#plan-workstream-b-outputs', 'validation.planOutputsRequired'),
+    consolidationOutputs: requiredLines(
+      '#plan-consolidation-outputs',
+      'validation.planOutputsRequired',
+    ),
+    verifierArgsA: fieldLines('#plan-workstream-a-verifier-args'),
+    verifierArgsB: fieldLines('#plan-workstream-b-verifier-args'),
+  };
+}
+
+function explicitMissionPlanFields(executable, finalVerifierArgs, definition) {
+  return {
+    constraints: [definition.requirementA, definition.requirementB],
+    acceptanceCriteria: [
+      {
+        id: 'workstream-a',
+        description: 'Workstream A satisfies its declared Contract requirement.',
+        verifier: {
+          executable: executable,
+          args: definition.verifierArgsA,
+          timeoutMs: 30000,
+        },
+      },
+      {
+        id: 'workstream-b',
+        description: 'Workstream B satisfies its declared Contract requirement.',
+        verifier: {
+          executable: executable,
+          args: definition.verifierArgsB,
+          timeoutMs: 30000,
+        },
+      },
+      {
+        id: 'mission-outcome',
+        description: 'The consolidated result satisfies the original Mission objective.',
+        verifier: {
+          executable: executable,
+          args: finalVerifierArgs,
+          timeoutMs: 30000,
+        },
+      },
+    ],
+    plan: {
+      nodes: [
+        {
+          nodeId: 'workstream-a',
+          kind: 'task',
+          title: 'Workstream A',
+          requirementIds: ['constraint-1', 'acceptance-workstream-a'],
+          stageId: 'qoder-workstream',
+          acceptanceCriterionIds: ['workstream-a'],
+          declaredOutputKeys: definition.outputsA,
+          requiredAuthorityScopes: ['workspace'],
+        },
+        {
+          nodeId: 'workstream-b',
+          kind: 'task',
+          title: 'Workstream B',
+          requirementIds: ['constraint-2', 'acceptance-workstream-b'],
+          stageId: 'claude-workstream',
+          acceptanceCriterionIds: ['workstream-b'],
+          declaredOutputKeys: definition.outputsB,
+          requiredAuthorityScopes: ['workspace'],
+        },
+        {
+          nodeId: 'consolidate',
+          kind: 'join',
+          title: 'Consolidate verified workstreams',
+          requirementIds: [
+            'objective',
+            'acceptance-workstream-a',
+            'acceptance-workstream-b',
+            'acceptance-mission-outcome',
+          ],
+          stageId: 'qoder-consolidation',
+          acceptanceCriterionIds: ['mission-outcome'],
+          declaredOutputKeys: definition.consolidationOutputs,
+          requiredAuthorityScopes: ['workspace'],
+        },
+      ],
+      edges: [
+        {
+          fromNodeId: 'workstream-a',
+          toNodeId: 'consolidate',
+          relation: 'join-input',
+          evidenceRefs: ['artifact:workstream-a'],
+        },
+        {
+          fromNodeId: 'workstream-b',
+          toNodeId: 'consolidate',
+          relation: 'join-input',
+          evidenceRefs: ['artifact:workstream-b'],
+        },
+      ],
+    },
+  };
+}
+
 async function submitMission(event) {
   event.preventDefault();
   setFormStatus(null, '');
@@ -5579,29 +7123,31 @@ async function submitMission(event) {
     const objective = requiredValue('#mission-objective', 'validation.objectiveRequired');
     const workspace = requiredValue('#mission-workspace', 'validation.workspaceRequired');
     const executable = requiredValue('#verifier-executable', 'validation.verifierRequired');
-    const argsField = elements.form.querySelector('#verifier-args');
-    const args = String(argsField ? argsField.value : '')
-      .split(/\r?\n/)
-      .map(function (argument) {
-        return argument.trim();
-      })
-      .filter(function (argument) {
-        return argument.length > 0;
-      });
+    const args = fieldLines('#verifier-args');
     const route = selectedRoute();
-    const payload = {
-      title: title,
-      objective: objective,
-      workspace: workspace,
-      constraints: [],
-      verifier: {
-        executable: executable,
-        args: args,
-        timeoutMs: 30000,
-      },
-      stages: routeStages(route),
-    };
-    setFormStatus(translated('form.creating'), '');
+    const planDefinition = route === 'mission-plan' ? readMissionPlanDefinition() : null;
+    const payload =
+      planDefinition === null
+        ? {
+            title: title,
+            objective: objective,
+            workspace: workspace,
+            constraints: [],
+            verifier: {
+              executable: executable,
+              args: args,
+              timeoutMs: 30000,
+            },
+            stages: routeStages(route),
+          }
+        : {
+            title: title,
+            objective: objective,
+            workspace: workspace,
+            ...explicitMissionPlanFields(executable, args, planDefinition),
+            stages: routeStages(route, planDefinition),
+          };
+    setFormStatus(translated(planDefinition === null ? 'form.creating' : 'form.creatingPlan'), '');
     const response = await requestJson('/api/v1/missions', {
       method: 'POST',
       body: JSON.stringify(payload),
@@ -5612,7 +7158,10 @@ async function submitMission(event) {
         : response && response.mission && typeof response.mission.missionId === 'string'
           ? response.mission.missionId
           : null;
-    setFormStatus(translated('form.created'), 'success');
+    setFormStatus(
+      translated(planDefinition === null ? 'form.created' : 'form.createdPlan'),
+      'success',
+    );
     await loadMissions();
     if (missionId) selectMission(missionId);
   } catch (error) {

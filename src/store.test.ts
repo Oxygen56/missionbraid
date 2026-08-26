@@ -851,6 +851,93 @@ describe('MissionStore', () => {
 
     fixture.store.close();
   });
+
+  it('rejects a Receipt that is unbound or bound to an obsolete Contract or Plan revision', () => {
+    const fixture = createFixture();
+    fixture.store.createMission(fixture.creation, fixture.fence);
+    fixture.store.appendEvent(rootBranchEvent(fixture.mission), fixture.fence);
+    fixture.store.appendEvents(
+      [
+        {
+          schemaVersion: DOMAIN_SCHEMA_VERSION,
+          eventId: 'event-contract-revision-obsolete',
+          missionId: fixture.mission.missionId,
+          occurredAt: '2026-08-24T00:00:01.000Z',
+          type: 'runtime.observation',
+          payload: {
+            kind: 'mission.contract_revision.created',
+            data: { contractRevisionId: 'contract-revision-obsolete' },
+          },
+        },
+        {
+          schemaVersion: DOMAIN_SCHEMA_VERSION,
+          eventId: 'event-plan-revision-obsolete',
+          missionId: fixture.mission.missionId,
+          occurredAt: '2026-08-24T00:00:02.000Z',
+          type: 'runtime.observation',
+          payload: {
+            kind: 'mission.plan_revision.created',
+            data: { planRevisionId: 'plan-revision-obsolete' },
+          },
+        },
+        {
+          schemaVersion: DOMAIN_SCHEMA_VERSION,
+          eventId: 'event-contract-revision-latest',
+          missionId: fixture.mission.missionId,
+          occurredAt: '2026-08-24T00:00:03.000Z',
+          type: 'runtime.observation',
+          payload: {
+            kind: 'mission.contract_revision.created',
+            data: { contractRevisionId: 'contract-revision-latest' },
+          },
+        },
+        {
+          schemaVersion: DOMAIN_SCHEMA_VERSION,
+          eventId: 'event-plan-revision-latest',
+          missionId: fixture.mission.missionId,
+          occurredAt: '2026-08-24T00:00:04.000Z',
+          type: 'runtime.observation',
+          payload: {
+            kind: 'mission.plan_revision.created',
+            data: { planRevisionId: 'plan-revision-latest' },
+          },
+        },
+      ],
+      fixture.fence,
+    );
+    const beforeReceipt = fixture.store.getMission(fixture.mission.missionId)!;
+    expect(() =>
+      fixture.store.appendEvent(
+        verifiedReceiptEvent(fixture, 'event-receipt-unbound-revision', beforeReceipt, {
+          branchId: fixture.mission.rootBranchId,
+        }),
+        fixture.fence,
+      ),
+    ).toThrow(/latest Contract and Plan revision/i);
+
+    const event = verifiedReceiptEvent(fixture, 'event-receipt-obsolete-revision', beforeReceipt, {
+      branchId: fixture.mission.rootBranchId,
+    });
+    if (event.type !== 'receipt.issued') throw new Error('Expected Receipt event');
+
+    expect(() =>
+      fixture.store.appendEvent(
+        {
+          ...event,
+          payload: {
+            receipt: {
+              ...event.payload.receipt,
+              contractRevisionId: 'contract-revision-obsolete',
+              planRevisionId: 'plan-revision-obsolete',
+            },
+          },
+        },
+        fixture.fence,
+      ),
+    ).toThrow(/latest Contract and Plan revision/i);
+
+    fixture.store.close();
+  });
 });
 
 function createFixture(now = () => new Date('2026-08-24T00:00:00.000Z'), ttlMs = 60_000) {

@@ -1,4 +1,8 @@
-export type RuntimeId = 'codex' | 'qoder' | 'claude';
+/**
+ * Stable Harness identity carried by Runtime evidence. Built-in execution is
+ * still limited to Codex, Qoder, and Claude unless a public Adapter is bound.
+ */
+export type RuntimeId = string;
 
 export type RuntimeCapabilityName =
   | 'observe'
@@ -125,13 +129,28 @@ export interface AdapterRunRequest {
 
 export interface RuntimeInvocation extends ProcessInvocation {
   readonly runtime: RuntimeId;
-  readonly outputProtocol: 'codex-jsonl' | 'qoder-stream-json' | 'claude-stream-json';
+  readonly outputProtocol:
+    | 'codex-jsonl'
+    | 'qoder-stream-json'
+    | 'claude-stream-json'
+    | 'adapter-v1';
 }
 
 export interface RuntimeRunResult {
   readonly runtime: RuntimeId;
   readonly outputProtocol: RuntimeInvocation['outputProtocol'];
   readonly process: ProcessRunResult;
+  /**
+   * Optional accounting for adapters that compact high-volume transport
+   * telemetry before forwarding semantic Runtime events to the Kernel.
+   */
+  readonly outputAccounting?: {
+    readonly strategy: string;
+    readonly rawLineCount: number;
+    readonly retainedLineCount: number;
+    readonly droppedLineCount: number;
+    readonly rawSha256: string;
+  };
 }
 
 export interface RuntimeAdapter<Request extends AdapterRunRequest = AdapterRunRequest> {

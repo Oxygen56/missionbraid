@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import {
   chmod,
@@ -17,6 +18,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { ClaudeAdapter } from './adapters/claude.js';
 import { CodexAdapter } from './adapters/codex.js';
 import { QoderAdapter } from './adapters/qoder.js';
+import { CONTEXT_CACHE_SCHEMA_VERSION } from './context-binding.js';
 import type { RuntimeAdapter } from './adapters/types.js';
 import type {
   CheckpointEffectFrontierEntryV1,
@@ -161,6 +163,41 @@ describe('native Adapter RuntimeContinuationPort', () => {
     expect(await readFile(join(fixture.source, 'result.txt'), 'utf8')).toBe('not-verified\n');
   });
 
+  it('remaps an accepted cached Context binding into the child Fork workspace', async () => {
+    const fixture = await createFixture('codex', 'success', { context: true });
+
+    const result = await fixture.port.continueFromCheckpoint(fixture.input);
+
+    expect(result.status).toBe('completed');
+    expect(result.contextEvidenceRefs).toHaveLength(1);
+    const prompt = await readFile(join(fixture.child, 'prompt.txt'), 'utf8');
+    expect(prompt).toContain('MissionBraid Context Snapshot (cached)');
+    expect(prompt).toContain('OLD:cached');
+    expect(prompt).not.toContain('SOURCE:current');
+    expect(JSON.stringify(fixture.evidence)).toContain('context:agent-context');
+  });
+
+  it('refreshes the declared Context source on the child Fork without changing its Profile', async () => {
+    const fixture = await createFixture('codex', 'success', {
+      context: true,
+      refreshContext: true,
+    });
+
+    const result = await fixture.port.continueFromCheckpoint(fixture.input);
+
+    expect(result.status).toBe('completed');
+    expect(result.contextEvidenceRefs).toHaveLength(1);
+    const prompt = await readFile(join(fixture.child, 'prompt.txt'), 'utf8');
+    expect(prompt).toContain('MissionBraid Context Snapshot (refreshed)');
+    expect(prompt).toContain('SOURCE:current');
+    expect(prompt).not.toContain('OLD:cached');
+    expect(fixture.input.intervention).toMatchObject({
+      kind: 'context',
+      targetRef: 'context:agent-context',
+      afterDigest: `sha256:${sha256('SOURCE:current')}`,
+    });
+  });
+
   it('rejects incomplete or duplicate Contract criterion sets', async () => {
     const fixture = await createFixture('codex', 'success');
     const secondVerifier = {
@@ -237,6 +274,91 @@ describe('native Adapter RuntimeContinuationPort', () => {
         }),
     ).toThrow(/does not match stage/);
   });
+
+  it('continues from an immutable source Checkpoint with a Planner-selected target Profile', async () => {
+    const fixture = await createFixture('qoder', 'success');
+    const targetStage: AttemptStageSpecV1 = {
+      ...fixture.stage,
+      stageId: 'stage-qoder-upgraded',
+      profile: {
+        ...fixture.stage.profile,
+        model: 'model-qoder-upgraded',
+        reasoningEffort: 'high',
+      },
+    };
+    const targetProfile: ProfileV1 = {
+      ...fixture.profile,
+      profileId: 'profile-qoder-upgraded',
+      model: targetStage.profile.model,
+      ...(targetStage.profile.reasoningEffort === undefined
+        ? {}
+        : { reasoningEffort: targetStage.profile.reasoningEffort }),
+      configurationDigest: hashPayload(targetStage.profile),
+      definition: {
+        definitionId: 'profile-definition-qoder-upgraded',
+        harness: targetStage.profile.harness,
+        requestedModel: targetStage.profile.model,
+        ...(targetStage.profile.reasoningEffort === undefined
+          ? {}
+          : { requestedReasoningEffort: targetStage.profile.reasoningEffort }),
+        ...(targetStage.profile.permissionMode === undefined
+          ? {}
+          : { permissionCeiling: targetStage.profile.permissionMode }),
+        injectionBudgetTokens: targetStage.profile.injectionBudgetTokens,
+      },
+    };
+    const profileSelection = {
+      selectionId: 'profile-rebound-selection-1',
+      sourceProfileId: fixture.profile.profileId,
+      targetProfileId: targetProfile.profileId,
+      targetStageId: targetStage.stageId,
+      targetProfileDefinitionId: 'profile-definition-qoder-upgraded',
+      plannerDecisionHash: 'a'.repeat(64),
+      authorityChange: 'unchanged' as const,
+      evidenceRefs: ['event:planner-decision-1', 'event:profile-selected-1'],
+      selectedAt: NOW,
+    };
+
+    const port = new NativeAdapterRuntimeContinuationPort({
+      ...fixture.portOptions,
+      acceptedMissionSpec: {
+        ...fixture.missionSpec,
+        attemptPlan: [...fixture.missionSpec.attemptPlan, targetStage],
+      },
+      acceptedStage: targetStage,
+      acceptedSourceProfile: fixture.profile,
+      acceptedProfile: targetProfile,
+      acceptedProfileSelection: profileSelection,
+    } as NativeAdapterRuntimeContinuationOptionsV1 & {
+      readonly acceptedProfileSelection: typeof profileSelection;
+    });
+
+    const result = await port.continueFromCheckpoint(fixture.input);
+
+    expect(result.status).toBe('completed');
+    expect(fixture.checkpoint.profileId).toBe(fixture.profile.profileId);
+    expect(targetProfile.profileId).not.toBe(fixture.checkpoint.profileId);
+  });
+
+  it('fails closed when a mutable Claude Fork has no controller-created Tool Gateway binding', async () => {
+    const fixture = await createFixture('claude', 'success');
+    const gatedStage: AttemptStageSpecV1 = {
+      ...fixture.stage,
+      breakpoint: 'mutable-tools',
+    };
+
+    expect(
+      () =>
+        new NativeAdapterRuntimeContinuationPort({
+          ...fixture.portOptions,
+          acceptedMissionSpec: {
+            ...fixture.missionSpec,
+            attemptPlan: [gatedStage],
+          },
+          acceptedStage: gatedStage,
+        }),
+    ).toThrow('requires a concrete native Tool Gateway binding');
+  });
 });
 
 type FakeBehavior = 'success' | 'result-only' | 'request-only' | 'process-failure' | 'bad-child';
@@ -263,6 +385,8 @@ async function createFixture(
   options: {
     readonly sourceResult?: string;
     readonly verifierInsideWorkspace?: boolean;
+    readonly context?: boolean;
+    readonly refreshContext?: boolean;
   } = {},
 ): Promise<Fixture> {
   const root = await mkdtemp(join(tmpdir(), `missionbraid-continuation-${harness}-`));
@@ -276,6 +400,18 @@ async function createFixture(
   git(source, ['config', 'user.email', 'fixture@example.com']);
   git(source, ['config', 'user.name', 'MissionBraid Fixture']);
   await writeFile(join(source, 'base.txt'), 'base\n', 'utf8');
+  const context =
+    options.context === true
+      ? {
+          factId: 'agent-context',
+          source: join(source, 'context.txt'),
+          snapshot: join(source, '.missionbraid', 'context-cache.json'),
+        }
+      : undefined;
+  if (context !== undefined) {
+    await mkdir(join(source, '.missionbraid'), { recursive: true });
+    await writeFile(context.source, 'SOURCE:current\n', 'utf8');
+  }
   if (options.sourceResult !== undefined) {
     await writeFile(join(source, 'result.txt'), options.sourceResult, 'utf8');
   }
@@ -299,6 +435,19 @@ process.exit(fs.readFileSync(path.join(exactWorkspace, 'result.txt'), 'utf8') ==
   git(source, ['add', '.']);
   git(source, ['commit', '-m', 'base']);
   git(source, ['worktree', 'add', '-b', `child-${harness}-${behavior}`, child]);
+  if (context !== undefined) {
+    await mkdir(join(child, '.missionbraid'), { recursive: true });
+    await writeFile(
+      join(child, '.missionbraid', 'context-cache.json'),
+      `${JSON.stringify({
+        schemaVersion: CONTEXT_CACHE_SCHEMA_VERSION,
+        contextFactId: context.factId,
+        boundWorkspaceDigest: 'sha256:baseline-frontier',
+        content: 'OLD:cached\n',
+      })}\n`,
+      'utf8',
+    );
+  }
 
   const command = await writeFakeHarness(root, harness, behavior);
   const verifierArgs =
@@ -335,6 +484,7 @@ process.exit(fs.readFileSync(path.join(exactWorkspace, 'result.txt'), 'utf8') ==
     constraints: ['Keep the source worktree unchanged.'],
     workspace: source,
     missionSourceDir: source,
+    ...(context === undefined ? {} : { context }),
     acceptanceCriteria: [
       {
         id: 'file-written',
@@ -387,15 +537,26 @@ process.exit(fs.readFileSync(path.join(exactWorkspace, 'result.txt'), 'utf8') ==
     contractId: contract.contractId,
     profileId: profile.profileId,
   };
-  const intervention: CheckpointInterventionV1 = {
-    interventionId: 'intervention-guidance-child',
-    kind: 'guidance',
-    targetRef: `stage:${stage.stageId}`,
-    beforeDigest: 'sha256:guidance-a',
-    afterDigest: 'sha256:guidance-b',
-    description: 'Use the accepted child-only guidance.',
-    authorityChange: 'unchanged',
-  };
+  const intervention: CheckpointInterventionV1 =
+    context !== undefined && options.refreshContext === true
+      ? {
+          interventionId: 'intervention-context-child',
+          kind: 'context',
+          targetRef: 'context:agent-context',
+          beforeDigest: `sha256:${sha256('OLD:cached')}`,
+          afterDigest: `sha256:${sha256('SOURCE:current')}`,
+          description: 'Refresh only the declared Context source on the child Fork.',
+          authorityChange: 'unchanged',
+        }
+      : {
+          interventionId: 'intervention-guidance-child',
+          kind: 'guidance',
+          targetRef: `stage:${stage.stageId}`,
+          beforeDigest: 'sha256:guidance-a',
+          afterDigest: 'sha256:guidance-b',
+          description: 'Use the accepted child-only guidance.',
+          authorityChange: 'unchanged',
+        };
   const evidence: RuntimeForkEvidenceV1[] = [];
   const input: RuntimeContinuationInputV1 = {
     forkId: 'fork-runtime-continuation',
@@ -420,6 +581,7 @@ process.exit(fs.readFileSync(path.join(exactWorkspace, 'result.txt'), 'utf8') ==
     acceptedCheckpoint: checkpoint,
     acceptedProfile: profile,
     acceptedIntervention: intervention,
+    ...(context === undefined ? {} : { acceptedContext: context }),
     controllerStateDir: stateDir,
     adapters: adapterBinding(harness, command),
     now: () => new Date(NOW),
@@ -509,6 +671,7 @@ process.stdin.setEncoding('utf8');
 process.stdin.on('data', (chunk) => { prompt += chunk; });
 process.stdin.on('end', () => {
   if (prompt.includes(${JSON.stringify(SECRET)})) process.exit(91);
+  fs.writeFileSync('prompt.txt', prompt);
   fs.writeFileSync('runtime-cwd.txt', process.cwd());
   fs.writeFileSync('runtime-argv.json', JSON.stringify(process.argv.slice(2)));
   fs.writeFileSync('result.txt', ${JSON.stringify(behavior === 'bad-child' ? 'not-verified\n' : 'verified\n')});
@@ -559,6 +722,10 @@ function runSourceVerifier(fixture: Fixture): boolean {
 
 function git(cwd: string, args: readonly string[]): string {
   return execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8', stdio: 'pipe' });
+}
+
+function sha256(value: string): string {
+  return createHash('sha256').update(value, 'utf8').digest('hex');
 }
 
 async function readTree(root: string): Promise<string> {

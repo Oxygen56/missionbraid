@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -44,7 +44,7 @@ describe('createMissionDraft', () => {
     expect(loaded.acceptanceCriteria[0]?.verifier).toMatchObject({
       executable: 'node',
       args: ['--test'],
-      cwd: workspace,
+      cwd: realpathSync(workspace),
       env: {},
       timeoutMs: 30_000,
     });
@@ -117,6 +117,38 @@ describe('createMissionDraft', () => {
     expect(loadMissionSpec(source).attemptPlan[0]?.profile.harness).toBe('claude');
   });
 
+  it('preserves an external Adapter and provider workspace binding in the generated Mission', () => {
+    const root = mkdtempSync(join(tmpdir(), 'missionbraid-draft-adapter-'));
+    roots.push(root);
+    const workspace = join(root, 'workspace');
+    mkdirSync(workspace);
+    const input = validInput(workspace);
+
+    const draft = createMissionDraft({
+      ...input,
+      stages: [
+        {
+          ...input.stages[0],
+          harness: 'provider-example',
+          adapterId: 'provider.example',
+          providerWorkspaceRef: 'provider-workspace:fixture',
+        },
+      ],
+    });
+    expect(draft.document.attemptPlan[0]?.profile).toMatchObject({
+      harness: 'provider-example',
+      adapterId: 'provider.example',
+      providerWorkspaceRef: 'provider-workspace:fixture',
+    });
+
+    const source = join(root, 'mission.yaml');
+    writeFileSync(source, draft.yaml, 'utf8');
+    expect(loadMissionSpec(source).attemptPlan[0]?.profile).toMatchObject({
+      harness: 'provider-example',
+      adapterId: 'provider.example',
+    });
+  });
+
   it('creates one ordered Codex-to-Qoder-to-Claude Mission for the unified Runtime path', () => {
     const root = mkdtempSync(join(tmpdir(), 'missionbraid-draft-three-runtime-'));
     roots.push(root);
@@ -155,6 +187,100 @@ describe('createMissionDraft', () => {
     const source = join(root, 'mission.yaml');
     writeFileSync(source, draft.yaml, 'utf8');
     expect(loadMissionSpec(source).attemptPlan).toHaveLength(3);
+  });
+
+  it('creates a loadable explicit two-worker Plan with independent criteria and consolidation', () => {
+    const root = mkdtempSync(join(tmpdir(), 'missionbraid-draft-plan-'));
+    roots.push(root);
+    const workspace = join(root, 'workspace');
+    mkdirSync(workspace);
+
+    const draft = createMissionDraft(planInput(workspace));
+    expect(draft.document.acceptanceCriteria.map((criterion) => criterion.id)).toEqual([
+      'workstream-a',
+      'workstream-b',
+      'mission-outcome',
+    ]);
+    expect(draft.document.attemptPlan.map((stage) => stage.onFailure)).toEqual([
+      'handoff',
+      'handoff',
+      'stop',
+    ]);
+    expect(draft.document.plan?.nodes.map((node) => node.nodeId)).toEqual([
+      'workstream-a',
+      'workstream-b',
+      'consolidate',
+    ]);
+
+    const source = join(root, 'mission-plan.yaml');
+    writeFileSync(source, draft.yaml, 'utf8');
+    const loaded = loadMissionSpec(source);
+    expect(loaded.plan?.edges).toEqual([
+      {
+        fromNodeId: 'workstream-a',
+        toNodeId: 'consolidate',
+        relation: 'join-input',
+        evidenceRefs: ['artifact:workstream-a'],
+      },
+      {
+        fromNodeId: 'workstream-b',
+        toNodeId: 'consolidate',
+        relation: 'join-input',
+        evidenceRefs: ['artifact:workstream-b'],
+      },
+    ]);
+    expect(loaded.plan?.nodes[2]).toMatchObject({
+      kind: 'join',
+      stageId: 'qoder-consolidation',
+      acceptanceCriterionIds: ['mission-outcome'],
+    });
+  });
+
+  it('canonicalizes a symlinked workspace for the Mission and every explicit verifier', () => {
+    const root = mkdtempSync(join(tmpdir(), 'missionbraid-draft-workspace-alias-'));
+    roots.push(root);
+    const workspace = join(root, 'workspace-real');
+    const workspaceAlias = join(root, 'workspace-alias');
+    mkdirSync(workspace);
+    symlinkSync(workspace, workspaceAlias, 'dir');
+
+    const draft = createMissionDraft(planInput(workspaceAlias));
+    expect(draft.document.workspace).toBe(realpathSync(workspace));
+    expect(draft.document.acceptanceCriteria.map((criterion) => criterion.verifier.cwd)).toEqual([
+      realpathSync(workspace),
+      realpathSync(workspace),
+      realpathSync(workspace),
+    ]);
+
+    const source = join(root, 'mission-plan-alias.yaml');
+    writeFileSync(source, draft.yaml, 'utf8');
+    const loaded = loadMissionSpec(source);
+    expect(loaded.workspace).toBe(realpathSync(workspace));
+    expect(
+      loaded.acceptanceCriteria.every((criterion) => criterion.verifier.cwd === loaded.workspace),
+    ).toBe(true);
+  });
+
+  it('rejects an explicit Plan that references a requirement outside the Contract', () => {
+    const root = mkdtempSync(join(tmpdir(), 'missionbraid-draft-plan-invalid-'));
+    roots.push(root);
+    const workspace = join(root, 'workspace');
+    mkdirSync(workspace);
+    const input = planInput(workspace);
+    const plan = input.plan as {
+      nodes: Array<Record<string, unknown>>;
+      edges: Array<Record<string, unknown>>;
+    };
+
+    expect(() =>
+      createMissionDraft({
+        ...input,
+        plan: {
+          ...plan,
+          nodes: [{ ...plan.nodes[0], requirementIds: ['constraint-99'] }, ...plan.nodes.slice(1)],
+        },
+      }),
+    ).toThrow(/unknown Contract requirement constraint-99/);
   });
 
   it.each([
@@ -259,6 +385,117 @@ function validInput(workspace: string) {
         injectionBudgetTokens: 1_600,
       },
     ],
+  };
+}
+
+function planInput(workspace: string): Record<string, unknown> {
+  return {
+    title: 'Build two independent workstreams and integrate them',
+    objective: 'Produce and verify one integrated result from both workstreams.',
+    workspace,
+    constraints: [
+      'Implement the first independent workstream.',
+      'Implement the second independent workstream.',
+    ],
+    acceptanceCriteria: [
+      {
+        id: 'workstream-a',
+        description: 'The first workstream passes its deterministic verifier.',
+        verifier: { executable: 'node', args: ['verify-a.mjs'], timeoutMs: 30_000 },
+      },
+      {
+        id: 'workstream-b',
+        description: 'The second workstream passes its deterministic verifier.',
+        verifier: { executable: 'node', args: ['verify-b.mjs'], timeoutMs: 30_000 },
+      },
+      {
+        id: 'mission-outcome',
+        description: 'The consolidated result passes the final verifier.',
+        verifier: { executable: 'node', args: ['verify-all.mjs'], timeoutMs: 30_000 },
+      },
+    ],
+    stages: [
+      {
+        stageId: 'qoder-workstream',
+        harness: 'qoder',
+        model: 'Qwen3.8-Max',
+        reasoningEffort: 'medium',
+        permissionMode: 'bypass_permissions',
+        injectionBudgetTokens: 1_600,
+        instruction: 'Implement only workstream A and change only workstream-a.txt.',
+      },
+      {
+        stageId: 'claude-workstream',
+        harness: 'claude',
+        model: 'deepseek-v4-pro',
+        reasoningEffort: 'medium',
+        permissionMode: 'bypassPermissions',
+        injectionBudgetTokens: 1_600,
+        instruction: 'Implement only workstream B and change only workstream-b.txt.',
+      },
+      {
+        stageId: 'qoder-consolidation',
+        harness: 'qoder',
+        model: 'Qwen3.8-Max',
+        reasoningEffort: 'medium',
+        permissionMode: 'bypass_permissions',
+        injectionBudgetTokens: 1_600,
+        instruction: 'Integrate both verified artifacts and change only integrated.txt.',
+      },
+    ],
+    plan: {
+      nodes: [
+        {
+          nodeId: 'workstream-a',
+          kind: 'task',
+          title: 'First workstream',
+          requirementIds: ['constraint-1', 'acceptance-workstream-a'],
+          stageId: 'qoder-workstream',
+          acceptanceCriterionIds: ['workstream-a'],
+          declaredOutputKeys: ['workstream-a.txt'],
+          requiredAuthorityScopes: ['workspace'],
+        },
+        {
+          nodeId: 'workstream-b',
+          kind: 'task',
+          title: 'Second workstream',
+          requirementIds: ['constraint-2', 'acceptance-workstream-b'],
+          stageId: 'claude-workstream',
+          acceptanceCriterionIds: ['workstream-b'],
+          declaredOutputKeys: ['workstream-b.txt'],
+          requiredAuthorityScopes: ['workspace'],
+        },
+        {
+          nodeId: 'consolidate',
+          kind: 'join',
+          title: 'Consolidate verified workstreams',
+          requirementIds: [
+            'objective',
+            'acceptance-workstream-a',
+            'acceptance-workstream-b',
+            'acceptance-mission-outcome',
+          ],
+          stageId: 'qoder-consolidation',
+          acceptanceCriterionIds: ['mission-outcome'],
+          declaredOutputKeys: ['integrated.txt'],
+          requiredAuthorityScopes: ['workspace'],
+        },
+      ],
+      edges: [
+        {
+          fromNodeId: 'workstream-a',
+          toNodeId: 'consolidate',
+          relation: 'join-input',
+          evidenceRefs: ['artifact:workstream-a'],
+        },
+        {
+          fromNodeId: 'workstream-b',
+          toNodeId: 'consolidate',
+          relation: 'join-input',
+          evidenceRefs: ['artifact:workstream-b'],
+        },
+      ],
+    },
   };
 }
 

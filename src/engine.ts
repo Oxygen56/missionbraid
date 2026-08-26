@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, realpathSync } from 'node:fs';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { homedir } from 'node:os';
 
@@ -9,6 +9,8 @@ import { CodexAdapter, type CodexSandbox } from './adapters/codex.js';
 import { ClaudeAdapter, type ClaudePermissionMode } from './adapters/claude.js';
 import { QoderAdapter, type QoderPermissionMode } from './adapters/qoder.js';
 import type { RuntimeDetection, RuntimeOutputLine, RuntimeRunResult } from './adapters/types.js';
+import { AdapterHostV1 } from './adapter-host.js';
+import { AdapterRegistryV1, type AdapterManifestV1 } from './adapter-sdk.js';
 import {
   createCanonicalCapsule,
   extractAndValidateAcknowledgement,
@@ -59,6 +61,8 @@ import {
   type ReceiptV1,
   type RuntimeCatalogObservationV1,
   type RuntimeProfileDefinitionV1,
+  type RuntimeAdapterIdentityV1,
+  type RuntimeBindingV1,
   type StoredEventV1,
   type WorkspaceFenceV1,
 } from './domain.js';
@@ -75,12 +79,20 @@ import {
 } from './provenance.js';
 import {
   createMissionSpecSnapshot,
+  isSupportedHarnessV1,
   loadMissionSpec,
   restoreMissionSpecSnapshot,
   type AttemptStageSpecV1,
+  type CommandVerifierSpecV1,
+  type MissionPlanNodeSpecV1,
   type MissionSpecV1,
   type SupportedHarnessV1,
 } from './spec.js';
+import {
+  contextPrompt,
+  readContextBinding,
+  type ContextBindingMaterialV1,
+} from './context-binding.js';
 import { hashPayload, MissionStore } from './store.js';
 import {
   nativeToolRequestName,
@@ -109,10 +121,15 @@ import {
   type ExecutionForkEvidenceJournalV1,
   type ExecutionForkEventDraftV1,
   type ExecutionForkEventV1,
+  type ExecutionForkProfileSelectionV1,
   type ExecutionForkRecordV1,
+  type RuntimeContinuationPortV1,
 } from './execution-fork.js';
 import { executionForkEventToMissionEvents } from './mission-execution-fork.js';
-import { NativeAdapterRuntimeContinuationPort } from './runtime-continuation.js';
+import {
+  NativeAdapterRuntimeContinuationPort,
+  executionForkProfileAuthorityChange,
+} from './runtime-continuation.js';
 import {
   deriveMissionFailureIntelligence,
   type DiagnosticForkProjectionInputV1,
@@ -124,9 +141,18 @@ import {
   type MissionOutcomeStudioViewV1,
 } from './mission-outcome-studio.js';
 import {
+  OutcomeStudioRegistry,
+  rerunIncidentScenario,
+  selectVerifiedOutcomeBranch,
+  verifyOutcomeBranchSelection,
+  verifyOutcomeCiResult,
   verifyIncidentScenario,
+  verifyStudioOutcomeReceipt,
+  type BranchEvaluationV1,
   type IncidentScenarioV1,
+  type OutcomeBranchSelectionV1,
   type OutcomeCiResultV1,
+  type StudioOutcomeReceiptV1,
 } from './outcome-studio.js';
 import {
   EXECUTION_PLANNER_POLICY_VERSION,
@@ -154,12 +180,19 @@ import {
   analyzeSelectiveInvalidation,
   createContractRevision,
   createMissionPlanRevision,
+  planConsolidationAttempt,
+  recordPlanArtifact,
+  recordWorkspaceIntegrationOutcome,
   type ActivePlanAttemptV1,
+  type ConsolidationAttemptPlanV1,
   type ContractRequirementV1,
   type ContractRevisionV1,
+  type DeterministicVerifierEvidenceV1,
   type MissionPlanRevisionV1,
   type PlanArtifactV1,
   type SelectiveInvalidationV1,
+  type StaleAttemptFenceV1,
+  type WorkspaceIntegrationOutcomeV1,
 } from './mission-plan.js';
 import {
   projectMissionPlanRuntime,
@@ -176,6 +209,8 @@ export interface MissionEngineOptions {
   readonly codexAdapter?: CodexAdapter;
   readonly qoderAdapter?: QoderAdapter;
   readonly claudeAdapter?: ClaudeAdapter;
+  /** Public SDK Adapters; they submit evidence/outcome through AdapterHostV1 only. */
+  readonly adapterRegistry?: AdapterRegistryV1;
   readonly now?: () => Date;
   readonly id?: () => string;
   readonly externalEffectTargets?: readonly QueryableEffectTarget<JsonValue, JsonValue>[];
@@ -189,6 +224,54 @@ export interface MissionOutcomeStudioScenarioCollectionV1 {
   readonly missionId: string;
   readonly scenarios: readonly IncidentScenarioV1[];
   readonly ciResults: readonly OutcomeCiResultV1[];
+}
+
+export interface MissionOutcomeStudioKernelTrialV1 {
+  readonly trialIndex: number;
+  readonly sourceProfileId: string;
+  readonly targetProfileId: string;
+  readonly targetStageId: string;
+  readonly profileSelectionId: string;
+  readonly plannerDecisionHash: string;
+  readonly branchId: string;
+  readonly attemptId: string;
+  readonly bindingId: string;
+  readonly runtimeRunId: string;
+  readonly receiptId: string;
+  readonly receiptOutcome: ReceiptV1['outcome'];
+  readonly eventHeadHash: string;
+  readonly eventThroughSeq: number;
+  readonly criterionEvidenceRefs: readonly string[];
+  readonly runtimeEvidenceRefs: readonly string[];
+  readonly retainedArtifactRefs: readonly string[];
+}
+
+interface MissionOutcomeStudioRerunCoreV1 {
+  readonly schemaVersion: 'missionbraid.dev/outcome-kernel-rerun/v1';
+  readonly missionId: string;
+  readonly scenarioId: string;
+  readonly contractId: string;
+  readonly sourceCheckpointId: string;
+  readonly sourceProfileId: string;
+  readonly executionKey: string;
+  readonly trialCount: number;
+  readonly trials: readonly MissionOutcomeStudioKernelTrialV1[];
+  readonly targetBranchId: string;
+  readonly targetAgentRevisionId: string;
+  readonly targetProfileId: string;
+  readonly targetStageId: string;
+  readonly targetProfileDefinitionId: string;
+  readonly profileSelectionId: string;
+  readonly evaluation: BranchEvaluationV1;
+  readonly receipt: StudioOutcomeReceiptV1;
+  readonly ciResult: OutcomeCiResultV1;
+  readonly startedAt: string;
+  readonly completedAt: string;
+}
+
+export interface MissionOutcomeStudioRerunV1 extends MissionOutcomeStudioRerunCoreV1 {
+  readonly runId: string;
+  readonly runHash: string;
 }
 
 export interface ExecuteMissionOptions {
@@ -213,6 +296,58 @@ export interface MissionPlanView {
   readonly contractRevision: ContractRevisionV1;
   readonly planRevision: MissionPlanRevisionV1;
   readonly invalidations: readonly SelectiveInvalidationV1[];
+  readonly execution: MissionPlanExecutionViewV1;
+}
+
+export interface MissionPlanAttemptViewV1 {
+  readonly attemptId: string;
+  readonly nodeId: string;
+  readonly harness: string;
+  readonly branchId: string;
+  readonly workspaceKey: string;
+  readonly planRevisionId: string;
+  readonly contractRevisionId: string;
+  readonly nodeVersion: string;
+  readonly status: 'running' | 'succeeded' | 'failed' | 'abandoned';
+  readonly fence: StaleAttemptFenceV1 | null;
+}
+
+export interface MissionPlanArtifactRecordV1 {
+  readonly recordId: string;
+  readonly artifact: PlanArtifactV1;
+  readonly attemptId: string;
+  readonly branchId: string;
+  readonly workspaceKey: string;
+  readonly workspacePath: string;
+  readonly sourceCommit: string;
+  readonly changedPaths: readonly string[];
+  readonly recordedAt: string;
+  readonly reusedFromArtifactId?: string;
+  readonly invalidationId?: string;
+}
+
+export interface MissionPlanConsolidationRecordV1 {
+  readonly plan: ConsolidationAttemptPlanV1;
+  readonly outcome?: WorkspaceIntegrationOutcomeV1;
+  readonly sourceArtifactIds: readonly string[];
+  readonly workspacePath: string;
+  readonly sourceCommitsBefore: Readonly<Record<string, string>>;
+  readonly sourceCommitsAfter?: Readonly<Record<string, string>>;
+  readonly recordedAt: string;
+}
+
+export interface MissionPlanExecutionViewV1 {
+  readonly attempts: readonly MissionPlanAttemptViewV1[];
+  readonly artifacts: readonly MissionPlanArtifactRecordV1[];
+  readonly fences: readonly StaleAttemptFenceV1[];
+  readonly consolidations: readonly MissionPlanConsolidationRecordV1[];
+}
+
+export interface MissionPlanExecutionResultV1 {
+  readonly missionId: string;
+  readonly status: 'succeeded' | 'waiting' | 'failed';
+  readonly receipt?: ReceiptV1;
+  readonly waitingReason?: string;
 }
 
 export interface ReviseMissionContractInputV1 {
@@ -281,9 +416,16 @@ export interface MissionExecutionForkRequestV1 {
   readonly intervention: CheckpointInterventionV1;
   /** I5 keeps the source Runtime Profile; I6 may explicitly select another eligible stage. */
   readonly stageId?: string;
+  /** Explicit already-declared Runtime Profile Definition selected for a Profile-Rebound Fork. */
+  readonly targetProfileDefinitionId?: string;
   readonly childBranchId?: string;
   /** Optional Kernel-bound diagnostic candidate. Generic Forks remain unchanged. */
   readonly diagnosticCandidateId?: string;
+}
+
+export interface MissionOutcomeStudioRerunRequestV1 {
+  readonly targetStageId: string;
+  readonly targetProfileDefinitionId: string;
 }
 
 export interface MissionDiagnosticForkRequestV1
@@ -335,16 +477,20 @@ interface SpecSnapshotProvenance {
 interface AttemptPlanRecord {
   readonly attemptId: string;
   readonly stageId: string;
-  readonly harness: SupportedHarnessV1;
+  readonly harness: string;
   readonly profileId: string;
   readonly branchId: string;
   readonly bindingId: string;
+  readonly workspaceKey?: string;
+  readonly planRevisionId?: string;
+  readonly contractRevisionId?: string;
+  readonly nodeVersion?: string;
 }
 
 interface AttemptBaselineRecord {
   readonly attemptId: string;
   readonly stageId: string;
-  readonly harness: SupportedHarnessV1;
+  readonly harness: string;
   readonly profileId: string;
   readonly branchId: string;
   readonly bindingId: string;
@@ -356,7 +502,7 @@ interface CheckpointRecord {
   readonly missionId: string;
   readonly attemptId: string;
   readonly stageId: string;
-  readonly harness: SupportedHarnessV1;
+  readonly harness: string;
   readonly profileId: string;
   readonly branchId: string;
   readonly bindingId: string;
@@ -381,6 +527,45 @@ interface PlannedRuntimeCandidate {
   readonly stage: AttemptStageSpecV1;
   readonly detection: RuntimeDetection;
   readonly profile: ProfileV1;
+}
+
+interface ResolvedExecutionForkRuntime {
+  readonly stage: AttemptStageSpecV1;
+  readonly sourceProfile: ProfileV1;
+  readonly targetProfile: ProfileV1;
+  readonly profileSelection?: ExecutionForkProfileSelectionV1;
+  readonly selectionEvents: readonly EventV1[];
+}
+
+interface ActiveMissionPlanNodeRun {
+  readonly attemptId: string;
+  readonly nodeId: string;
+  readonly nodeVersion: string;
+  readonly planRevisionId: string;
+  readonly contractRevisionId: string;
+  readonly harness: string;
+  readonly branchId: string;
+  readonly workspaceKey: string;
+  readonly workspacePath: string;
+  readonly controller: AbortController;
+  fence?: StaleAttemptFenceV1;
+}
+
+interface ActiveMissionPlanRun {
+  readonly missionId: string;
+  readonly fence: WorkspaceFenceV1;
+  readonly spec: MissionSpecV1;
+  readonly baselineCheckpointId: string;
+  readonly baselineCommit: string;
+  readonly attempts: Map<string, ActiveMissionPlanNodeRun>;
+}
+
+interface MissionPlanNodeRunOutcome {
+  readonly attemptId: string;
+  readonly nodeId: string;
+  readonly status: 'succeeded' | 'failed' | 'abandoned';
+  readonly artifact?: MissionPlanArtifactRecordV1;
+  readonly detail?: string;
 }
 
 interface PlannerTrigger {
@@ -410,6 +595,7 @@ export class MissionEngine {
   readonly #codex: CodexAdapter;
   readonly #qoder: QoderAdapter;
   readonly #claude: ClaudeAdapter;
+  readonly #adapterHost: AdapterHostV1;
   readonly #artifacts: NativeArtifactStore;
   readonly #externalEffectTargets: ReadonlyMap<string, QueryableEffectTarget<JsonValue, JsonValue>>;
   readonly #beforeExternalEffectAppend:
@@ -418,6 +604,7 @@ export class MissionEngine {
   readonly #modelOnlyResample: ModelOnlyResamplePortV1;
   readonly #now: () => Date;
   readonly #id: () => string;
+  readonly #activePlanRuns = new Map<string, ActiveMissionPlanRun>();
 
   constructor(options: MissionEngineOptions) {
     this.#stateDir = resolve(options.stateDir);
@@ -426,6 +613,10 @@ export class MissionEngine {
     this.#codex = options.codexAdapter ?? new CodexAdapter();
     this.#qoder = options.qoderAdapter ?? new QoderAdapter();
     this.#claude = options.claudeAdapter ?? new ClaudeAdapter();
+    this.#adapterHost = new AdapterHostV1({
+      registry: options.adapterRegistry ?? new AdapterRegistryV1(),
+      now: this.#now,
+    });
     this.#artifacts = new NativeArtifactStore(this.#stateDir);
     this.#externalEffectTargets = indexExternalEffectTargets(options.externalEffectTargets ?? []);
     this.#beforeExternalEffectAppend = options.beforeExternalEffectAppend;
@@ -465,6 +656,7 @@ export class MissionEngine {
       options.workspace === undefined ? {} : { workspace: options.workspace },
     );
     assertControlStateIsolation(this.#stateDir, spec.workspace);
+    assertExecutablePlanTerminalJoin(spec);
     const specSnapshot = createMissionSpecSnapshot(spec);
     const missionId = `mission-${this.#id()}`;
     const rootBranchId = `branch-root-${this.#id()}`;
@@ -472,8 +664,14 @@ export class MissionEngine {
     const ownerId = `runner-${this.#id()}`;
     return await this.#withLease(workspaceKey, ownerId, async (fence) => {
       const contract = createContract(spec, this.#now());
-      const detection = await this.#detect(spec.attemptPlan[0]?.profile.harness ?? 'codex');
-      const profile = createProfile(spec.attemptPlan[0]!, detection, spec.workspace);
+      const initialStage = spec.attemptPlan[0]!;
+      const detection = await this.#detectStage(initialStage);
+      const profile = createProfile(
+        initialStage,
+        detection,
+        spec.workspace,
+        this.#adapterManifest(initialStage),
+      );
       const createdAt = this.#now().toISOString();
       const contractRevision = createContractRevision({
         missionId,
@@ -486,26 +684,51 @@ export class MissionEngine {
         planId: `plan-${missionId}`,
         missionId,
         contractRevision,
-        nodes: spec.attemptPlan.map((stage, index) => ({
-          nodeId: stage.stageId,
-          kind: 'task' as const,
-          title: stage.stageId,
-          requirementIds: requirementsFromSpec(spec).map((r) => r.requirementId),
-          inputArtifactIds: [],
-          declaredOutputKeys: [`stage:${stage.stageId}`],
-          requiredAuthorityScopes: ['workspace'],
-          // Plan projection is descriptive; execution Attempts retain the real Mission workspace.
-          // Marking it read-only prevents the DAG validator from mistaking sequential stages for
-          // concurrently writable owners of the same workspace.
-          workspace: { access: 'read-only' as const, workspaceKey, sharedResourceKeys: [] },
-          provenanceEvidenceRefs: [`mission:${missionId}:stage:${stage.stageId}`],
-        })),
-        edges: spec.attemptPlan.slice(1).map((stage, index) => ({
-          fromNodeId: spec.attemptPlan[index]!.stageId,
-          toNodeId: stage.stageId,
-          relation: 'depends-on' as const,
-          evidenceRefs: [`mission:${missionId}`],
-        })),
+        nodes:
+          spec.plan === undefined
+            ? spec.attemptPlan.map((stage) => ({
+                nodeId: stage.stageId,
+                kind: 'task' as const,
+                title: stage.stageId,
+                requirementIds: requirementsFromSpec(spec).map((r) => r.requirementId),
+                inputArtifactIds: [],
+                declaredOutputKeys: [`stage:${stage.stageId}`],
+                requiredAuthorityScopes: ['workspace'],
+                // Legacy attemptPlan is a fallback route, not a parallel DAG.
+                workspace: {
+                  access: 'read-only' as const,
+                  workspaceKey,
+                  sharedResourceKeys: [],
+                },
+                provenanceEvidenceRefs: [`mission:${missionId}:stage:${stage.stageId}`],
+              }))
+            : spec.plan.nodes.map((node) => ({
+                nodeId: node.nodeId,
+                kind: node.kind,
+                title: node.title,
+                requirementIds: node.requirementIds,
+                inputArtifactIds: [],
+                declaredOutputKeys: node.declaredOutputKeys,
+                requiredAuthorityScopes: node.requiredAuthorityScopes,
+                workspace: {
+                  access: 'isolated-writable' as const,
+                  workspaceKey: `workspace-plan-${hashPayload({ missionId, nodeId: node.nodeId }).slice(0, 28)}`,
+                  sharedResourceKeys: [],
+                },
+                provenanceEvidenceRefs: [
+                  `mission:${missionId}:plan-node:${node.nodeId}`,
+                  `stage:${node.stageId}`,
+                ],
+              })),
+        edges:
+          spec.plan === undefined
+            ? spec.attemptPlan.slice(1).map((stage, index) => ({
+                fromNodeId: spec.attemptPlan[index]!.stageId,
+                toNodeId: stage.stageId,
+                relation: 'depends-on' as const,
+                evidenceRefs: [`mission:${missionId}`],
+              }))
+            : spec.plan.edges,
         provenance: { source: 'deterministic-planner', evidenceRefs: [`mission:${missionId}`] },
         createdAt,
       });
@@ -555,7 +778,9 @@ export class MissionEngine {
         type: 'runtime.catalog_observed',
         payload: { observation: requireCatalogObservation(profile) },
       };
-      const definitionEvents = uniqueProfileDefinitions(spec).map(
+      const definitionEvents = uniqueProfileDefinitions(spec, (stage) =>
+        this.#adapterManifest(stage),
+      ).map(
         (definition): EventV1 => ({
           schemaVersion: DOMAIN_SCHEMA_VERSION,
           eventId: `event-${this.#id()}`,
@@ -957,7 +1182,7 @@ export class MissionEngine {
   ): Promise<MissionOutcomeStudioScenarioCollectionV1> {
     const mission = this.#requireMission(missionId);
     const view = await this.outcomeStudio(missionId, branchId);
-    if (view.incidentScenario === null || view.ciResult === null) {
+    if (view.incidentScenario === null) {
       throw new MissionExecutionError(
         `Mission ${missionId} has no complete Outcome Studio scenario`,
       );
@@ -978,7 +1203,10 @@ export class MissionEngine {
           fence,
         );
       }
-      if (!existing.ciResults.some((result) => result.resultId === view.ciResult!.resultId)) {
+      if (
+        view.ciResult !== null &&
+        !existing.ciResults.some((result) => result.resultId === view.ciResult!.resultId)
+      ) {
         this.#observe(
           missionId,
           'outcome-studio.ci-result.saved',
@@ -988,6 +1216,494 @@ export class MissionEngine {
       }
     });
     return this.outcomeStudioScenarios(missionId);
+  }
+
+  async selectOutcomeStudioBranch(
+    missionId: string,
+    branchId: string,
+    authorityRef: string,
+    authorityKind: 'human' | 'external-authority' = 'human',
+  ): Promise<OutcomeBranchSelectionV1> {
+    const mission = this.#requireMission(missionId);
+    const view = await this.outcomeStudio(missionId, branchId);
+    if (view.comparison === null || view.studioReceipt === null) {
+      throw new MissionExecutionError(
+        `Mission ${missionId} has no verified compared Branch ready for selection`,
+      );
+    }
+    const selection = selectVerifiedOutcomeBranch({
+      comparison: view.comparison,
+      receipt: view.studioReceipt,
+      authorityKind,
+      authorityRef,
+      decidedAt: this.#now().toISOString(),
+    });
+    const ownerId = `outcome-selection-${this.#id()}`;
+    await this.#withLease(mission.workspaceKey, ownerId, async (fence) => {
+      if (
+        this.outcomeStudioSelections(missionId).some(
+          (existing) => existing.selectionId === selection.selectionId,
+        )
+      ) {
+        return;
+      }
+      this.#observe(
+        missionId,
+        'outcome-studio.branch-selection.saved',
+        selection as unknown as JsonValue,
+        fence,
+      );
+    });
+    return selection;
+  }
+
+  outcomeStudioSelections(missionId: string): readonly OutcomeBranchSelectionV1[] {
+    this.#requireMission(missionId);
+    const selections: OutcomeBranchSelectionV1[] = [];
+    for (const event of this.#store.listEvents(missionId)) {
+      if (
+        event.type !== 'runtime.observation' ||
+        event.payload.kind !== 'outcome-studio.branch-selection.saved' ||
+        !isJsonObject(event.payload.data)
+      ) {
+        continue;
+      }
+      try {
+        const selection = event.payload.data as unknown as OutcomeBranchSelectionV1;
+        verifyOutcomeBranchSelection(selection);
+        selections.push(selection);
+      } catch {
+        // Historical malformed evidence never becomes an accepted selection.
+      }
+    }
+    return selections;
+  }
+
+  async rerunOutcomeStudioScenario(
+    missionId: string,
+    scenarioId: string,
+    request: MissionOutcomeStudioRerunRequestV1,
+    signal?: AbortSignal,
+  ): Promise<MissionOutcomeStudioRerunV1> {
+    const mission = this.#requireMission(missionId);
+    const scenario = this.outcomeStudioScenarios(missionId).scenarios.find(
+      (candidate) => candidate.scenarioId === scenarioId,
+    );
+    if (scenario === undefined) {
+      throw new MissionExecutionError(
+        `Outcome Studio scenario ${scenarioId} is not saved for Mission ${missionId}`,
+      );
+    }
+    verifyIncidentScenario(scenario);
+    if (scenario.contractId !== mission.contract.contractId || scenario.executionPlan === null) {
+      throw new MissionExecutionError('Outcome Studio scenario is not executable by this Mission');
+    }
+    const executionPlan = scenario.executionPlan;
+    const suite = executionPlan.evaluationSuite;
+    const trialCounts = uniqueStrings(
+      suite.criteria.map((criterion) => String(criterion.trialCount)),
+    );
+    if (
+      trialCounts.length !== 1 ||
+      suite.criteria.some(
+        (criterion) =>
+          criterion.mode !== 'stochastic-model' ||
+          criterion.threshold === null ||
+          criterion.threshold.minimumKnownTrials > criterion.trialCount,
+      )
+    ) {
+      throw new MissionExecutionError(
+        'Kernel scenario reruns require one predeclared stochastic trial count and threshold',
+      );
+    }
+    const trialCount = Number(trialCounts[0]);
+    const intervention = incidentScenarioIntervention(scenario);
+    const executionKey = `outcome-kernel-run-${this.#id()}`;
+    const startedAt = this.#now().toISOString();
+    const runSeed = hashPayload({
+      missionId,
+      scenarioId,
+      executionKey,
+      startedAt,
+      targetStageId: request.targetStageId,
+      targetProfileDefinitionId: request.targetProfileDefinitionId,
+    });
+    await this.#withLease(
+      mission.workspaceKey,
+      `outcome-rerun-start-${this.#id()}`,
+      async (fence) => {
+        this.#observe(
+          missionId,
+          'outcome-studio.incident-rerun.started',
+          {
+            executionKey,
+            scenarioId,
+            suiteId: suite.suiteId,
+            suiteHash: suite.suiteHash,
+            sourceCheckpointId: scenario.sourceCheckpointId,
+            sourceProfileId: executionPlan.sourceProfileId,
+            targetStageId: request.targetStageId,
+            targetProfileDefinitionId: request.targetProfileDefinitionId,
+            trialCount,
+            thresholds: suite.criteria.map((criterion) => ({
+              criterionId: criterion.criterionId,
+              threshold: criterion.threshold,
+            })),
+            startedAt,
+          } as unknown as JsonValue,
+          fence,
+        );
+      },
+    );
+
+    const persistedTrials: Array<{
+      readonly trial: MissionOutcomeStudioKernelTrialV1;
+      readonly view: MissionOutcomeStudioViewV1;
+      readonly profileSelection: ExecutionForkProfileSelectionV1;
+    }> = [];
+    for (let trialIndex = 0; trialIndex < trialCount; trialIndex += 1) {
+      const childBranchId = `branch-outcome-trial-${runSeed.slice(0, 20)}-${String(trialIndex + 1)}`;
+      let record: ExecutionForkRecordV1;
+      let receipt: ReceiptV1;
+      try {
+        const executed = await this.executeFork(
+          missionId,
+          {
+            checkpointId: scenario.sourceCheckpointId,
+            childBranchId,
+            intervention,
+            stageId: request.targetStageId,
+            targetProfileDefinitionId: request.targetProfileDefinitionId,
+          },
+          signal,
+        );
+        record = executed.record;
+        receipt = executed.receipt;
+      } catch (error) {
+        const failedRecord = (await this.executionForks(missionId)).find(
+          (candidate) => candidate.lineage.childBranchId === childBranchId,
+        );
+        if (failedRecord === undefined) throw error;
+        record = failedRecord;
+        receipt = await this.#issueOutcomeRegressionRejectedReceipt(
+          missionId,
+          childBranchId,
+          failedRecord,
+        );
+      }
+      const events = this.#store.listEvents(missionId);
+      const attempt = events.find(
+        (event): event is Extract<StoredEventV1, { type: 'attempt.started' }> =>
+          event.type === 'attempt.started' && event.payload.attempt.branchId === childBranchId,
+      )?.payload.attempt;
+      const binding = events.find(
+        (event): event is Extract<StoredEventV1, { type: 'attempt.bound' }> =>
+          event.type === 'attempt.bound' && event.payload.binding.branchId === childBranchId,
+      )?.payload.binding;
+      const runtimeRunId = record.runtimeResult?.runtimeRunId;
+      const profileSelection = record.lineage.profileSelection;
+      const view = await this.outcomeStudio(missionId, childBranchId);
+      if (
+        attempt === undefined ||
+        binding === undefined ||
+        runtimeRunId === undefined ||
+        profileSelection === undefined ||
+        view.branch === null ||
+        view.agentRevision === null
+      ) {
+        throw new MissionExecutionError(
+          `Kernel trial ${String(trialIndex + 1)} lacks a persisted Branch, Attempt, Binding, Runtime, or evaluation`,
+        );
+      }
+      persistedTrials.push({
+        view,
+        profileSelection,
+        trial: {
+          trialIndex,
+          sourceProfileId: profileSelection.sourceProfileId,
+          targetProfileId: profileSelection.targetProfileId,
+          targetStageId: profileSelection.targetStageId,
+          profileSelectionId: profileSelection.selectionId,
+          plannerDecisionHash: profileSelection.plannerDecisionHash,
+          branchId: childBranchId,
+          attemptId: attempt.attemptId,
+          bindingId: binding.bindingId,
+          runtimeRunId,
+          receiptId: receipt.receiptId,
+          receiptOutcome: receipt.outcome,
+          eventHeadHash: receipt.verifiedHeadHash,
+          eventThroughSeq: receipt.verifiedThroughSeq,
+          criterionEvidenceRefs: uniqueStrings(
+            view.branch.evaluation.criteria.flatMap((criterion) => criterion.evidenceRefs),
+          ),
+          runtimeEvidenceRefs: uniqueStrings([
+            ...record.runtimeEvidence.map((evidence) => `evidence:${evidence.evidenceId}`),
+            ...(record.runtimeResult?.verificationEvidenceRefs ?? []),
+            ...(record.runtimeResult?.toolExecutionEvidenceRefs ?? []),
+          ]),
+          retainedArtifactRefs: uniqueStrings([
+            `branch:${childBranchId}`,
+            `attempt:${attempt.attemptId}`,
+            `binding:${binding.bindingId}`,
+            `runtime:${runtimeRunId}`,
+            `receipt:${receipt.receiptId}`,
+            ...(record.futureSnapshot === undefined
+              ? []
+              : [`workspace:${record.futureSnapshot.workspaceDigest}`]),
+          ]),
+        },
+      });
+    }
+
+    const targetRevisionIds = uniqueStrings(
+      persistedTrials.map((entry) => entry.view.agentRevision!.revisionId),
+    );
+    const sourceProfileIds = uniqueStrings(
+      persistedTrials.map((entry) => entry.trial.sourceProfileId),
+    );
+    const targetProfileIds = uniqueStrings(
+      persistedTrials.map((entry) => entry.trial.targetProfileId),
+    );
+    const targetStageIds = uniqueStrings(persistedTrials.map((entry) => entry.trial.targetStageId));
+    const profileSelectionIds = uniqueStrings(
+      persistedTrials.map((entry) => entry.trial.profileSelectionId),
+    );
+    if (targetRevisionIds.length !== 1) {
+      throw new MissionExecutionError(
+        'Kernel trials did not use one content-identical Agent Revision',
+      );
+    }
+    if (
+      sourceProfileIds.length !== 1 ||
+      targetProfileIds.length !== 1 ||
+      targetStageIds.length !== 1 ||
+      profileSelectionIds.length !== 1 ||
+      sourceProfileIds[0] !== executionPlan.sourceProfileId ||
+      sourceProfileIds[0] === targetProfileIds[0] ||
+      targetStageIds[0] !== request.targetStageId
+    ) {
+      throw new MissionExecutionError(
+        'Kernel trials did not preserve one source Checkpoint and one distinct Planner-selected target Profile',
+      );
+    }
+    const registry = new OutcomeStudioRegistry();
+    for (const criterion of suite.criteria) {
+      if (
+        suite.criteria.some(
+          (candidate) =>
+            candidate.runner.kind === criterion.runner.kind &&
+            candidate.runner.version === criterion.runner.version &&
+            candidate.mode !== criterion.mode,
+        )
+      ) {
+        throw new MissionExecutionError(
+          'One criterion runner cannot declare multiple execution modes',
+        );
+      }
+      if (
+        suite.criteria.findIndex(
+          (candidate) =>
+            candidate.runner.kind === criterion.runner.kind &&
+            candidate.runner.version === criterion.runner.version,
+        ) !== suite.criteria.indexOf(criterion)
+      ) {
+        continue;
+      }
+      registry.registerRunner({
+        ...criterion.runner,
+        mode: criterion.mode,
+        run: async ({ criterion: runningCriterion, trialIndex }) => {
+          const persisted = persistedTrials[trialIndex];
+          const observed = persisted?.view.branch?.evaluation.criteria.find(
+            (candidate) => candidate.criterionId === runningCriterion.criterionId,
+          );
+          if (persisted === undefined || observed === undefined) {
+            return { outcome: 'unknown', evidenceRefs: [], retainedArtifactRefs: [] };
+          }
+          return {
+            outcome: observed.status,
+            ...(observed.status === 'passed'
+              ? { score: 1 }
+              : observed.status === 'failed'
+                ? { score: 0 }
+                : {}),
+            evidenceRefs: uniqueStrings([
+              ...persisted.trial.criterionEvidenceRefs,
+              ...persisted.trial.runtimeEvidenceRefs,
+              `branch:${persisted.trial.branchId}`,
+              `attempt:${persisted.trial.attemptId}`,
+              `binding:${persisted.trial.bindingId}`,
+              `runtime:${persisted.trial.runtimeRunId}`,
+              `receipt:${persisted.trial.receiptId}`,
+            ]),
+            retainedArtifactRefs: persisted.trial.retainedArtifactRefs,
+          };
+        },
+      });
+    }
+    const evaluatorBindings = suite.criteria.flatMap((criterion) => criterion.evaluators);
+    for (const evaluator of evaluatorBindings) {
+      if (
+        evaluatorBindings.findIndex(
+          (candidate) =>
+            candidate.kind === evaluator.kind && candidate.version === evaluator.version,
+        ) !== evaluatorBindings.indexOf(evaluator)
+      ) {
+        continue;
+      }
+      registry.registerEvaluator({
+        kind: evaluator.kind,
+        version: evaluator.version,
+        basis: 'deterministic',
+        evaluate: async ({ trials }) => ({
+          status:
+            trials.length === trialCount &&
+            trials.every(
+              (trial) =>
+                trial.evidenceRefs.some((reference) => reference.startsWith('branch:')) &&
+                trial.evidenceRefs.some((reference) => reference.startsWith('attempt:')) &&
+                trial.evidenceRefs.some((reference) => reference.startsWith('binding:')) &&
+                trial.evidenceRefs.some((reference) => reference.startsWith('runtime:')) &&
+                trial.evidenceRefs.some((reference) => reference.startsWith('receipt:')) &&
+                trial.retainedArtifactRefs.length > 0,
+            )
+              ? 'passed'
+              : 'unknown',
+          evidenceRefs: persistedTrials.flatMap((entry) => [
+            `branch:${entry.trial.branchId}`,
+            `receipt:${entry.trial.receiptId}`,
+          ]),
+        }),
+      });
+    }
+    const terminal = persistedTrials.at(-1)!;
+    const selectedProfile = persistedTrials[0]!.profileSelection;
+    const runtimeProfileBinding = {
+      sourceProfileId: selectedProfile.sourceProfileId,
+      targetProfileId: selectedProfile.targetProfileId,
+      targetStageId: selectedProfile.targetStageId,
+      targetProfileDefinitionId: selectedProfile.targetProfileDefinitionId,
+      profileSelectionId: selectedProfile.selectionId,
+      plannerDecisionHash: selectedProfile.plannerDecisionHash,
+      authorityChange: selectedProfile.authorityChange,
+      evidenceRefs: selectedProfile.evidenceRefs,
+    };
+    const terminalBranch = terminal.view.branch!;
+    const terminalRevision = terminal.view.agentRevision!;
+    const rerun = await rerunIncidentScenario({
+      scenario,
+      registry,
+      target: {
+        branchId: terminalBranch.branchId,
+        contractId: terminalBranch.contractId,
+        agentRevision: terminalRevision,
+        checkpointId: terminalBranch.checkpointId,
+        eventHeadHash: terminal.trial.eventHeadHash,
+        eventThroughSeq: terminal.trial.eventThroughSeq,
+        scenarioId,
+      },
+      lineageBranchIds: [
+        ...uniqueStrings(
+          persistedTrials
+            .flatMap((entry) => entry.view.branch!.lineageBranchIds)
+            .filter((branchId) => branchId !== terminalBranch.branchId),
+        ),
+        terminalBranch.branchId,
+      ],
+      dimensions: terminalBranch.dimensions,
+      agentReported: {
+        status: persistedTrials.every(
+          (entry) => entry.view.branch!.agentReported.status === 'reported-success',
+        )
+          ? 'reported-success'
+          : persistedTrials.some(
+                (entry) => entry.view.branch!.agentReported.status === 'reported-failure',
+              )
+            ? 'reported-failure'
+            : 'not-reported',
+        evidenceRefs: uniqueStrings(
+          persistedTrials.flatMap((entry) => entry.view.branch!.agentReported.evidenceRefs),
+        ),
+      },
+      effects: [],
+      runtimeProfileBinding,
+      outcomePolicyVersion: suite.outcomePolicyVersion,
+      issuedAt: this.#now().toISOString(),
+    });
+    const core: MissionOutcomeStudioRerunCoreV1 = {
+      schemaVersion: 'missionbraid.dev/outcome-kernel-rerun/v1',
+      missionId,
+      scenarioId,
+      contractId: scenario.contractId,
+      sourceCheckpointId: scenario.sourceCheckpointId,
+      sourceProfileId: sourceProfileIds[0]!,
+      executionKey,
+      trialCount,
+      trials: persistedTrials.map((entry) => entry.trial),
+      targetBranchId: terminalBranch.branchId,
+      targetAgentRevisionId: rerun.targetAgentRevisionId,
+      targetProfileId: rerun.targetProfileId,
+      targetStageId: targetStageIds[0]!,
+      targetProfileDefinitionId: request.targetProfileDefinitionId,
+      profileSelectionId: profileSelectionIds[0]!,
+      evaluation: rerun.evaluation,
+      receipt: rerun.receipt,
+      ciResult: rerun.ciResult,
+      startedAt,
+      completedAt: this.#now().toISOString(),
+    };
+    const runHash = hashPayload(core);
+    const completed: MissionOutcomeStudioRerunV1 = {
+      ...core,
+      runId: `outcome-kernel-rerun-${runHash.slice(0, 32)}`,
+      runHash,
+    };
+    verifyMissionOutcomeStudioRerun(completed);
+    await this.#withLease(
+      mission.workspaceKey,
+      `outcome-rerun-complete-${this.#id()}`,
+      async (fence) => {
+        this.#observe(
+          missionId,
+          'outcome-studio.incident-rerun.saved',
+          completed as unknown as JsonValue,
+          fence,
+        );
+        if (
+          !this.outcomeStudioScenarios(missionId).ciResults.some(
+            (result) => result.resultId === completed.ciResult.resultId,
+          )
+        ) {
+          this.#observe(
+            missionId,
+            'outcome-studio.ci-result.saved',
+            completed.ciResult as unknown as JsonValue,
+            fence,
+          );
+        }
+      },
+    );
+    return completed;
+  }
+
+  outcomeStudioReruns(missionId: string): readonly MissionOutcomeStudioRerunV1[] {
+    this.#requireMission(missionId);
+    return this.#store.listEvents(missionId).flatMap((event): MissionOutcomeStudioRerunV1[] => {
+      if (
+        event.type !== 'runtime.observation' ||
+        event.payload.kind !== 'outcome-studio.incident-rerun.saved' ||
+        !isJsonObject(event.payload.data)
+      ) {
+        return [];
+      }
+      try {
+        const run = event.payload.data as unknown as MissionOutcomeStudioRerunV1;
+        verifyMissionOutcomeStudioRerun(run);
+        return [run];
+      } catch {
+        return [];
+      }
+    });
   }
 
   outcomeStudioScenarios(missionId: string): MissionOutcomeStudioScenarioCollectionV1 {
@@ -1005,9 +1721,12 @@ export class MissionEngine {
           // Ignore malformed historical exports; the Kernel remains readable.
         }
       } else if (event.payload.kind === 'outcome-studio.ci-result.saved') {
-        const value = event.payload.data as unknown as OutcomeCiResultV1;
-        if (typeof value.resultId === 'string' && typeof value.resultHash === 'string') {
+        try {
+          const value = event.payload.data as unknown as OutcomeCiResultV1;
+          verifyOutcomeCiResult(value);
           ciResults.push(value);
+        } catch {
+          // A malformed or policy-inconsistent CI export is never surfaced.
         }
       }
     }
@@ -1378,6 +2097,270 @@ export class MissionEngine {
     });
   }
 
+  async #resolveExecutionForkRuntime(
+    missionId: string,
+    spec: MissionSpecV1,
+    checkpoint: CompositeCheckpointManifestV1,
+    sourceStage: AttemptStageSpecV1,
+    sourceProfile: ProfileV1,
+    request: MissionExecutionForkRequestV1,
+  ): Promise<ResolvedExecutionForkRuntime> {
+    if (request.targetProfileDefinitionId === undefined) {
+      const stageId = request.stageId ?? sourceStage.stageId;
+      const stage = spec.attemptPlan.find((candidate) => candidate.stageId === stageId);
+      if (stage === undefined || !stageMatchesProfile(stage, sourceProfile)) {
+        throw new MissionExecutionError(
+          'A different Runtime Profile requires an explicit eligible target stage and Profile Definition',
+        );
+      }
+      return {
+        stage,
+        sourceProfile,
+        targetProfile: sourceProfile,
+        selectionEvents: [],
+      };
+    }
+    if (request.stageId === undefined) {
+      throw new MissionExecutionError(
+        'Profile-Rebound Fork requires an explicit target stage from this Mission',
+      );
+    }
+    const targetStage = spec.attemptPlan.find((candidate) => candidate.stageId === request.stageId);
+    if (targetStage === undefined) {
+      throw new MissionExecutionError(
+        `Profile-Rebound target stage ${request.stageId} is not declared by Mission ${missionId}`,
+      );
+    }
+    const targetDefinition = profileDefinition(targetStage, this.#adapterManifest(targetStage));
+    if (targetDefinition.definitionId !== request.targetProfileDefinitionId) {
+      throw new MissionExecutionError(
+        'Profile-Rebound target Profile Definition does not match the declared Mission stage',
+      );
+    }
+
+    const missionEvents = this.#store.listEvents(missionId);
+    for (let index = missionEvents.length - 1; index >= 0; index -= 1) {
+      const event = missionEvents[index];
+      if (
+        event?.type !== 'runtime.observation' ||
+        event.payload.kind !== 'execution-fork.profile-rebound.selected' ||
+        !isJsonObject(event.payload.data)
+      ) {
+        continue;
+      }
+      const data = event.payload.data;
+      if (
+        data.checkpointId !== checkpoint.checkpointId ||
+        data.sourceProfileId !== sourceProfile.profileId ||
+        data.targetStageId !== targetStage.stageId ||
+        data.targetProfileDefinitionId !== targetDefinition.definitionId ||
+        !isJsonObject(data.selection) ||
+        !isJsonObject(data.targetProfile)
+      ) {
+        continue;
+      }
+      const selection = data.selection as unknown as ExecutionForkProfileSelectionV1;
+      const targetProfile = data.targetProfile as unknown as ProfileV1;
+      if (
+        selection.sourceProfileId !== sourceProfile.profileId ||
+        selection.targetProfileId !== targetProfile.profileId ||
+        selection.targetStageId !== targetStage.stageId ||
+        selection.targetProfileDefinitionId !== targetDefinition.definitionId ||
+        targetProfile.definition?.definitionId !== targetDefinition.definitionId ||
+        !stageMatchesProfile(targetStage, targetProfile) ||
+        executionForkProfileAuthorityChange(sourceProfile, targetProfile) !==
+          selection.authorityChange
+      ) {
+        throw new MissionExecutionError(
+          'Persisted Profile-Rebound selection conflicts with its source or declared target',
+        );
+      }
+      return {
+        stage: targetStage,
+        sourceProfile,
+        targetProfile,
+        profileSelection: selection,
+        selectionEvents: [],
+      };
+    }
+
+    const detection = await this.#detectStage(targetStage);
+    const targetProfile = createProfile(
+      targetStage,
+      detection,
+      spec.workspace,
+      this.#adapterManifest(targetStage),
+    );
+    if (targetProfile.profileId === sourceProfile.profileId) {
+      throw new MissionExecutionError(
+        'Profile-Rebound target resolves to the immutable source Runtime Profile',
+      );
+    }
+    const authorityChange = executionForkProfileAuthorityChange(sourceProfile, targetProfile);
+    if (authorityChange === 'expanded') {
+      throw new MissionExecutionError(
+        'Profile-Rebound target may only keep or narrow source Runtime authority',
+      );
+    }
+    const mission = this.#requireMission(missionId);
+    const state = reconstructExecutionState(missionEvents);
+    const candidate: PlannedRuntimeCandidate = {
+      stage: targetStage,
+      detection,
+      profile: targetProfile,
+    };
+    const requirements = plannerRequirements(missionId, mission.contract, sourceStage, [candidate]);
+    const plannerInput: ExecutionPlannerInputV1 = {
+      policyVersion: EXECUTION_PLANNER_POLICY_VERSION,
+      requirements,
+      candidates: [
+        {
+          profile: targetProfile,
+          observation: plannerObservation(candidate),
+          handoffStates: plannerProfileReboundStates(checkpoint, mission.contract),
+          wouldRepeatEffectIds: [],
+        },
+      ],
+      currentProfileId: sourceProfile.profileId,
+      effectFrontier: state.effects.map((effect) => ({
+        effectId: effect.effectId,
+        status: effect.status,
+      })),
+    };
+    const decision = planExecution(plannerInput);
+    if (decision.binding.selectedProfileId !== targetProfile.profileId) {
+      const rejection = decision.filter.candidates
+        .find((item) => item.profileId === targetProfile.profileId)
+        ?.rejectionReasons.map((reason) => reason.code)
+        .join(', ');
+      throw new MissionExecutionError(
+        `Profile-Rebound target is not eligible under the frozen Planner requirements${
+          rejection === undefined || rejection.length === 0 ? '' : `: ${rejection}`
+        }`,
+      );
+    }
+    const selectedAt = this.#now().toISOString();
+    const identity = hashPayload({
+      missionId,
+      checkpointId: checkpoint.checkpointId,
+      sourceProfileId: sourceProfile.profileId,
+      targetProfileId: targetProfile.profileId,
+      targetStageId: targetStage.stageId,
+      targetProfileDefinitionId: targetDefinition.definitionId,
+      plannerDecisionHash: decision.decisionHash,
+    }).slice(0, 32);
+    const catalogEventId = `event-profile-rebound-catalog-${identity}`;
+    const requirementsEventId = `event-profile-rebound-requirements-${identity}`;
+    const decisionEventId = `event-profile-rebound-decision-${identity}`;
+    const profileEventId = `event-profile-rebound-profile-${identity}`;
+    const selectionEventId = `event-profile-rebound-selection-${identity}`;
+    const selection: ExecutionForkProfileSelectionV1 = {
+      selectionId: `profile-rebound-selection-${identity}`,
+      sourceProfileId: sourceProfile.profileId,
+      targetProfileId: targetProfile.profileId,
+      targetStageId: targetStage.stageId,
+      targetProfileDefinitionId: targetDefinition.definitionId,
+      plannerDecisionHash: decision.decisionHash,
+      authorityChange,
+      evidenceRefs: [`event:${decisionEventId}`, `event:${profileEventId}`],
+      selectedAt,
+    };
+    const trigger = {
+      code: 'OUTCOME_REGRESSION_PROFILE_REBOUND',
+      sourceStageId: sourceStage.stageId,
+      sourceProfileId: sourceProfile.profileId,
+      sourceCheckpointId: checkpoint.checkpointId,
+      targetStageId: targetStage.stageId,
+      targetProfileDefinitionId: targetDefinition.definitionId,
+    };
+    const selectionEvents: EventV1[] = [
+      {
+        schemaVersion: DOMAIN_SCHEMA_VERSION,
+        eventId: catalogEventId,
+        missionId,
+        occurredAt: detection.checkedAt,
+        type: 'runtime.catalog_observed',
+        payload: { observation: requireCatalogObservation(targetProfile) },
+      },
+      {
+        schemaVersion: DOMAIN_SCHEMA_VERSION,
+        eventId: requirementsEventId,
+        missionId,
+        occurredAt: selectedAt,
+        type: 'runtime.observation',
+        payload: {
+          kind: 'execution-planner.requirements_frozen',
+          data: {
+            requirements: requirements as unknown as JsonValue,
+            derivationSource: 'accepted-profile-rebound-source-and-target',
+            trigger: trigger as unknown as JsonValue,
+            sourceCompositeCheckpointId: checkpoint.checkpointId,
+          },
+        },
+      },
+      {
+        schemaVersion: DOMAIN_SCHEMA_VERSION,
+        eventId: decisionEventId,
+        missionId,
+        occurredAt: selectedAt,
+        type: 'runtime.observation',
+        payload: {
+          kind: 'execution-planner.decision',
+          data: {
+            trigger: trigger as unknown as JsonValue,
+            plannerInput: plannerInput as unknown as JsonValue,
+            decision: decision as unknown as JsonValue,
+            policyVersion: EXECUTION_PLANNER_POLICY_VERSION,
+            decisionHash: decision.decisionHash,
+            sourceCompositeCheckpoint: {
+              checkpointId: checkpoint.checkpointId,
+              manifestHash: checkpoint.manifestHash,
+              source: checkpoint.source as unknown as JsonValue,
+              eventPrefix: checkpoint.eventPrefix as unknown as JsonValue,
+            },
+          },
+        },
+      },
+      {
+        schemaVersion: DOMAIN_SCHEMA_VERSION,
+        eventId: profileEventId,
+        missionId,
+        occurredAt: selectedAt,
+        type: 'profile.selected',
+        payload: {
+          profile: targetProfile,
+          reason: `Deterministic Profile-Rebound Planner ${decision.decisionHash}`,
+        },
+      },
+      {
+        schemaVersion: DOMAIN_SCHEMA_VERSION,
+        eventId: selectionEventId,
+        missionId,
+        occurredAt: selectedAt,
+        type: 'runtime.observation',
+        payload: {
+          kind: 'execution-fork.profile-rebound.selected',
+          data: {
+            checkpointId: checkpoint.checkpointId,
+            sourceProfileId: sourceProfile.profileId,
+            targetProfileId: targetProfile.profileId,
+            targetStageId: targetStage.stageId,
+            targetProfileDefinitionId: targetDefinition.definitionId,
+            selection: selection as unknown as JsonValue,
+            targetProfile: targetProfile as unknown as JsonValue,
+          },
+        },
+      },
+    ];
+    return {
+      stage: targetStage,
+      sourceProfile,
+      targetProfile,
+      profileSelection: selection,
+      selectionEvents,
+    };
+  }
+
   async executeFork(
     missionId: string,
     request: MissionExecutionForkRequestV1,
@@ -1416,6 +2399,13 @@ export class MissionEngine {
           'Diagnostic Fork candidate is not ready on the supplied Composite Checkpoint',
         );
       }
+      await assertDiagnosticInterventionMatchesContext(
+        spec,
+        checkpoint,
+        candidate,
+        intelligence.failureIntelligenceInput,
+        request.intervention,
+      );
       diagnosticVariable = proposal.changedVariable;
     }
     if (
@@ -1446,12 +2436,30 @@ export class MissionEngine {
         'Execution Fork Checkpoint Profile no longer matches its source Attempt',
       );
     }
-    const sourceStageId = sourceAttempt.stageId;
-    const stageId = request.stageId ?? sourceStageId;
-    const stage = spec.attemptPlan.find((candidate) => candidate.stageId === stageId);
-    if (stage === undefined || !stageMatchesProfile(stage, sourceProfile)) {
+    const sourceStage = spec.attemptPlan.find(
+      (candidate) => candidate.stageId === sourceAttempt.stageId,
+    );
+    if (sourceStage === undefined || !stageMatchesProfile(sourceStage, sourceProfile)) {
       throw new MissionExecutionError(
-        'This iteration executes a Fork with the immutable source Runtime Profile; a different Profile requires an eligible Planner decision',
+        'Execution Fork source stage no longer matches its immutable source Runtime Profile',
+      );
+    }
+    const resolvedRuntime = await this.#resolveExecutionForkRuntime(
+      missionId,
+      spec,
+      checkpoint,
+      sourceStage,
+      sourceProfile,
+      request,
+    );
+    const stage = resolvedRuntime.stage;
+    const targetProfile = resolvedRuntime.targetProfile;
+    if (
+      stage.breakpoint === 'mutable-tools' &&
+      (stage.profile.harness !== 'claude' || stage.profile.adapterId !== undefined)
+    ) {
+      throw new MissionExecutionError(
+        'Execution Fork mutable-tools enforcement is currently supported only for the native Claude Harness',
       );
     }
 
@@ -1464,6 +2472,8 @@ export class MissionEngine {
       checkpointId: checkpoint.checkpointId,
       childBranchId,
       intervention: request.intervention,
+      targetProfileId: targetProfile.profileId,
+      profileSelectionId: resolvedRuntime.profileSelection?.selectionId ?? null,
     });
     const worktreeParent = join(this.#stateDir, 'worktrees', missionId);
     await mkdir(worktreeParent, { recursive: true });
@@ -1478,6 +2488,9 @@ export class MissionEngine {
     const ownerId = `execution-fork-${this.#id()}`;
 
     return await this.#withLease(mission.workspaceKey, ownerId, async (fence) => {
+      if (resolvedRuntime.selectionEvents.length > 0) {
+        this.#store.appendEvents(resolvedRuntime.selectionEvents, fence);
+      }
       if (request.diagnosticCandidateId !== undefined && isJsonObject(diagnosticVariable)) {
         this.#store.appendEvent(
           {
@@ -1505,6 +2518,11 @@ export class MissionEngine {
       const fileJournal = new FileExecutionForkEvidenceJournal(
         join(this.#stateDir, 'execution-forks'),
       );
+      let forkToolGateway: ToolGateway | undefined;
+      let forkToolGateBinding: ClaudeToolGateBindingV1 | undefined;
+      let forkToolGatewayError: unknown;
+      let forkToolGatewayWatcher: Promise<void> | undefined;
+      const forkToolGatewayController = new AbortController();
       const mirroredJournal: ExecutionForkEvidenceJournalV1 = {
         append: async (draft: ExecutionForkEventDraftV1): Promise<ExecutionForkEventV1> => {
           const sourceEvent = await fileJournal.append(draft);
@@ -1516,12 +2534,13 @@ export class MissionEngine {
             attemptId: childAttemptId,
             branchId: childBranchId,
             contractId: mission.contract.contractId,
-            profileId: sourceProfile.profileId,
+            profileId: targetProfile.profileId,
             workspaceKey: childWorkspaceKey,
             planNodeId: stage.stageId,
             authority: 'workspace',
             injectionBudgetTokens: stage.profile.injectionBudgetTokens,
             boundAt: bindingBoundAt,
+            runtimeBinding: runtimeBinding(childAttemptId, targetProfile),
           };
           const kernelEvents = [
             ...executionForkEventToMissionEvents(
@@ -1544,7 +2563,7 @@ export class MissionEngine {
                   attemptId: childAttemptId,
                   stageId: stage.stageId,
                   harness: stage.profile.harness,
-                  profileId: sourceProfile.profileId,
+                  profileId: targetProfile.profileId,
                   branchId: childBranchId,
                   bindingId: binding.bindingId,
                   checkpointId: checkpoint.checkpointId,
@@ -1554,52 +2573,163 @@ export class MissionEngine {
             });
           }
           this.#store.appendEvents(kernelEvents, fence);
+          if (sourceEvent.type === 'fork.planned' && stage.breakpoint === 'mutable-tools') {
+            try {
+              if (forkToolGateway !== undefined || forkToolGateBinding !== undefined) {
+                throw new MissionExecutionError(
+                  'Execution Fork native Tool Gateway was armed more than once',
+                );
+              }
+              forkToolGateway = this.#toolGateway(missionId, childAttemptId);
+              await forkToolGateway.initialize();
+              forkToolGateBinding = await createClaudeToolGateBinding({
+                stateDir: this.#stateDir,
+                gatewayRoot: this.#toolGatewayRoot(),
+                missionId,
+                attemptId: childAttemptId,
+              });
+              this.#observe(
+                missionId,
+                'tool.gateway.armed',
+                {
+                  attemptId: childAttemptId,
+                  operation: 'execution-fork',
+                  matcher: forkToolGateBinding.matcher,
+                  tools: [...forkToolGateBinding.tools],
+                  settingsSha256: forkToolGateBinding.settingsSha256,
+                  controlLevel: 'enforced',
+                  capabilityFidelity: 'native',
+                  parentProcess: 'continues-while-hook-blocks-tool-dispatch',
+                  childProcesses: 'covered-only-when-dispatched-through-matched-Claude-tool',
+                  inFlightRequests: 'not-revoked',
+                  pendingTools: 'blocked-until-persisted-release',
+                },
+                fence,
+                childAttemptId,
+              );
+              forkToolGatewayWatcher = this.#watchToolGateway(
+                missionId,
+                childAttemptId,
+                forkToolGateway,
+                fence,
+                forkToolGatewayController.signal,
+              ).catch((error: unknown) => {
+                forkToolGatewayError = error;
+                forkToolGatewayController.abort();
+              });
+            } catch (error) {
+              // The durable fork.planned event already exists. Preserve that
+              // journal boundary and let the Runtime fail closed so the
+              // ExecutionForkService can append a durable fork.failed event.
+              forkToolGatewayError = error;
+              forkToolGatewayController.abort();
+            }
+          }
           return sourceEvent;
         },
         load: async (forkId: string) => await fileJournal.load(forkId),
       };
       const service = new ExecutionForkService({ journal: mirroredJournal, now: this.#now });
-      const runtime = new NativeAdapterRuntimeContinuationPort({
-        missionId,
-        acceptedContract: mission.contract,
-        acceptedMissionSpec: spec,
-        acceptedStage: stage,
-        acceptedCheckpoint: {
-          checkpointId: checkpoint.checkpointId,
+      const runtime: RuntimeContinuationPortV1 = {
+        continueFromCheckpoint: async (input) => {
+          if (forkToolGatewayError !== undefined) {
+            throw new MissionExecutionError(
+              'Execution Fork native Tool Gateway could not be armed',
+              { cause: forkToolGatewayError },
+            );
+          }
+          if (stage.breakpoint === 'mutable-tools' && forkToolGateBinding === undefined) {
+            throw new MissionExecutionError(
+              'Execution Fork reached Runtime dispatch without its native Tool Gateway binding',
+            );
+          }
+          const runtimeSignal =
+            stage.breakpoint !== 'mutable-tools'
+              ? signal
+              : signal === undefined
+                ? forkToolGatewayController.signal
+                : AbortSignal.any([signal, forkToolGatewayController.signal]);
+          const port = new NativeAdapterRuntimeContinuationPort({
+            missionId,
+            acceptedContract: mission.contract,
+            acceptedMissionSpec: spec,
+            acceptedStage: stage,
+            acceptedCheckpoint: {
+              checkpointId: checkpoint.checkpointId,
+              missionId,
+              contractId: checkpoint.source.contractId,
+              profileId: checkpoint.source.profileId,
+            },
+            acceptedSourceProfile: sourceProfile,
+            acceptedProfile: targetProfile,
+            ...(resolvedRuntime.profileSelection === undefined
+              ? {}
+              : { acceptedProfileSelection: resolvedRuntime.profileSelection }),
+            acceptedIntervention: request.intervention,
+            ...(spec.context === undefined ? {} : { acceptedContext: spec.context }),
+            controllerStateDir: this.#stateDir,
+            provenanceFile: this.#provenanceFile(missionId),
+            adapters: { codex: this.#codex, qoder: this.#qoder, claude: this.#claude },
+            adapterHost: this.#adapterHost,
+            ...(forkToolGateBinding === undefined
+              ? {}
+              : { acceptedToolGateBinding: forkToolGateBinding }),
+            ...(runtimeSignal === undefined ? {} : { signal: runtimeSignal }),
+          });
+          return await port.continueFromCheckpoint(input);
+        },
+      };
+      try {
+        const record = await service.execute(
+          {
+            mode: 'execution-fork',
+            checkpoint,
+            repositoryRoot: spec.workspace,
+            childBranchId,
+            gitBranchName,
+            worktreeId,
+            childWorkspaceKey,
+            isolatedWorktreePath,
+            intervention: request.intervention,
+            externalEffectDecisions,
+            runtimeBinding: runtimeBinding(
+              `fork-attempt-${checkpoint.checkpointId}`,
+              targetProfile,
+            ),
+            ...(resolvedRuntime.profileSelection === undefined
+              ? {}
+              : { profileSelection: resolvedRuntime.profileSelection }),
+          },
+          runtime,
+        );
+        if (forkToolGateway !== undefined) {
+          await this.#drainToolGateway(
+            missionId,
+            `fork-attempt-${record.forkId}`,
+            forkToolGateway,
+            fence,
+          );
+          forkToolGatewayController.abort();
+          await forkToolGatewayWatcher;
+          if (forkToolGatewayError !== undefined) {
+            throw new MissionExecutionError(
+              'The Execution Fork native Tool Gateway stopped before it could release a decision',
+              { cause: forkToolGatewayError },
+            );
+          }
+        }
+        const receipt = await this.#issueExecutionForkReceipt(
           missionId,
-          contractId: checkpoint.source.contractId,
-          profileId: checkpoint.source.profileId,
-        },
-        acceptedProfile: sourceProfile,
-        acceptedIntervention: request.intervention,
-        controllerStateDir: this.#stateDir,
-        provenanceFile: this.#provenanceFile(missionId),
-        adapters: { codex: this.#codex, qoder: this.#qoder, claude: this.#claude },
-        ...(signal === undefined ? {} : { signal }),
-      });
-      const record = await service.execute(
-        {
-          mode: 'execution-fork',
-          checkpoint,
-          repositoryRoot: spec.workspace,
           childBranchId,
-          gitBranchName,
-          worktreeId,
-          childWorkspaceKey,
-          isolatedWorktreePath,
-          intervention: request.intervention,
-          externalEffectDecisions,
-        },
-        runtime,
-      );
-      const receipt = await this.#issueExecutionForkReceipt(
-        missionId,
-        childBranchId,
-        spec,
-        record,
-        fence,
-      );
-      return { record, receipt };
+          spec,
+          record,
+          fence,
+        );
+        return { record, receipt };
+      } finally {
+        forkToolGatewayController.abort();
+        await forkToolGatewayWatcher?.catch(() => undefined);
+      }
     });
   }
 
@@ -1661,7 +2791,7 @@ export class MissionEngine {
     this.#requireMission(missionId);
     return this.#requireSpecSnapshot(missionId).attemptPlan.map((stage) => ({
       stageId: stage.stageId,
-      profileDefinition: profileDefinition(stage),
+      profileDefinition: profileDefinition(stage, this.#adapterManifest(stage)),
     }));
   }
 
@@ -1686,7 +2816,7 @@ export class MissionEngine {
       overrideId: `planner-override-${this.#id()}`,
       missionId,
       stageId,
-      profileDefinitionId: profileDefinition(stage).definitionId,
+      profileDefinitionId: profileDefinition(stage, this.#adapterManifest(stage)).definitionId,
       reason,
       recordedAt: this.#now().toISOString(),
     };
@@ -1901,7 +3031,119 @@ export class MissionEngine {
     const invalidations = observations
       .filter((event) => event.payload.kind === 'mission.selective_invalidation.created')
       .map((event) => event.payload.data as unknown as SelectiveInvalidationV1);
-    return { contractRevision, planRevision, invalidations };
+    return {
+      contractRevision,
+      planRevision,
+      invalidations,
+      execution: this.#missionPlanExecutionView(missionId, observations),
+    };
+  }
+
+  #missionPlanExecutionView(
+    missionId: string,
+    observations?: readonly Extract<StoredEventV1, { type: 'runtime.observation' }>[],
+  ): MissionPlanExecutionViewV1 {
+    const events = this.#store.listEvents(missionId);
+    const runtimeObservations =
+      observations ??
+      events.filter(
+        (event): event is Extract<StoredEventV1, { type: 'runtime.observation' }> =>
+          event.type === 'runtime.observation',
+      );
+    const state = reconstructExecutionState(events);
+    const artifacts = runtimeObservations.flatMap((event): MissionPlanArtifactRecordV1[] => {
+      if (
+        event.payload.kind !== 'mission.plan_artifact.recorded' &&
+        event.payload.kind !== 'mission.plan_artifact.reused'
+      ) {
+        return [];
+      }
+      if (!isJsonObject(event.payload.data) || !isJsonObject(event.payload.data.record)) return [];
+      return [event.payload.data.record as unknown as MissionPlanArtifactRecordV1];
+    });
+    const invalidationFences = runtimeObservations.flatMap((event): StaleAttemptFenceV1[] => {
+      if (
+        event.payload.kind !== 'mission.selective_invalidation.created' ||
+        !isJsonObject(event.payload.data) ||
+        !Array.isArray(event.payload.data.staleAttemptFences)
+      ) {
+        return [];
+      }
+      return event.payload.data.staleAttemptFences as unknown as StaleAttemptFenceV1[];
+    });
+    const fenceByAttempt = new Map(invalidationFences.map((fence) => [fence.attemptId, fence]));
+    const attempts = [...state.plans.values()]
+      .filter(
+        (plan) =>
+          plan.planRevisionId !== undefined &&
+          plan.contractRevisionId !== undefined &&
+          plan.nodeVersion !== undefined &&
+          plan.workspaceKey !== undefined,
+      )
+      .map(
+        (plan): MissionPlanAttemptViewV1 => ({
+          attemptId: plan.attemptId,
+          nodeId: plan.stageId,
+          harness: plan.harness,
+          branchId: plan.branchId,
+          workspaceKey: plan.workspaceKey!,
+          planRevisionId: plan.planRevisionId!,
+          contractRevisionId: plan.contractRevisionId!,
+          nodeVersion: plan.nodeVersion!,
+          status: state.finished.get(plan.attemptId) ?? 'running',
+          fence: fenceByAttempt.get(plan.attemptId) ?? null,
+        }),
+      )
+      .sort((left, right) => left.attemptId.localeCompare(right.attemptId));
+    const consolidationPlans = runtimeObservations.flatMap(
+      (event): MissionPlanConsolidationRecordV1[] => {
+        if (
+          event.payload.kind !== 'mission.consolidation.planned' ||
+          !isJsonObject(event.payload.data) ||
+          !isJsonObject(event.payload.data.record)
+        ) {
+          return [];
+        }
+        return [event.payload.data.record as unknown as MissionPlanConsolidationRecordV1];
+      },
+    );
+    const outcomes = new Map<string, WorkspaceIntegrationOutcomeV1>();
+    const afterById = new Map<string, Readonly<Record<string, string>>>();
+    for (const event of runtimeObservations) {
+      if (
+        event.payload.kind !== 'mission.consolidation.completed' ||
+        !isJsonObject(event.payload.data) ||
+        !isJsonObject(event.payload.data.outcome) ||
+        typeof event.payload.data.consolidationId !== 'string'
+      ) {
+        continue;
+      }
+      outcomes.set(
+        event.payload.data.consolidationId,
+        event.payload.data.outcome as unknown as WorkspaceIntegrationOutcomeV1,
+      );
+      if (isJsonObject(event.payload.data.sourceCommitsAfter)) {
+        afterById.set(
+          event.payload.data.consolidationId,
+          event.payload.data.sourceCommitsAfter as Readonly<Record<string, string>>,
+        );
+      }
+    }
+    const consolidations = consolidationPlans.map((record) => ({
+      ...record,
+      ...(outcomes.has(record.plan.consolidationId)
+        ? { outcome: outcomes.get(record.plan.consolidationId)! }
+        : {}),
+      ...(afterById.has(record.plan.consolidationId)
+        ? { sourceCommitsAfter: afterById.get(record.plan.consolidationId)! }
+        : {}),
+    }));
+    return {
+      attempts,
+      artifacts,
+      fences: invalidationFences,
+      consolidations,
+    };
   }
 
   /**
@@ -1942,10 +3184,11 @@ export class MissionEngine {
         agentId: plan.harness,
         nodeId: plan.stageId,
         nodeVersion:
+          plan.nodeVersion ??
           planView.planRevision.nodes.find((node) => node.nodeId === plan.stageId)?.nodeVersion ??
           `unknown:${plan.stageId}`,
-        planRevisionId: planView.planRevision.planRevisionId,
-        contractRevisionId: planView.contractRevision.contractRevisionId,
+        planRevisionId: plan.planRevisionId ?? planView.planRevision.planRevisionId,
+        contractRevisionId: plan.contractRevisionId ?? planView.contractRevision.contractRevisionId,
         status: terminalStatus === undefined ? ('running' as const) : ('finished' as const),
         ...(terminalStatus === undefined ? {} : { terminalStatus }),
         authorityRefs: ['workspace'],
@@ -1954,7 +3197,7 @@ export class MissionEngine {
       if (terminalStatus === undefined) activeAttempts.push(attempt);
       else finishedAttempts.push(attempt);
     }
-    const artifacts: PlanArtifactV1[] = state.checkpoints.flatMap((checkpoint) => {
+    const legacyArtifacts: PlanArtifactV1[] = state.checkpoints.flatMap((checkpoint) => {
       if (checkpoint.status !== 'succeeded' && checkpoint.status !== 'handed_off') return [];
       const receipt = receiptByAttemptId.get(checkpoint.attemptId);
       // A checkpoint is a workspace boundary, not proof that a plan node
@@ -1964,10 +3207,11 @@ export class MissionEngine {
       const node = planView.planRevision.nodes.find(
         (candidate) => candidate.nodeId === checkpoint.stageId,
       );
+      const artifactId = `plan-artifact:${checkpoint.checkpointId}`;
       return [
         {
           schemaVersion: 'missionbraid.dev/plan-artifact/v1',
-          artifactId: `plan-artifact:${checkpoint.checkpointId}`,
+          artifactId,
           artifactDigest: checkpoint.delta.afterWorkspaceDigest,
           missionId,
           planId: planView.planRevision.planId,
@@ -1981,7 +3225,7 @@ export class MissionEngine {
             evidenceId: `receipt:${receipt.receiptId}:criterion:${verification.criterionId}`,
             evaluator: 'deterministic' as const,
             verifierId: `receipt:${receipt.receiptId}`,
-            subjectId: checkpoint.attemptId,
+            subjectId: artifactId,
             subjectDigest: checkpoint.delta.afterWorkspaceDigest ?? checkpoint.checkpointId,
             result: {
               criterionId: verification.criterionId,
@@ -1998,6 +3242,15 @@ export class MissionEngine {
         },
       ];
     });
+    const artifacts = [
+      ...planView.execution.artifacts.map((record) => record.artifact),
+      ...legacyArtifacts.filter(
+        (artifact) =>
+          !planView.execution.artifacts.some(
+            (record) => record.artifact.artifactId === artifact.artifactId,
+          ),
+      ),
+    ];
     return projectMissionPlanRuntime({
       plan: planView.planRevision,
       activeAttempts,
@@ -2012,126 +3265,2002 @@ export class MissionEngine {
     input: ReviseMissionContractInputV1,
   ): Promise<ReviseMissionContractResultV1> {
     const mission = this.#requireMission(missionId);
+    const activeRun = this.#activePlanRuns.get(missionId);
+    if (activeRun !== undefined) {
+      return this.#reviseMissionContractUnderFence(missionId, input, activeRun.fence, activeRun);
+    }
     const ownerId = `contract-revision-${this.#id()}`;
-    return await this.#withLease(mission.workspaceKey, ownerId, async (fence) => {
-      const current = this.missionPlan(missionId);
-      const createdAt = this.#now().toISOString();
-      const next = createContractRevision({
-        missionId,
-        contract: input.contract,
-        requirements: input.requirements,
-        ...(input.authorityChanges === undefined
-          ? {}
-          : { authorityChanges: input.authorityChanges }),
-        previousRevision: current.contractRevision,
-        provenance: { reason: input.reason, evidenceRefs: input.evidenceRefs ?? [] },
-        createdAt,
-      });
-      const state = reconstructExecutionState(this.#store.listEvents(missionId));
-      const activeAttempts: ActivePlanAttemptV1[] = [...state.plans.values()].flatMap((plan) => {
-        const node = current.planRevision.nodes.find(
-          (candidate) => candidate.nodeId === plan.stageId,
-        );
-        if (node === undefined || state.finished.has(plan.attemptId)) return [];
-        return [
-          {
-            attemptId: plan.attemptId,
-            agentId: plan.harness,
-            nodeId: node.nodeId,
-            nodeVersion: node.nodeVersion,
-            planRevisionId: current.planRevision.planRevisionId,
-            contractRevisionId: current.contractRevision.contractRevisionId,
-            status: 'running',
+    return await this.#withLease(mission.workspaceKey, ownerId, async (fence) =>
+      this.#reviseMissionContractUnderFence(missionId, input, fence),
+    );
+  }
+
+  #reviseMissionContractUnderFence(
+    missionId: string,
+    input: ReviseMissionContractInputV1,
+    fence: WorkspaceFenceV1,
+    activeRun?: ActiveMissionPlanRun,
+  ): ReviseMissionContractResultV1 {
+    const current = this.missionPlan(missionId);
+    assertSupportedExecutableContractRevision(current.contractRevision.contract, input.contract);
+    const createdAt = this.#now().toISOString();
+    const next = createContractRevision({
+      missionId,
+      contract: input.contract,
+      requirements: input.requirements,
+      ...(input.authorityChanges === undefined ? {} : { authorityChanges: input.authorityChanges }),
+      previousRevision: current.contractRevision,
+      provenance: { reason: input.reason, evidenceRefs: input.evidenceRefs ?? [] },
+      createdAt,
+    });
+    const state = reconstructExecutionState(this.#store.listEvents(missionId));
+    const activeAttempts: ActivePlanAttemptV1[] = (
+      activeRun === undefined
+        ? [...state.plans.values()].flatMap((plan) => {
+            if (
+              state.finished.has(plan.attemptId) ||
+              plan.planRevisionId === undefined ||
+              plan.contractRevisionId === undefined ||
+              plan.nodeVersion === undefined
+            ) {
+              return [];
+            }
+            return [
+              {
+                attemptId: plan.attemptId,
+                agentId: plan.harness,
+                nodeId: plan.stageId,
+                nodeVersion: plan.nodeVersion,
+                planRevisionId: plan.planRevisionId,
+                contractRevisionId: plan.contractRevisionId,
+                status: 'running' as const,
+                authorityRefs: ['workspace'],
+                evidenceRefs: [`attempt:${plan.attemptId}`],
+              },
+            ];
+          })
+        : [...activeRun.attempts.values()].map((attempt) => ({
+            attemptId: attempt.attemptId,
+            agentId: attempt.harness,
+            nodeId: attempt.nodeId,
+            nodeVersion: attempt.nodeVersion,
+            planRevisionId: attempt.planRevisionId,
+            contractRevisionId: attempt.contractRevisionId,
+            status: 'running' as const,
             authorityRefs: ['workspace'],
-            evidenceRefs: [`attempt:${plan.attemptId}`],
+            evidenceRefs: [`attempt:${attempt.attemptId}`, `branch:${attempt.branchId}`],
+          }))
+    ).filter((attempt) => attempt.planRevisionId === current.planRevision.planRevisionId);
+    const artifacts = current.execution.artifacts.map((record) => record.artifact);
+    const invalidation = analyzeSelectiveInvalidation({
+      plan: current.planRevision,
+      previousContractRevision: current.contractRevision,
+      nextContractRevision: next,
+      artifacts,
+      activeAttempts,
+    });
+    const nextRequirementIds = new Set(next.requirements.map((item) => item.requirementId));
+    const nextPlan = createMissionPlanRevision({
+      planId: current.planRevision.planId,
+      missionId,
+      contractRevision: next,
+      parentRevision: current.planRevision,
+      nodes: current.planRevision.nodes.map((node) => ({
+        nodeId: node.nodeId,
+        kind: node.kind,
+        title: node.title,
+        requirementIds: node.requirementIds.filter((requirementId) =>
+          nextRequirementIds.has(requirementId),
+        ),
+        inputArtifactIds: node.inputArtifactIds,
+        declaredOutputKeys: node.declaredOutputKeys,
+        requiredAuthorityScopes: node.requiredAuthorityScopes,
+        workspace: node.workspace,
+        provenanceEvidenceRefs: node.provenanceEvidenceRefs,
+      })),
+      edges: current.planRevision.edges.map((edge) => ({
+        fromNodeId: edge.fromNodeId,
+        toNodeId: edge.toNodeId,
+        relation: edge.relation,
+        evidenceRefs: edge.evidenceRefs,
+      })),
+      sharedResources: current.planRevision.sharedResources,
+      provenance: {
+        source: 'deterministic-planner',
+        evidenceRefs: uniqueStrings([
+          ...current.planRevision.provenance.evidenceRefs,
+          ...next.provenance.evidenceRefs,
+        ]),
+      },
+      createdAt,
+    });
+    this.#store.appendEvents(
+      [
+        {
+          schemaVersion: DOMAIN_SCHEMA_VERSION,
+          eventId: `event-${this.#id()}`,
+          missionId,
+          occurredAt: createdAt,
+          type: 'runtime.observation',
+          payload: {
+            kind: 'mission.contract_revision.created',
+            data: next as unknown as JsonValue,
           },
-        ];
-      });
-      const invalidation = analyzeSelectiveInvalidation({
-        plan: current.planRevision,
-        previousContractRevision: current.contractRevision,
-        nextContractRevision: next,
-        activeAttempts,
-      });
-      // A Contract revision is also a Mission Plan boundary.  Keep the DAG
-      // immutable and create a new content-addressed revision, even when the
-      // node topology is unchanged; otherwise the next execution would still
-      // appear bound to the old Contract revision after a requirement change.
-      const nextPlan = createMissionPlanRevision({
-        planId: current.planRevision.planId,
-        missionId,
-        contractRevision: next,
-        parentRevision: current.planRevision,
-        nodes: current.planRevision.nodes.map((node) => ({
-          nodeId: node.nodeId,
-          kind: node.kind,
-          title: node.title,
-          // The initial plan intentionally binds every execution stage to the
-          // Mission Contract. Rebind the same topology to the new immutable
-          // requirement set so removed IDs cannot make the revision invalid.
-          requirementIds: next.requirements.map((requirement) => requirement.requirementId),
-          inputArtifactIds: node.inputArtifactIds,
-          declaredOutputKeys: node.declaredOutputKeys,
-          requiredAuthorityScopes: node.requiredAuthorityScopes,
-          workspace: node.workspace,
-          provenanceEvidenceRefs: node.provenanceEvidenceRefs,
-        })),
-        edges: current.planRevision.edges.map((edge) => ({
-          fromNodeId: edge.fromNodeId,
-          toNodeId: edge.toNodeId,
-          relation: edge.relation,
-          evidenceRefs: edge.evidenceRefs,
-        })),
-        sharedResources: current.planRevision.sharedResources,
-        provenance: {
-          source: 'deterministic-planner',
-          evidenceRefs: uniqueStrings([
-            ...current.planRevision.provenance.evidenceRefs,
-            ...next.provenance.evidenceRefs,
-          ]),
         },
-        createdAt,
-      });
-      this.#store.appendEvents(
-        [
-          {
+        {
+          schemaVersion: DOMAIN_SCHEMA_VERSION,
+          eventId: `event-${this.#id()}`,
+          missionId,
+          occurredAt: createdAt,
+          type: 'runtime.observation',
+          payload: {
+            kind: 'mission.plan_revision.created',
+            data: nextPlan as unknown as JsonValue,
+          },
+        },
+        {
+          schemaVersion: DOMAIN_SCHEMA_VERSION,
+          eventId: `event-${this.#id()}`,
+          missionId,
+          occurredAt: createdAt,
+          type: 'runtime.observation',
+          payload: {
+            kind: 'mission.selective_invalidation.created',
+            data: invalidation as unknown as JsonValue,
+          },
+        },
+        ...invalidation.staleAttemptFences.map(
+          (attemptFence): EventV1 => ({
             schemaVersion: DOMAIN_SCHEMA_VERSION,
             eventId: `event-${this.#id()}`,
             missionId,
+            attemptId: attemptFence.attemptId,
             occurredAt: createdAt,
             type: 'runtime.observation',
             payload: {
-              kind: 'mission.contract_revision.created',
-              data: next as unknown as JsonValue,
+              kind: 'mission.attempt_fence.requested',
+              data: attemptFence as unknown as JsonValue,
             },
-          },
+          }),
+        ),
+      ],
+      fence,
+    );
+    if (activeRun !== undefined) {
+      for (const attemptFence of invalidation.staleAttemptFences) {
+        const attempt = activeRun.attempts.get(attemptFence.attemptId);
+        if (attempt === undefined) continue;
+        attempt.fence = attemptFence;
+        attempt.controller.abort();
+      }
+    }
+    return { contractRevision: next, planRevision: nextPlan, invalidation };
+  }
+
+  /** Execute the optional Mission Plan DAG with one isolated native Agent per ready node. */
+  async executeMissionPlan(
+    missionId: string,
+    signal?: AbortSignal,
+  ): Promise<MissionPlanExecutionResultV1> {
+    const mission = this.#requireMission(missionId);
+    const spec = this.#requireSpecSnapshot(missionId);
+    if (spec.plan === undefined) {
+      throw new MissionExecutionError(`Mission ${missionId} has no executable Mission Plan`);
+    }
+    if (this.#activePlanRuns.has(missionId)) {
+      throw new MissionExecutionError(`Mission ${missionId} already has an active Plan run`);
+    }
+    const ownerId = `plan-runner-${this.#id()}`;
+    return await this.#withLease(mission.workspaceKey, ownerId, async (fence) => {
+      const baselineCommit = gitText(spec.workspace, ['rev-parse', '--verify', 'HEAD']);
+      const baselineSnapshot = snapshotGitWorkspace(spec.workspace, { now: this.#now });
+      const baselineCheckpointId = `plan-baseline-${hashPayload({
+        missionId,
+        baselineCommit,
+        workspaceDigest: baselineSnapshot.workspaceDigest,
+      }).slice(0, 28)}`;
+      if (
+        !this.#store
+          .listEvents(missionId)
+          .some(
+            (event) =>
+              event.type === 'runtime.observation' &&
+              event.payload.kind === 'mission.plan_base_checkpoint.created' &&
+              isJsonObject(event.payload.data) &&
+              event.payload.data.checkpointId === baselineCheckpointId,
+          )
+      ) {
+        this.#observe(
+          missionId,
+          'mission.plan_base_checkpoint.created',
           {
-            schemaVersion: DOMAIN_SCHEMA_VERSION,
-            eventId: `event-${this.#id()}`,
-            missionId,
-            occurredAt: createdAt,
-            type: 'runtime.observation',
-            payload: {
-              kind: 'mission.plan_revision.created',
-              data: nextPlan as unknown as JsonValue,
-            },
+            checkpointId: baselineCheckpointId,
+            branchId: requireRootBranch(mission),
+            baselineCommit,
+            workspaceDigest: baselineSnapshot.workspaceDigest,
           },
-          {
-            schemaVersion: DOMAIN_SCHEMA_VERSION,
-            eventId: `event-${this.#id()}`,
-            missionId,
-            occurredAt: createdAt,
-            type: 'runtime.observation',
-            payload: {
-              kind: 'mission.selective_invalidation.created',
-              data: invalidation as unknown as JsonValue,
-            },
-          },
-        ],
+          fence,
+        );
+      }
+      const run: ActiveMissionPlanRun = {
+        missionId,
+        fence,
+        spec,
+        baselineCheckpointId,
+        baselineCommit,
+        attempts: new Map(),
+      };
+      this.#activePlanRuns.set(missionId, run);
+      this.#append(
+        {
+          schemaVersion: DOMAIN_SCHEMA_VERSION,
+          eventId: `event-${this.#id()}`,
+          missionId,
+          occurredAt: this.#now().toISOString(),
+          type: 'mission.status_changed',
+          payload: { status: 'running' },
+        },
         fence,
       );
-      return { contractRevision: next, planRevision: nextPlan, invalidation };
+      await this.#writeProvenanceProjection(missionId);
+      try {
+        while (signal?.aborted !== true) {
+          const pendingView = this.missionPlan(missionId);
+          const unplannedRequirementIds = activeUnplannedRequirementIds(pendingView);
+          if (unplannedRequirementIds.length > 0) {
+            const reason = `Mission Plan has unplanned requirements: ${unplannedRequirementIds.join(', ')}`;
+            this.#setWaiting(missionId, reason, fence);
+            return { missionId, status: 'waiting', waitingReason: reason };
+          }
+          this.#adoptReusablePlanArtifacts(run);
+          const view = this.missionPlan(missionId);
+          const artifactByNode = currentPlanArtifactByNode(view);
+          const nonJoinNodes = view.planRevision.nodes.filter((node) => node.kind !== 'join');
+          const incomplete = nonJoinNodes.filter((node) => !artifactByNode.has(node.nodeId));
+          if (incomplete.length > 0) {
+            const ready = incomplete.filter((node) => {
+              if (
+                [...run.attempts.values()].some(
+                  (attempt) =>
+                    attempt.nodeId === node.nodeId &&
+                    attempt.planRevisionId === view.planRevision.planRevisionId,
+                )
+              ) {
+                return false;
+              }
+              const predecessors = view.planRevision.edges
+                .filter((edge) => edge.toNodeId === node.nodeId)
+                .map((edge) => edge.fromNodeId);
+              return predecessors.every((predecessor) => artifactByNode.has(predecessor));
+            });
+            if (ready.length === 0) {
+              const reason =
+                'No executable Plan node is ready from the persisted artifact frontier';
+              this.#setWaiting(missionId, reason, fence);
+              return { missionId, status: 'waiting', waitingReason: reason };
+            }
+            const outcomes = await Promise.all(
+              ready.map(
+                async (node) => await this.#executeMissionPlanNode(run, view, node.nodeId, signal),
+              ),
+            );
+            const latest = this.missionPlan(missionId);
+            const revisionChanged =
+              latest.planRevision.planRevisionId !== view.planRevision.planRevisionId;
+            const hardFailure = outcomes.find(
+              (outcome) => outcome.status === 'failed' || outcome.status === 'abandoned',
+            );
+            if (hardFailure !== undefined && !revisionChanged) {
+              const reason =
+                hardFailure.detail ?? `Plan node ${hardFailure.nodeId} did not produce an artifact`;
+              this.#setWaiting(missionId, reason, fence);
+              return { missionId, status: 'waiting', waitingReason: reason };
+            }
+            continue;
+          }
+
+          const joinNode = view.planRevision.nodes.find((node) => node.kind === 'join');
+          if (joinNode === undefined) {
+            const reason = 'Mission Plan has no consolidation join node';
+            this.#setWaiting(missionId, reason, fence);
+            return { missionId, status: 'waiting', waitingReason: reason };
+          }
+          const receipt = await this.#executeMissionPlanConsolidation(
+            run,
+            view,
+            joinNode.nodeId,
+            signal,
+          );
+          if (receipt === undefined) continue;
+          return { missionId, status: 'succeeded', receipt };
+        }
+        const reason = 'Mission Plan execution was interrupted';
+        this.#setWaiting(missionId, reason, fence);
+        return { missionId, status: 'waiting', waitingReason: reason };
+      } finally {
+        for (const attempt of run.attempts.values()) attempt.controller.abort();
+        this.#activePlanRuns.delete(missionId);
+      }
     });
+  }
+
+  #adoptReusablePlanArtifacts(run: ActiveMissionPlanRun): void {
+    const view = this.missionPlan(run.missionId);
+    const invalidation = [...view.invalidations]
+      .reverse()
+      .find(
+        (candidate) =>
+          candidate.targetContractRevisionId === view.contractRevision.contractRevisionId &&
+          candidate.sourcePlanRevisionId === view.planRevision.parentPlanRevisionId,
+      );
+    if (invalidation === undefined) return;
+    const existingIds = new Set(
+      view.execution.artifacts.map((record) => record.artifact.artifactId),
+    );
+    const currentNodes = new Map(view.planRevision.nodes.map((node) => [node.nodeId, node]));
+    for (const source of view.execution.artifacts) {
+      if (
+        source.artifact.planRevisionId !== invalidation.sourcePlanRevisionId ||
+        !invalidation.reusableNodeIds.includes(source.artifact.producedByNodeId) ||
+        !planArtifactHasPassingEvidence(source.artifact)
+      ) {
+        continue;
+      }
+      const node = currentNodes.get(source.artifact.producedByNodeId);
+      if (node === undefined || node.nodeVersion !== source.artifact.producerNodeVersion) continue;
+      const artifactId = `plan-artifact-reuse-${hashPayload({
+        sourceArtifactId: source.artifact.artifactId,
+        targetPlanRevisionId: view.planRevision.planRevisionId,
+      }).slice(0, 28)}`;
+      if (existingIds.has(artifactId)) continue;
+      const evidence: DeterministicVerifierEvidenceV1 = {
+        evidenceId: `reuse-evidence-${hashPayload({ artifactId, invalidation: invalidation.invalidationId }).slice(0, 28)}`,
+        evaluator: 'deterministic',
+        verifierId: 'missionbraid-selective-reuse',
+        subjectId: artifactId,
+        subjectDigest: source.artifact.artifactDigest,
+        result: {
+          criterionId: `reuse-${node.nodeId}`,
+          status: 'passed',
+          evidenceRefs: [
+            `invalidation:${invalidation.invalidationId}`,
+            `source-artifact:${source.artifact.artifactId}`,
+          ],
+        },
+        evidenceRefs: [
+          `invalidation:${invalidation.invalidationId}`,
+          `source-artifact:${source.artifact.artifactId}`,
+        ],
+      };
+      const artifact = recordPlanArtifact({
+        artifactId,
+        artifactDigest: source.artifact.artifactDigest,
+        plan: view.planRevision,
+        producedByNodeId: node.nodeId,
+        sourceArtifactIds: [source.artifact.artifactId],
+        verifierEvidence: [evidence],
+        evidenceRefs: [
+          `invalidation:${invalidation.invalidationId}`,
+          `source-artifact:${source.artifact.artifactId}`,
+        ],
+      });
+      const record: MissionPlanArtifactRecordV1 = {
+        ...source,
+        recordId: `artifact-record-${this.#id()}`,
+        artifact,
+        recordedAt: this.#now().toISOString(),
+        reusedFromArtifactId: source.artifact.artifactId,
+        invalidationId: invalidation.invalidationId,
+      };
+      this.#observe(
+        run.missionId,
+        'mission.plan_artifact.reused',
+        { record: record as unknown as JsonValue },
+        run.fence,
+        source.attemptId,
+      );
+      existingIds.add(artifactId);
+    }
+  }
+
+  async #executeMissionPlanNode(
+    run: ActiveMissionPlanRun,
+    view: MissionPlanView,
+    nodeId: string,
+    signal?: AbortSignal,
+  ): Promise<MissionPlanNodeRunOutcome> {
+    const node = view.planRevision.nodes.find((candidate) => candidate.nodeId === nodeId);
+    const nodeSpec = run.spec.plan?.nodes.find((candidate) => candidate.nodeId === nodeId);
+    if (node === undefined || nodeSpec === undefined) {
+      throw new MissionExecutionError(`Plan node ${nodeId} is not executable`);
+    }
+    const stage = run.spec.attemptPlan.find((candidate) => candidate.stageId === nodeSpec.stageId);
+    if (stage === undefined) {
+      throw new MissionExecutionError(
+        `Plan node ${nodeId} references missing stage ${nodeSpec.stageId}`,
+      );
+    }
+    const detection = await this.#detectStage(stage);
+    if (!detection.available || !detection.responsive || detection.status !== 'ready') {
+      return {
+        attemptId: `attempt-unstarted-${this.#id()}`,
+        nodeId,
+        status: 'failed',
+        detail: `Runtime ${stage.profile.harness} is unavailable`,
+      };
+    }
+    const identity = hashPayload({
+      missionId: run.missionId,
+      nodeId,
+      planRevisionId: view.planRevision.planRevisionId,
+      nonce: this.#id(),
+    }).slice(0, 28);
+    const branchId = `branch-plan-${identity}`;
+    const attemptId = `attempt-plan-${identity}`;
+    const bindingId = `binding-plan-${identity}`;
+    const workspaceKey = `workspace-plan-${identity}`;
+    const worktreePath = join(this.#stateDir, 'worktrees', run.missionId, `plan-${identity}`);
+    const gitBranchName = `missionbraid/plan-${identity}`;
+    await mkdir(dirname(worktreePath), { recursive: true });
+    gitExec(run.spec.workspace, [
+      'worktree',
+      'add',
+      '-b',
+      gitBranchName,
+      worktreePath,
+      run.baselineCommit,
+    ]);
+    const before = snapshotGitWorkspace(worktreePath, { now: this.#now });
+    const controlDirectory = join(worktreePath, '.missionbraid');
+    await mkdir(controlDirectory, { recursive: true });
+    await writeFile(
+      join(controlDirectory, 'contract-revision.json'),
+      `${JSON.stringify(
+        {
+          contractRevisionId: view.contractRevision.contractRevisionId,
+          revisionNumber: view.contractRevision.revisionNumber,
+          requirements: view.contractRevision.requirements,
+        },
+        null,
+        2,
+      )}\n`,
+      { encoding: 'utf8', mode: 0o600 },
+    );
+    const executionBaseline = snapshotGitWorkspace(worktreePath, { now: this.#now });
+    const profile = createProfile(stage, detection, worktreePath, this.#adapterManifest(stage));
+    const startedAt = this.#now().toISOString();
+    const branch: BranchV1 = {
+      schemaVersion: DOMAIN_SCHEMA_VERSION,
+      branchId,
+      missionId: run.missionId,
+      parentBranchId: requireRootBranch(this.#requireMission(run.missionId)),
+      baseCheckpointId: run.baselineCheckpointId,
+      status: 'active',
+      createdAt: startedAt,
+    };
+    const binding: AttemptBindingV1 = {
+      schemaVersion: DOMAIN_SCHEMA_VERSION,
+      bindingId,
+      missionId: run.missionId,
+      attemptId,
+      branchId,
+      contractId: view.contractRevision.contract.contractId,
+      profileId: profile.profileId,
+      workspaceKey,
+      planNodeId: node.nodeId,
+      planRevisionId: view.planRevision.planRevisionId,
+      contractRevisionId: view.contractRevision.contractRevisionId,
+      nodeVersion: node.nodeVersion,
+      agentId: stage.profile.harness,
+      authorityRefs: ['workspace'],
+      fenceGeneration: view.contractRevision.revisionNumber,
+      authority: 'workspace',
+      injectionBudgetTokens: stage.profile.injectionBudgetTokens,
+      boundAt: startedAt,
+      runtimeBinding: runtimeBinding(attemptId, profile),
+    };
+    const effectId = `effect-plan-${identity}`;
+    const effect: EffectV1 = {
+      schemaVersion: DOMAIN_SCHEMA_VERSION,
+      effectId,
+      missionId: run.missionId,
+      attemptId,
+      kind: 'workspace.plan_node_mutation',
+      resourceKey: workspaceKey,
+      controlLevel: 'enforced',
+      scope: 'branch_local_workspace',
+      status: 'intended',
+      evidenceRefs: [
+        `plan:${view.planRevision.planRevisionId}`,
+        `contract:${view.contractRevision.contractRevisionId}`,
+      ],
+      createdAt: startedAt,
+    };
+    this.#store.appendEvents(
+      [
+        {
+          schemaVersion: DOMAIN_SCHEMA_VERSION,
+          eventId: `event-${this.#id()}`,
+          missionId: run.missionId,
+          occurredAt: startedAt,
+          type: 'branch.created',
+          payload: { branch },
+        },
+        {
+          schemaVersion: DOMAIN_SCHEMA_VERSION,
+          eventId: `event-${this.#id()}`,
+          missionId: run.missionId,
+          occurredAt: detection.checkedAt,
+          type: 'runtime.catalog_observed',
+          payload: { observation: requireCatalogObservation(profile) },
+        },
+        {
+          schemaVersion: DOMAIN_SCHEMA_VERSION,
+          eventId: `event-${this.#id()}`,
+          missionId: run.missionId,
+          occurredAt: startedAt,
+          type: 'profile.selected',
+          payload: { profile, reason: `Mission Plan node ${node.nodeId}` },
+        },
+        {
+          schemaVersion: DOMAIN_SCHEMA_VERSION,
+          eventId: `event-${this.#id()}`,
+          missionId: run.missionId,
+          attemptId,
+          occurredAt: startedAt,
+          type: 'attempt.bound',
+          payload: { binding },
+        },
+        {
+          schemaVersion: DOMAIN_SCHEMA_VERSION,
+          eventId: `event-${this.#id()}`,
+          missionId: run.missionId,
+          attemptId,
+          occurredAt: startedAt,
+          type: 'effect.recorded',
+          payload: { effect },
+        },
+        {
+          schemaVersion: DOMAIN_SCHEMA_VERSION,
+          eventId: `event-${this.#id()}`,
+          missionId: run.missionId,
+          attemptId,
+          occurredAt: startedAt,
+          type: 'runtime.observation',
+          payload: {
+            kind: 'attempt.plan',
+            data: {
+              attemptId,
+              stageId: node.nodeId,
+              sourceStageId: stage.stageId,
+              harness: stage.profile.harness,
+              profileId: profile.profileId,
+              branchId,
+              bindingId,
+              workspaceKey,
+              planRevisionId: view.planRevision.planRevisionId,
+              contractRevisionId: view.contractRevision.contractRevisionId,
+              nodeVersion: node.nodeVersion,
+              operation: 'mission-plan-node',
+            },
+          },
+        },
+        {
+          schemaVersion: DOMAIN_SCHEMA_VERSION,
+          eventId: `event-${this.#id()}`,
+          missionId: run.missionId,
+          attemptId,
+          occurredAt: startedAt,
+          type: 'attempt.started',
+          payload: {
+            attempt: {
+              schemaVersion: DOMAIN_SCHEMA_VERSION,
+              attemptId,
+              missionId: run.missionId,
+              branchId,
+              profileId: profile.profileId,
+              stageId: node.nodeId,
+              status: 'running',
+              startedAt,
+            },
+          },
+        },
+      ],
+      run.fence,
+    );
+    const controller = new AbortController();
+    const active: ActiveMissionPlanNodeRun = {
+      attemptId,
+      nodeId,
+      nodeVersion: node.nodeVersion,
+      planRevisionId: view.planRevision.planRevisionId,
+      contractRevisionId: view.contractRevision.contractRevisionId,
+      harness: stage.profile.harness,
+      branchId,
+      workspaceKey,
+      workspacePath: worktreePath,
+      controller,
+    };
+    run.attempts.set(attemptId, active);
+    const runtimeSignal =
+      signal === undefined ? controller.signal : AbortSignal.any([signal, controller.signal]);
+    const prompt = createMissionPlanNodePrompt(view, nodeSpec, stage);
+    const promptArtifact = await this.#artifacts.putLine(prompt);
+    this.#observe(
+      run.missionId,
+      'context.controller_prompt',
+      {
+        attemptId,
+        branchId,
+        bindingId,
+        planNodeId: node.nodeId,
+        planRevisionId: view.planRevision.planRevisionId,
+        contractRevisionId: view.contractRevision.contractRevisionId,
+        source: 'missionbraid-plan-coordinator',
+        adapterBinding: 'native-process-prompt-argument',
+        visibility: 'known',
+        completeness: 'partial',
+        nativeArtifact: promptArtifact as unknown as JsonValue,
+      },
+      run.fence,
+      attemptId,
+    );
+    const runtimeEventIdByNativeIdentity = new Map<string, string>();
+    const outputHash = createHash('sha256');
+    let outputLines = 0;
+    let runtimeResult: RuntimeRunResult;
+    try {
+      runtimeResult = await this.#runRuntime(stage, profile, {
+        missionId: run.missionId,
+        branchId,
+        attemptId,
+        bindingId,
+        workspaceKey,
+        workspace: worktreePath,
+        prompt,
+        signal: runtimeSignal,
+        onStart: (pid) => {
+          this.#observe(
+            run.missionId,
+            'runtime.process_started',
+            {
+              attemptId,
+              nodeId,
+              harness: stage.profile.harness,
+              pid,
+              planRevisionId: view.planRevision.planRevisionId,
+              contractRevisionId: view.contractRevision.contractRevisionId,
+            },
+            run.fence,
+            attemptId,
+          );
+        },
+        onOutput: async (line) => {
+          const artifact = await this.#artifacts.putLine(line.line);
+          const causalParentIds = nativeParentCorrelationIds(line.value).flatMap((parentId) => {
+            const parent = runtimeEventIdByNativeIdentity.get(parentId);
+            return parent === undefined ? [] : [parent];
+          });
+          const normalized = normalizeRuntimeOutput(
+            line,
+            {
+              missionId: run.missionId,
+              branchId,
+              attemptId,
+              bindingId,
+              planNodeId: node.nodeId,
+              sourceProtocol: this.#runtimeProtocol(stage),
+              ...(causalParentIds.length === 0 ? {} : { causalParentIds }),
+            },
+            artifact,
+          );
+          this.#append(
+            {
+              schemaVersion: DOMAIN_SCHEMA_VERSION,
+              eventId: normalized.runtimeEventId,
+              missionId: run.missionId,
+              attemptId,
+              occurredAt: normalized.observedAt,
+              type: 'runtime.event',
+              payload: { event: normalized },
+            },
+            run.fence,
+          );
+          for (const nativeIdentity of nativeEventIdentityIds(line.value)) {
+            runtimeEventIdByNativeIdentity.set(nativeIdentity, normalized.runtimeEventId);
+          }
+          outputHash.update(`${line.stream}\0${line.line}\n`, 'utf8');
+          outputLines += 1;
+        },
+      });
+    } catch (error) {
+      runtimeResult = runtimeThrownResult(
+        stage.profile.harness,
+        this.#runtimeResultProtocol(stage),
+        error,
+        startedAt,
+        this.#now(),
+      );
+    }
+    const afterRuntime = snapshotGitWorkspace(worktreePath, { now: this.#now });
+    const runtimeDelta = createStageWorkspaceDelta(executionBaseline, afterRuntime);
+    const processSucceeded = processResultSucceeded(runtimeResult);
+    this.#observe(
+      run.missionId,
+      'runtime.process_finished',
+      {
+        attemptId,
+        nodeId,
+        harness: stage.profile.harness,
+        exitCode: runtimeResult.process.exitCode,
+        signal: runtimeResult.process.signal,
+        aborted: runtimeResult.process.aborted,
+        outputSha256: outputHash.digest('hex'),
+        outputLines,
+        ...(runtimeResult.outputAccounting === undefined
+          ? {}
+          : {
+              rawOutputSha256: runtimeResult.outputAccounting.rawSha256,
+              rawOutputLines: runtimeResult.outputAccounting.rawLineCount,
+              retainedOutputLines: runtimeResult.outputAccounting.retainedLineCount,
+              droppedOutputLines: runtimeResult.outputAccounting.droppedLineCount,
+              outputCompactionStrategy: runtimeResult.outputAccounting.strategy,
+            }),
+        planRevisionId: view.planRevision.planRevisionId,
+        contractRevisionId: view.contractRevision.contractRevisionId,
+      },
+      run.fence,
+      attemptId,
+    );
+    const postRuntimeFence = this.#missionPlanAttemptFence(run, active, view);
+    if (postRuntimeFence !== undefined) {
+      this.#appendPlanNodeTerminalEvents(
+        run,
+        attemptId,
+        effectId,
+        'abandoned',
+        runtimeDelta.changedPaths.length > 0 ? 'confirmed' : 'skipped',
+        `Attempt fenced by ${postRuntimeFence.fenceId}`,
+      );
+      this.#observe(
+        run.missionId,
+        'mission.attempt_fenced',
+        {
+          ...postRuntimeFence,
+          processAborted: runtimeResult.process.aborted,
+          preservedWorkspaceDigest: afterRuntime.workspaceDigest,
+        } as unknown as JsonValue,
+        run.fence,
+        attemptId,
+      );
+      run.attempts.delete(attemptId);
+      return { attemptId, nodeId, status: 'abandoned', detail: 'Obsolete revision was fenced' };
+    }
+    if (!processSucceeded) {
+      this.#appendPlanNodeTerminalEvents(
+        run,
+        attemptId,
+        effectId,
+        'failed',
+        runtimeDelta.changedPaths.length > 0 ? 'confirmed' : 'failed',
+        failureSummary(runtimeResult, false, true, true),
+      );
+      run.attempts.delete(attemptId);
+      return {
+        attemptId,
+        nodeId,
+        status: 'failed',
+        detail: failureSummary(runtimeResult, false, true, true),
+      };
+    }
+    const changedPaths = runtimeDelta.changedPaths.map((change) => change.path);
+    const undeclared = changedPaths.filter((path) => !node.declaredOutputKeys.includes(path));
+    if (undeclared.length > 0 || changedPaths.length === 0) {
+      const detail =
+        changedPaths.length === 0
+          ? 'Agent produced no declared workspace output'
+          : `Agent changed undeclared paths: ${undeclared.join(', ')}`;
+      this.#appendPlanNodeTerminalEvents(
+        run,
+        attemptId,
+        effectId,
+        'failed',
+        changedPaths.length === 0 ? 'skipped' : 'confirmed',
+        detail,
+      );
+      run.attempts.delete(attemptId);
+      return { attemptId, nodeId, status: 'failed', detail };
+    }
+    const verifications = await this.#verifyPlanNode(
+      run,
+      nodeSpec,
+      worktreePath,
+      attemptId,
+      signal,
+    );
+    const afterVerification = snapshotGitWorkspace(worktreePath, { now: this.#now });
+    const verifierDelta = createStageWorkspaceDelta(afterRuntime, afterVerification);
+    const postVerificationFence = this.#missionPlanAttemptFence(run, active, view);
+    if (postVerificationFence !== undefined) {
+      this.#appendPlanNodeTerminalEvents(
+        run,
+        attemptId,
+        effectId,
+        'abandoned',
+        runtimeDelta.changedPaths.length > 0 ? 'confirmed' : 'skipped',
+        `Attempt fenced by ${postVerificationFence.fenceId}`,
+      );
+      this.#observe(
+        run.missionId,
+        'mission.attempt_fenced',
+        {
+          ...postVerificationFence,
+          processAborted: runtimeResult.process.aborted,
+          preservedWorkspaceDigest: snapshotGitWorkspace(worktreePath, { now: this.#now })
+            .workspaceDigest,
+        } as unknown as JsonValue,
+        run.fence,
+        attemptId,
+      );
+      run.attempts.delete(attemptId);
+      return { attemptId, nodeId, status: 'abandoned', detail: 'Obsolete revision was fenced' };
+    }
+    if (verifierDelta.changedPaths.length > 0) {
+      const undeclaredVerifierPaths = verifierDelta.changedPaths
+        .map((change) => change.path)
+        .filter((path) => !node.declaredOutputKeys.includes(path));
+      const detail =
+        undeclaredVerifierPaths.length > 0
+          ? `Verifier changed undeclared paths: ${undeclaredVerifierPaths.join(', ')}`
+          : `Verifier changed Agent output paths: ${verifierDelta.changedPaths
+              .map((change) => change.path)
+              .join(', ')}`;
+      this.#appendPlanNodeTerminalEvents(run, attemptId, effectId, 'failed', 'confirmed', detail);
+      run.attempts.delete(attemptId);
+      return { attemptId, nodeId, status: 'failed', detail };
+    }
+    if (verifications.some((verification) => !verification.result.passed)) {
+      const detail = `Deterministic verifier rejected Plan node ${nodeId}`;
+      this.#appendPlanNodeTerminalEvents(run, attemptId, effectId, 'failed', 'confirmed', detail);
+      run.attempts.delete(attemptId);
+      return { attemptId, nodeId, status: 'failed', detail };
+    }
+    await rm(controlDirectory, { recursive: true, force: true });
+    gitExec(worktreePath, ['add', '--', ...node.declaredOutputKeys.map(assertSafePlanOutputPath)]);
+    gitExec(worktreePath, [
+      '-c',
+      'user.name=MissionBraid',
+      '-c',
+      'user.email=missionbraid@localhost',
+      'commit',
+      '--no-gpg-sign',
+      '-m',
+      `MissionBraid Plan node ${node.nodeId}`,
+    ]);
+    const sourceCommit = gitText(worktreePath, ['rev-parse', 'HEAD']);
+    const sealed = snapshotGitWorkspace(worktreePath, { now: this.#now });
+    assertSealedPlanWorkspace(sealed, sourceCommit);
+    const sealedDelta = createStageWorkspaceDelta(before, sealed);
+    const artifactId = `plan-artifact-${hashPayload({ attemptId, sourceCommit }).slice(0, 28)}`;
+    const verifierEvidence: DeterministicVerifierEvidenceV1[] = verifications.map(
+      ({ criterionId, result }) => ({
+        evidenceId: `plan-verifier-${hashPayload({ artifactId, criterionId, invocation: result.invocationDigest }).slice(0, 28)}`,
+        evaluator: 'deterministic',
+        verifierId: `command:${result.invocationDigest}`,
+        subjectId: artifactId,
+        subjectDigest: sealed.workspaceDigest,
+        result: {
+          criterionId,
+          status: 'passed',
+          evidenceRefs: [
+            `verifier:${result.invocationDigest}`,
+            `stdout:sha256:${result.stdout.sha256}`,
+            `stderr:sha256:${result.stderr.sha256}`,
+          ],
+        },
+        evidenceRefs: [
+          `verifier:${result.invocationDigest}`,
+          `stdout:sha256:${result.stdout.sha256}`,
+          `stderr:sha256:${result.stderr.sha256}`,
+        ],
+      }),
+    );
+    const artifact = recordPlanArtifact({
+      artifactId,
+      artifactDigest: sealed.workspaceDigest,
+      plan: view.planRevision,
+      producedByNodeId: node.nodeId,
+      verifierEvidence,
+      evidenceRefs: [`attempt:${attemptId}`, `branch:${branchId}`, `commit:${sourceCommit}`],
+    });
+    const record: MissionPlanArtifactRecordV1 = {
+      recordId: `artifact-record-${this.#id()}`,
+      artifact,
+      attemptId,
+      branchId,
+      workspaceKey,
+      workspacePath: worktreePath,
+      sourceCommit,
+      changedPaths: sealedDelta.changedPaths.map((change) => change.path),
+      recordedAt: this.#now().toISOString(),
+    };
+    const checkpointId = `checkpoint-plan-${hashPayload({ attemptId, sourceCommit }).slice(0, 28)}`;
+    this.#observe(
+      run.missionId,
+      'checkpoint.created',
+      {
+        checkpointId,
+        missionId: run.missionId,
+        attemptId,
+        stageId: node.nodeId,
+        harness: stage.profile.harness,
+        profileId: profile.profileId,
+        branchId,
+        bindingId,
+        status: 'succeeded',
+        delta: sealedDelta,
+        origin: 'runtime-completion',
+      } as unknown as JsonValue,
+      run.fence,
+      attemptId,
+    );
+    this.#appendPlanNodeTerminalEvents(
+      run,
+      attemptId,
+      effectId,
+      'succeeded',
+      'confirmed',
+      `Plan node ${node.nodeId} passed deterministic verification`,
+    );
+    this.#observe(
+      run.missionId,
+      'mission.plan_artifact.recorded',
+      { record: record as unknown as JsonValue },
+      run.fence,
+      attemptId,
+    );
+    run.attempts.delete(attemptId);
+    return { attemptId, nodeId, status: 'succeeded', artifact: record };
+  }
+
+  #missionPlanAttemptFence(
+    run: ActiveMissionPlanRun,
+    attempt: ActiveMissionPlanNodeRun,
+    observedView: MissionPlanView,
+  ): StaleAttemptFenceV1 | undefined {
+    const requested = planAttemptFence(attempt);
+    if (requested !== undefined) return requested;
+    const latest = this.missionPlan(run.missionId);
+    if (
+      latest.planRevision.planRevisionId === observedView.planRevision.planRevisionId &&
+      latest.contractRevision.contractRevisionId ===
+        observedView.contractRevision.contractRevisionId
+    ) {
+      return undefined;
+    }
+    const stale: StaleAttemptFenceV1 = {
+      fenceId: `attempt-fence-${hashPayload({
+        attemptId: attempt.attemptId,
+        observedPlanRevisionId: attempt.planRevisionId,
+        observedContractRevisionId: attempt.contractRevisionId,
+        targetContractRevisionId: latest.contractRevision.contractRevisionId,
+      }).slice(0, 28)}`,
+      attemptId: attempt.attemptId,
+      agentId: attempt.harness,
+      nodeId: attempt.nodeId,
+      reason: 'obsolete-contract-revision',
+      action: 'interrupt-and-preserve-evidence',
+      acceptsFurtherEffects: false,
+      observedPlanRevisionId: attempt.planRevisionId,
+      observedContractRevisionId: attempt.contractRevisionId,
+      targetContractRevisionId: latest.contractRevision.contractRevisionId,
+      evidenceRefs: [
+        `plan:${attempt.planRevisionId}`,
+        `contract:${attempt.contractRevisionId}`,
+        `target-contract:${latest.contractRevision.contractRevisionId}`,
+      ],
+    };
+    attempt.fence = stale;
+    attempt.controller.abort();
+    return stale;
+  }
+
+  #appendPlanNodeTerminalEvents(
+    run: ActiveMissionPlanRun,
+    attemptId: string,
+    effectId: string,
+    attemptStatus: 'succeeded' | 'failed' | 'abandoned',
+    effectStatus: EffectV1['status'],
+    summary: string,
+  ): void {
+    const endedAt = this.#now().toISOString();
+    this.#store.appendEvents(
+      [
+        {
+          schemaVersion: DOMAIN_SCHEMA_VERSION,
+          eventId: `event-${this.#id()}`,
+          missionId: run.missionId,
+          attemptId,
+          occurredAt: endedAt,
+          type: 'effect.status_changed',
+          payload: {
+            effectId,
+            status: effectStatus,
+            evidenceRefs: [`attempt:${attemptId}`, `summary:${hashPayload(summary)}`],
+          },
+        },
+        {
+          schemaVersion: DOMAIN_SCHEMA_VERSION,
+          eventId: `event-${this.#id()}`,
+          missionId: run.missionId,
+          attemptId,
+          occurredAt: endedAt,
+          type: 'attempt.finished',
+          payload: { attemptId, status: attemptStatus, endedAt, summary },
+        },
+      ],
+      run.fence,
+    );
+  }
+
+  async #verifyPlanNode(
+    run: ActiveMissionPlanRun,
+    nodeSpec: MissionPlanNodeSpecV1,
+    workspacePath: string,
+    attemptId: string,
+    signal?: AbortSignal,
+  ): Promise<readonly { criterionId: string; result: CommandVerificationResultV1 }[]> {
+    const selected = nodeSpec.acceptanceCriterionIds.map((criterionId) => {
+      const criterion = run.spec.acceptanceCriteria.find(
+        (candidate) => candidate.id === criterionId,
+      );
+      if (criterion === undefined) {
+        throw new MissionExecutionError(
+          `Plan node ${nodeSpec.nodeId} references unknown criterion ${criterionId}`,
+        );
+      }
+      return criterion;
+    });
+    const results: { criterionId: string; result: CommandVerificationResultV1 }[] = [];
+    for (const criterion of selected) {
+      const verifier = remapVerifierWorkspace(
+        criterion.verifier,
+        run.spec.workspace,
+        workspacePath,
+      );
+      const result = await runCommandVerifier(verifier, {
+        workspace: workspacePath,
+        missionSourceDir: run.spec.missionSourceDir,
+        controllerStateDir: this.#stateDir,
+        provenanceFile: this.#provenanceFile(run.missionId),
+        ...(signal === undefined ? {} : { signal }),
+      });
+      results.push({ criterionId: criterion.id, result });
+      this.#observe(
+        run.missionId,
+        'verification.completed',
+        {
+          attemptId,
+          nodeId: nodeSpec.nodeId,
+          criterionId: criterion.id,
+          passed: result.passed,
+          invocationDigest: result.invocationDigest,
+          exitCode: result.exitCode,
+          signal: result.signal,
+          timedOut: result.timedOut,
+          stdoutSha256: result.stdout.sha256,
+          stderrSha256: result.stderr.sha256,
+        },
+        run.fence,
+        attemptId,
+      );
+    }
+    return results;
+  }
+
+  async #executeMissionPlanConsolidation(
+    run: ActiveMissionPlanRun,
+    view: MissionPlanView,
+    joinNodeId: string,
+    signal?: AbortSignal,
+  ): Promise<ReceiptV1 | undefined> {
+    const joinNode = view.planRevision.nodes.find((node) => node.nodeId === joinNodeId);
+    const joinSpec = run.spec.plan?.nodes.find((node) => node.nodeId === joinNodeId);
+    if (joinNode === undefined || joinSpec === undefined || joinNode.kind !== 'join') {
+      throw new MissionExecutionError(`Join node ${joinNodeId} is not executable`);
+    }
+    const stage = run.spec.attemptPlan.find((candidate) => candidate.stageId === joinSpec.stageId);
+    if (stage === undefined) {
+      throw new MissionExecutionError(`Join node ${joinNodeId} has no Runtime stage`);
+    }
+    const incomingNodeIds = view.planRevision.edges
+      .filter((edge) => edge.toNodeId === joinNodeId)
+      .map((edge) => edge.fromNodeId)
+      .sort();
+    const artifactByNode = currentPlanArtifactByNode(view);
+    const sources = incomingNodeIds.map((nodeId) => {
+      const record = artifactByNode.get(nodeId);
+      if (record === undefined) {
+        throw new MissionExecutionError(`Join input ${nodeId} has no current verified artifact`);
+      }
+      return record;
+    });
+    const sourceSnapshotsBefore = new Map(
+      sources.map((source) => {
+        const snapshot = snapshotGitWorkspace(source.workspacePath, { now: this.#now });
+        if (
+          snapshot.head !== source.sourceCommit ||
+          snapshot.status.length > 0 ||
+          snapshot.workspaceDigest !== source.artifact.artifactDigest
+        ) {
+          throw new MissionExecutionError(
+            `Join input ${source.artifact.artifactId} no longer matches its immutable artifact`,
+          );
+        }
+        return [source.artifact.artifactId, snapshot] as const;
+      }),
+    );
+    const selectedPaths = new Map<string, string>();
+    for (const source of sources) {
+      for (const path of source.changedPaths) {
+        const owner = selectedPaths.get(path);
+        if (owner !== undefined && owner !== source.artifact.artifactId) {
+          throw new MissionExecutionError(`Join input conflict on ${path}`);
+        }
+        selectedPaths.set(path, source.artifact.artifactId);
+      }
+    }
+    const identity = hashPayload({
+      missionId: run.missionId,
+      joinNodeId,
+      planRevisionId: view.planRevision.planRevisionId,
+      sourceArtifactIds: sources.map((source) => source.artifact.artifactId),
+      nonce: this.#id(),
+    }).slice(0, 28);
+    const branchId = `branch-consolidation-${identity}`;
+    const attemptId = `attempt-consolidation-${identity}`;
+    const bindingId = `binding-consolidation-${identity}`;
+    const workspaceKey = `workspace-consolidation-${identity}`;
+    const workspacePath = join(
+      this.#stateDir,
+      'worktrees',
+      run.missionId,
+      `consolidation-${identity}`,
+    );
+    const controller = new AbortController();
+    const active: ActiveMissionPlanNodeRun = {
+      attemptId,
+      nodeId: joinNode.nodeId,
+      nodeVersion: joinNode.nodeVersion,
+      planRevisionId: view.planRevision.planRevisionId,
+      contractRevisionId: view.contractRevision.contractRevisionId,
+      harness: stage.profile.harness,
+      branchId,
+      workspaceKey,
+      workspacePath,
+      controller,
+    };
+    run.attempts.set(attemptId, active);
+    const runtimeSignal =
+      signal === undefined ? controller.signal : AbortSignal.any([signal, controller.signal]);
+    let detection: RuntimeDetection;
+    try {
+      detection = await this.#detectStage(stage);
+    } catch (error) {
+      run.attempts.delete(attemptId);
+      throw error;
+    }
+    if (this.#missionPlanAttemptFence(run, active, view) !== undefined) {
+      run.attempts.delete(attemptId);
+      return undefined;
+    }
+    if (!detection.available || !detection.responsive || detection.status !== 'ready') {
+      run.attempts.delete(attemptId);
+      throw new MissionExecutionError(
+        `Consolidation Runtime ${stage.profile.harness} is unavailable`,
+      );
+    }
+    const profile = createProfile(
+      stage,
+      detection,
+      run.spec.workspace,
+      this.#adapterManifest(stage),
+    );
+    const startedAt = this.#now().toISOString();
+    const planned = planConsolidationAttempt({
+      plan: view.planRevision,
+      contractRevision: view.contractRevision,
+      joinNodeId,
+      sources: sources.map((source) => ({
+        kind: 'artifact' as const,
+        selectionId: `selection-${source.artifact.artifactId}`,
+        branchId: source.branchId,
+        attemptId: source.attemptId,
+        nodeId: source.artifact.producedByNodeId,
+        workspaceKey: source.workspaceKey,
+        artifact: source.artifact,
+        sourceAuthorityRefs: [],
+      })),
+      newBranchId: branchId,
+      newAttemptId: attemptId,
+      profileId: profile.profileId,
+      targetWorkspaceKey: workspaceKey,
+      explicitAuthorityBindings: joinNode.requiredAuthorityScopes.map((scope, index) => ({
+        source: 'authorized-grant' as const,
+        grantId: `grant-local-plan-integration-${index + 1}`,
+        authorityRef: `mission:${run.missionId}:local-workspace`,
+        scope,
+        evidenceRefs: [
+          `user-request:mission-plan-execution`,
+          `plan:${view.planRevision.planRevisionId}`,
+        ],
+      })),
+      conflicts: [],
+      startedAt,
+    });
+    if (!planned.ok) {
+      throw new MissionExecutionError(
+        `Consolidation blocked by ${planned.blocker.code}: ${planned.blocker.detail}`,
+      );
+    }
+    const branch: BranchV1 = {
+      ...planned.plan.branch,
+      parentBranchId: requireRootBranch(this.#requireMission(run.missionId)),
+      baseCheckpointId: run.baselineCheckpointId,
+    };
+    const consolidationPlan: ConsolidationAttemptPlanV1 = {
+      ...planned.plan,
+      branch,
+    };
+    const sourceCommitsBefore = Object.fromEntries(
+      sources.map((source) => [source.artifact.artifactId, source.sourceCommit]),
+    );
+    const record: MissionPlanConsolidationRecordV1 = {
+      plan: consolidationPlan,
+      sourceArtifactIds: sources.map((source) => source.artifact.artifactId),
+      workspacePath,
+      sourceCommitsBefore,
+      recordedAt: startedAt,
+    };
+    const binding: AttemptBindingV1 = {
+      schemaVersion: DOMAIN_SCHEMA_VERSION,
+      bindingId,
+      missionId: run.missionId,
+      attemptId,
+      branchId,
+      contractId: view.contractRevision.contract.contractId,
+      profileId: profile.profileId,
+      workspaceKey,
+      planNodeId: joinNode.nodeId,
+      planRevisionId: view.planRevision.planRevisionId,
+      contractRevisionId: view.contractRevision.contractRevisionId,
+      nodeVersion: joinNode.nodeVersion,
+      agentId: stage.profile.harness,
+      authorityRefs: consolidationPlan.authority.explicitBindings.map(
+        (authority) => authority.authorityRef,
+      ),
+      fenceGeneration: view.contractRevision.revisionNumber,
+      authority: 'workspace',
+      injectionBudgetTokens: stage.profile.injectionBudgetTokens,
+      boundAt: startedAt,
+      runtimeBinding: runtimeBinding(attemptId, profile),
+    };
+    this.#store.appendEvents(
+      [
+        {
+          schemaVersion: DOMAIN_SCHEMA_VERSION,
+          eventId: `event-${this.#id()}`,
+          missionId: run.missionId,
+          occurredAt: startedAt,
+          type: 'runtime.observation',
+          payload: {
+            kind: 'mission.consolidation.planned',
+            data: { record: record as unknown as JsonValue },
+          },
+        },
+        {
+          schemaVersion: DOMAIN_SCHEMA_VERSION,
+          eventId: `event-${this.#id()}`,
+          missionId: run.missionId,
+          occurredAt: startedAt,
+          type: 'branch.created',
+          payload: { branch },
+        },
+        {
+          schemaVersion: DOMAIN_SCHEMA_VERSION,
+          eventId: `event-${this.#id()}`,
+          missionId: run.missionId,
+          occurredAt: detection.checkedAt,
+          type: 'runtime.catalog_observed',
+          payload: { observation: requireCatalogObservation(profile) },
+        },
+        {
+          schemaVersion: DOMAIN_SCHEMA_VERSION,
+          eventId: `event-${this.#id()}`,
+          missionId: run.missionId,
+          occurredAt: startedAt,
+          type: 'profile.selected',
+          payload: { profile, reason: `Mission Plan consolidation ${joinNode.nodeId}` },
+        },
+        {
+          schemaVersion: DOMAIN_SCHEMA_VERSION,
+          eventId: `event-${this.#id()}`,
+          missionId: run.missionId,
+          attemptId,
+          occurredAt: startedAt,
+          type: 'attempt.bound',
+          payload: { binding },
+        },
+        {
+          schemaVersion: DOMAIN_SCHEMA_VERSION,
+          eventId: `event-${this.#id()}`,
+          missionId: run.missionId,
+          attemptId,
+          occurredAt: startedAt,
+          type: 'effect.recorded',
+          payload: { effect: consolidationPlan.workspaceIntegration.effect },
+        },
+        {
+          schemaVersion: DOMAIN_SCHEMA_VERSION,
+          eventId: `event-${this.#id()}`,
+          missionId: run.missionId,
+          attemptId,
+          occurredAt: startedAt,
+          type: 'runtime.observation',
+          payload: {
+            kind: 'attempt.plan',
+            data: {
+              attemptId,
+              stageId: joinNode.nodeId,
+              sourceStageId: stage.stageId,
+              harness: stage.profile.harness,
+              profileId: profile.profileId,
+              branchId,
+              bindingId,
+              workspaceKey,
+              planRevisionId: view.planRevision.planRevisionId,
+              contractRevisionId: view.contractRevision.contractRevisionId,
+              nodeVersion: joinNode.nodeVersion,
+              operation: 'mission-plan-consolidation',
+            },
+          },
+        },
+        {
+          schemaVersion: DOMAIN_SCHEMA_VERSION,
+          eventId: `event-${this.#id()}`,
+          missionId: run.missionId,
+          attemptId,
+          occurredAt: startedAt,
+          type: 'attempt.started',
+          payload: { attempt: consolidationPlan.attempt },
+        },
+      ],
+      run.fence,
+    );
+    await mkdir(dirname(workspacePath), { recursive: true });
+    gitExec(run.spec.workspace, [
+      'worktree',
+      'add',
+      '-b',
+      `missionbraid/consolidation-${identity}`,
+      workspacePath,
+      run.baselineCommit,
+    ]);
+    const before = snapshotGitWorkspace(workspacePath, { now: this.#now });
+    const controlDirectory = join(workspacePath, '.missionbraid');
+    await mkdir(controlDirectory, { recursive: true });
+    await writeFile(
+      join(controlDirectory, 'contract-revision.json'),
+      `${JSON.stringify(
+        {
+          contractRevisionId: view.contractRevision.contractRevisionId,
+          revisionNumber: view.contractRevision.revisionNumber,
+          requirements: view.contractRevision.requirements,
+        },
+        null,
+        2,
+      )}\n`,
+      { encoding: 'utf8', mode: 0o600 },
+    );
+    await writeFile(
+      join(controlDirectory, 'selection-manifest.json'),
+      `${JSON.stringify(
+        {
+          consolidationId: consolidationPlan.consolidationId,
+          planRevisionId: view.planRevision.planRevisionId,
+          contractRevisionId: view.contractRevision.contractRevisionId,
+          sources: sources.map((source) => ({
+            artifactId: source.artifact.artifactId,
+            artifactDigest: source.artifact.artifactDigest,
+            sourceCommit: source.sourceCommit,
+            paths: source.changedPaths,
+          })),
+        },
+        null,
+        2,
+      )}\n`,
+      { encoding: 'utf8', mode: 0o600 },
+    );
+    for (const source of sources) {
+      if (source.changedPaths.length === 0) continue;
+      gitExec(workspacePath, ['checkout', source.sourceCommit, '--', ...source.changedPaths]);
+    }
+    const materializedSources = snapshotGitWorkspace(workspacePath, { now: this.#now });
+    const integratedSourceDigests = new Map(
+      [...selectedPaths.keys()].map((path) => [
+        path,
+        workspacePathState(materializedSources, path),
+      ]),
+    );
+    const preConsolidationRuntimeFence = this.#missionPlanAttemptFence(run, active, view);
+    if (preConsolidationRuntimeFence !== undefined) {
+      this.#appendPlanNodeTerminalEvents(
+        run,
+        attemptId,
+        consolidationPlan.workspaceIntegration.effect.effectId,
+        'abandoned',
+        'confirmed',
+        `Consolidation fenced by ${preConsolidationRuntimeFence.fenceId}`,
+      );
+      this.#observe(
+        run.missionId,
+        'mission.attempt_fenced',
+        {
+          ...preConsolidationRuntimeFence,
+          processAborted: false,
+          preservedWorkspaceDigest: snapshotGitWorkspace(workspacePath, { now: this.#now })
+            .workspaceDigest,
+        } as unknown as JsonValue,
+        run.fence,
+        attemptId,
+      );
+      run.attempts.delete(attemptId);
+      return undefined;
+    }
+    const prompt = createMissionPlanConsolidationPrompt(view, joinSpec, stage, sources);
+    const outputHash = createHash('sha256');
+    let outputLines = 0;
+    const runtimeResult = await this.#runRuntime(stage, profile, {
+      missionId: run.missionId,
+      branchId,
+      attemptId,
+      bindingId,
+      workspaceKey,
+      workspace: workspacePath,
+      prompt,
+      signal: runtimeSignal,
+      onStart: (pid) => {
+        this.#observe(
+          run.missionId,
+          'runtime.process_started',
+          {
+            attemptId,
+            nodeId: joinNode.nodeId,
+            harness: stage.profile.harness,
+            pid,
+            planRevisionId: view.planRevision.planRevisionId,
+            contractRevisionId: view.contractRevision.contractRevisionId,
+          },
+          run.fence,
+          attemptId,
+        );
+      },
+      onOutput: async (line) => {
+        const nativeArtifact = await this.#artifacts.putLine(line.line);
+        const normalized = normalizeRuntimeOutput(
+          line,
+          {
+            missionId: run.missionId,
+            branchId,
+            attemptId,
+            bindingId,
+            planNodeId: joinNode.nodeId,
+            sourceProtocol: this.#runtimeProtocol(stage),
+          },
+          nativeArtifact,
+        );
+        this.#append(
+          {
+            schemaVersion: DOMAIN_SCHEMA_VERSION,
+            eventId: normalized.runtimeEventId,
+            missionId: run.missionId,
+            attemptId,
+            occurredAt: normalized.observedAt,
+            type: 'runtime.event',
+            payload: { event: normalized },
+          },
+          run.fence,
+        );
+        outputHash.update(`${line.stream}\0${line.line}\n`, 'utf8');
+        outputLines += 1;
+      },
+    });
+    this.#observe(
+      run.missionId,
+      'runtime.process_finished',
+      {
+        attemptId,
+        nodeId: joinNode.nodeId,
+        harness: stage.profile.harness,
+        exitCode: runtimeResult.process.exitCode,
+        signal: runtimeResult.process.signal,
+        aborted: runtimeResult.process.aborted,
+        outputSha256: outputHash.digest('hex'),
+        outputLines,
+        ...(runtimeResult.outputAccounting === undefined
+          ? {}
+          : {
+              rawOutputSha256: runtimeResult.outputAccounting.rawSha256,
+              rawOutputLines: runtimeResult.outputAccounting.rawLineCount,
+              retainedOutputLines: runtimeResult.outputAccounting.retainedLineCount,
+              droppedOutputLines: runtimeResult.outputAccounting.droppedLineCount,
+              outputCompactionStrategy: runtimeResult.outputAccounting.strategy,
+            }),
+      },
+      run.fence,
+      attemptId,
+    );
+    const postConsolidationRuntimeFence = this.#missionPlanAttemptFence(run, active, view);
+    if (postConsolidationRuntimeFence !== undefined) {
+      this.#appendPlanNodeTerminalEvents(
+        run,
+        attemptId,
+        consolidationPlan.workspaceIntegration.effect.effectId,
+        'abandoned',
+        'confirmed',
+        `Consolidation fenced by ${postConsolidationRuntimeFence.fenceId}`,
+      );
+      this.#observe(
+        run.missionId,
+        'mission.attempt_fenced',
+        {
+          ...postConsolidationRuntimeFence,
+          processAborted: runtimeResult.process.aborted,
+          preservedWorkspaceDigest: snapshotGitWorkspace(workspacePath, { now: this.#now })
+            .workspaceDigest,
+        } as unknown as JsonValue,
+        run.fence,
+        attemptId,
+      );
+      run.attempts.delete(attemptId);
+      return undefined;
+    }
+    if (!processResultSucceeded(runtimeResult)) {
+      this.#appendPlanNodeTerminalEvents(
+        run,
+        attemptId,
+        consolidationPlan.workspaceIntegration.effect.effectId,
+        'failed',
+        'failed',
+        failureSummary(runtimeResult, false, true, true),
+      );
+      run.attempts.delete(attemptId);
+      throw new MissionExecutionError('Consolidation Agent failed');
+    }
+    const afterConsolidationRuntime = snapshotGitWorkspace(workspacePath, { now: this.#now });
+    const changedIntegratedSources = [...integratedSourceDigests].flatMap(
+      ([path, expectedDigest]) =>
+        workspacePathState(afterConsolidationRuntime, path) === expectedDigest ? [] : [path],
+    );
+    if (changedIntegratedSources.length > 0) {
+      this.#appendPlanNodeTerminalEvents(
+        run,
+        attemptId,
+        consolidationPlan.workspaceIntegration.effect.effectId,
+        'failed',
+        'failed',
+        `Consolidation Agent changed immutable source paths: ${changedIntegratedSources.join(', ')}`,
+      );
+      run.attempts.delete(attemptId);
+      throw new MissionExecutionError('Consolidation Agent changed immutable source artifacts');
+    }
+    const consolidationAgentDelta = createStageWorkspaceDelta(
+      materializedSources,
+      afterConsolidationRuntime,
+    );
+    const undeclaredAgentPaths = consolidationAgentDelta.changedPaths
+      .map((change) => change.path)
+      .filter((path) => !joinNode.declaredOutputKeys.includes(path));
+    if (undeclaredAgentPaths.length > 0) {
+      const detail = `Consolidation Agent changed undeclared paths: ${undeclaredAgentPaths.join(', ')}`;
+      this.#appendPlanNodeTerminalEvents(
+        run,
+        attemptId,
+        consolidationPlan.workspaceIntegration.effect.effectId,
+        'failed',
+        'failed',
+        detail,
+      );
+      run.attempts.delete(attemptId);
+      throw new MissionExecutionError(detail);
+    }
+    const verifications: { criterionId: string; result: CommandVerificationResultV1 }[] = [];
+    for (const criterion of run.spec.acceptanceCriteria) {
+      const result = await runCommandVerifier(
+        remapVerifierWorkspace(criterion.verifier, run.spec.workspace, workspacePath),
+        {
+          workspace: workspacePath,
+          missionSourceDir: run.spec.missionSourceDir,
+          controllerStateDir: this.#stateDir,
+          provenanceFile: this.#provenanceFile(run.missionId),
+          ...(signal === undefined ? {} : { signal }),
+        },
+      );
+      verifications.push({ criterionId: criterion.id, result });
+      this.#observe(
+        run.missionId,
+        'verification.completed',
+        {
+          attemptId,
+          nodeId: joinNode.nodeId,
+          criterionId: criterion.id,
+          passed: result.passed,
+          invocationDigest: result.invocationDigest,
+          exitCode: result.exitCode,
+          stdoutSha256: result.stdout.sha256,
+          stderrSha256: result.stderr.sha256,
+        },
+        run.fence,
+        attemptId,
+      );
+    }
+    const afterConsolidationVerification = snapshotGitWorkspace(workspacePath, {
+      now: this.#now,
+    });
+    const postConsolidationVerificationFence = this.#missionPlanAttemptFence(run, active, view);
+    if (postConsolidationVerificationFence !== undefined) {
+      this.#appendPlanNodeTerminalEvents(
+        run,
+        attemptId,
+        consolidationPlan.workspaceIntegration.effect.effectId,
+        'abandoned',
+        'confirmed',
+        `Consolidation fenced by ${postConsolidationVerificationFence.fenceId}`,
+      );
+      this.#observe(
+        run.missionId,
+        'mission.attempt_fenced',
+        {
+          ...postConsolidationVerificationFence,
+          processAborted: runtimeResult.process.aborted,
+          preservedWorkspaceDigest: snapshotGitWorkspace(workspacePath, { now: this.#now })
+            .workspaceDigest,
+        } as unknown as JsonValue,
+        run.fence,
+        attemptId,
+      );
+      run.attempts.delete(attemptId);
+      return undefined;
+    }
+    const verifierChangedSources = [...integratedSourceDigests].flatMap(([path, expectedDigest]) =>
+      workspacePathState(afterConsolidationVerification, path) === expectedDigest ? [] : [path],
+    );
+    if (verifierChangedSources.length > 0) {
+      const detail = `Verifier changed immutable source paths: ${verifierChangedSources.join(', ')}`;
+      this.#appendPlanNodeTerminalEvents(
+        run,
+        attemptId,
+        consolidationPlan.workspaceIntegration.effect.effectId,
+        'failed',
+        'failed',
+        detail,
+      );
+      run.attempts.delete(attemptId);
+      throw new MissionExecutionError(detail);
+    }
+    const consolidationVerifierDelta = createStageWorkspaceDelta(
+      afterConsolidationRuntime,
+      afterConsolidationVerification,
+    );
+    if (consolidationVerifierDelta.changedPaths.length > 0) {
+      const verifierPaths = consolidationVerifierDelta.changedPaths.map((change) => change.path);
+      const undeclaredVerifierPaths = verifierPaths.filter(
+        (path) => !joinNode.declaredOutputKeys.includes(path),
+      );
+      const detail =
+        undeclaredVerifierPaths.length > 0
+          ? `Verifier changed undeclared paths: ${undeclaredVerifierPaths.join(', ')}`
+          : `Verifier changed consolidation output paths: ${verifierPaths.join(', ')}`;
+      this.#appendPlanNodeTerminalEvents(
+        run,
+        attemptId,
+        consolidationPlan.workspaceIntegration.effect.effectId,
+        'failed',
+        'failed',
+        detail,
+      );
+      run.attempts.delete(attemptId);
+      throw new MissionExecutionError(detail);
+    }
+    if (verifications.some(({ result }) => !result.passed)) {
+      this.#appendPlanNodeTerminalEvents(
+        run,
+        attemptId,
+        consolidationPlan.workspaceIntegration.effect.effectId,
+        'failed',
+        'failed',
+        'Revised Outcome Contract verifier rejected the consolidation workspace',
+      );
+      run.attempts.delete(attemptId);
+      throw new MissionExecutionError('Revised Outcome Contract verification failed');
+    }
+    await rm(controlDirectory, { recursive: true, force: true });
+    gitExec(workspacePath, [
+      'add',
+      '--',
+      ...uniqueStrings([
+        ...selectedPaths.keys(),
+        ...joinNode.declaredOutputKeys.map(assertSafePlanOutputPath),
+      ]),
+    ]);
+    gitExec(workspacePath, [
+      '-c',
+      'user.name=MissionBraid',
+      '-c',
+      'user.email=missionbraid@localhost',
+      'commit',
+      '--no-gpg-sign',
+      '-m',
+      `MissionBraid consolidation ${joinNode.nodeId}`,
+    ]);
+    const sourceCommit = gitText(workspacePath, ['rev-parse', 'HEAD']);
+    const sealed = snapshotGitWorkspace(workspacePath, { now: this.#now });
+    assertSealedPlanWorkspace(sealed, sourceCommit);
+    const delta = createStageWorkspaceDelta(before, sealed);
+    const workspaceEvidence: DeterministicVerifierEvidenceV1[] = verifications.map(
+      ({ criterionId, result }) => ({
+        evidenceId: `integration-verifier-${hashPayload({ identity, criterionId, invocation: result.invocationDigest }).slice(0, 28)}`,
+        evaluator: 'deterministic',
+        verifierId: `command:${result.invocationDigest}`,
+        subjectId: consolidationPlan.workspaceIntegration.outputVerificationSubjectId,
+        subjectDigest: sealed.workspaceDigest,
+        result: {
+          criterionId,
+          status: 'passed',
+          evidenceRefs: [`verifier:${result.invocationDigest}`],
+        },
+        evidenceRefs: [
+          `verifier:${result.invocationDigest}`,
+          `stdout:sha256:${result.stdout.sha256}`,
+          `stderr:sha256:${result.stderr.sha256}`,
+        ],
+      }),
+    );
+    const integrationOutcome = recordWorkspaceIntegrationOutcome({
+      plan: consolidationPlan,
+      outputWorkspaceDigest: sealed.workspaceDigest,
+      verifierEvidence: workspaceEvidence,
+    });
+    const joinArtifactId = `plan-artifact-${hashPayload({ attemptId, sourceCommit }).slice(0, 28)}`;
+    const joinArtifactEvidence: DeterministicVerifierEvidenceV1[] = workspaceEvidence.map(
+      (evidence) => ({
+        ...evidence,
+        evidenceId: `join-${evidence.evidenceId}`,
+        subjectId: joinArtifactId,
+      }),
+    );
+    const joinArtifact = recordPlanArtifact({
+      artifactId: joinArtifactId,
+      artifactDigest: sealed.workspaceDigest,
+      plan: view.planRevision,
+      producedByNodeId: joinNode.nodeId,
+      sourceArtifactIds: sources.map((source) => source.artifact.artifactId),
+      verifierEvidence: joinArtifactEvidence,
+      evidenceRefs: [
+        `consolidation:${consolidationPlan.consolidationId}`,
+        `commit:${sourceCommit}`,
+      ],
+    });
+    const joinRecord: MissionPlanArtifactRecordV1 = {
+      recordId: `artifact-record-${this.#id()}`,
+      artifact: joinArtifact,
+      attemptId,
+      branchId,
+      workspaceKey,
+      workspacePath,
+      sourceCommit,
+      changedPaths: delta.changedPaths.map((change) => change.path),
+      recordedAt: this.#now().toISOString(),
+    };
+    const sourceSnapshotsAfter = new Map(
+      sources.map((source) => [
+        source.artifact.artifactId,
+        snapshotGitWorkspace(source.workspacePath, { now: this.#now }),
+      ]),
+    );
+    const sourceCommitsAfter = Object.fromEntries(
+      sources.map((source) => [
+        source.artifact.artifactId,
+        sourceSnapshotsAfter.get(source.artifact.artifactId)?.head ?? '',
+      ]),
+    );
+    const changedSourceArtifacts = sources.filter((source) => {
+      const beforeSource = sourceSnapshotsBefore.get(source.artifact.artifactId);
+      const afterSource = sourceSnapshotsAfter.get(source.artifact.artifactId);
+      return (
+        beforeSource === undefined ||
+        afterSource === undefined ||
+        beforeSource.workspaceDigest !== afterSource.workspaceDigest ||
+        afterSource.status.length > 0 ||
+        afterSource.head !== source.sourceCommit
+      );
+    });
+    if (changedSourceArtifacts.length > 0) {
+      const detail = 'An immutable source Branch changed during consolidation';
+      this.#appendPlanNodeTerminalEvents(
+        run,
+        attemptId,
+        consolidationPlan.workspaceIntegration.effect.effectId,
+        'failed',
+        'failed',
+        detail,
+      );
+      run.attempts.delete(attemptId);
+      throw new MissionExecutionError(detail);
+    }
+    const preSuccessFence = this.#missionPlanAttemptFence(run, active, view);
+    if (preSuccessFence !== undefined) {
+      this.#appendPlanNodeTerminalEvents(
+        run,
+        attemptId,
+        consolidationPlan.workspaceIntegration.effect.effectId,
+        'abandoned',
+        'confirmed',
+        `Consolidation fenced by ${preSuccessFence.fenceId}`,
+      );
+      this.#observe(
+        run.missionId,
+        'mission.attempt_fenced',
+        {
+          ...preSuccessFence,
+          processAborted: runtimeResult.process.aborted,
+          preservedWorkspaceDigest: sealed.workspaceDigest,
+        } as unknown as JsonValue,
+        run.fence,
+        attemptId,
+      );
+      run.attempts.delete(attemptId);
+      return undefined;
+    }
+    const preSuccessUnplanned = activeUnplannedRequirementIds(this.missionPlan(run.missionId));
+    if (preSuccessUnplanned.length > 0) {
+      this.#appendPlanNodeTerminalEvents(
+        run,
+        attemptId,
+        consolidationPlan.workspaceIntegration.effect.effectId,
+        'abandoned',
+        'confirmed',
+        `Consolidation cannot cover unplanned requirements: ${preSuccessUnplanned.join(', ')}`,
+      );
+      run.attempts.delete(attemptId);
+      return undefined;
+    }
+    const checkpointId = `checkpoint-consolidation-${hashPayload({ attemptId, sourceCommit }).slice(0, 28)}`;
+    this.#observe(
+      run.missionId,
+      'checkpoint.created',
+      {
+        checkpointId,
+        missionId: run.missionId,
+        attemptId,
+        stageId: joinNode.nodeId,
+        harness: stage.profile.harness,
+        profileId: profile.profileId,
+        branchId,
+        bindingId,
+        status: 'succeeded',
+        delta,
+        origin: 'runtime-completion',
+      } as unknown as JsonValue,
+      run.fence,
+      attemptId,
+    );
+    this.#appendPlanNodeTerminalEvents(
+      run,
+      attemptId,
+      consolidationPlan.workspaceIntegration.effect.effectId,
+      'succeeded',
+      integrationOutcome.effect.status,
+      'Consolidation workspace passed the revised Outcome Contract',
+    );
+    this.#observe(
+      run.missionId,
+      'mission.plan_artifact.recorded',
+      { record: joinRecord as unknown as JsonValue },
+      run.fence,
+      attemptId,
+    );
+    this.#observe(
+      run.missionId,
+      'mission.consolidation.completed',
+      {
+        consolidationId: consolidationPlan.consolidationId,
+        outcome: integrationOutcome as unknown as JsonValue,
+        sourceCommitsAfter: sourceCommitsAfter as unknown as JsonValue,
+      },
+      run.fence,
+      attemptId,
+    );
+    const receiptTarget = this.missionPlan(run.missionId);
+    if (
+      receiptTarget.planRevision.planRevisionId !== view.planRevision.planRevisionId ||
+      receiptTarget.contractRevision.contractRevisionId !== view.contractRevision.contractRevisionId
+    ) {
+      run.attempts.delete(attemptId);
+      throw new MissionExecutionError('Receipt target is no longer the latest Mission Plan');
+    }
+    const receiptUnplannedRequirements = activeUnplannedRequirementIds(receiptTarget);
+    if (receiptUnplannedRequirements.length > 0) {
+      run.attempts.delete(attemptId);
+      throw new MissionExecutionError(
+        `Receipt cannot cover unplanned requirements: ${receiptUnplannedRequirements.join(', ')}`,
+      );
+    }
+    const projection = this.#requireMission(run.missionId);
+    // Receipt disclosures must match the latest persisted status event exactly.
+    // The broader projection intentionally accumulates provenance refs, while
+    // the Kernel invariant compares the terminal disclosure with the latest
+    // status record.
+    const effects = reconstructExecutionState(this.#store.listEvents(run.missionId)).effects;
+    const receipt: ReceiptV1 = {
+      schemaVersion: DOMAIN_SCHEMA_VERSION,
+      receiptId: `receipt-${this.#id()}`,
+      missionId: run.missionId,
+      contractId: view.contractRevision.contract.contractId,
+      contractRevisionId: view.contractRevision.contractRevisionId,
+      planRevisionId: view.planRevision.planRevisionId,
+      branchId,
+      outcome: 'verified',
+      verifications: verifications.map(({ criterionId, result }) => ({
+        criterionId,
+        status: 'passed',
+        evidenceRefs: [
+          `verifier:${result.invocationDigest}`,
+          `stdout:sha256:${result.stdout.sha256}`,
+          `stderr:sha256:${result.stderr.sha256}`,
+        ],
+      })),
+      verifiedHeadHash: projection.headHash,
+      verifiedThroughSeq: projection.lastSeq,
+      attemptIds: [
+        ...reconstructExecutionState(this.#store.listEvents(run.missionId)).plans.keys(),
+      ],
+      handoffIds: [],
+      effectIds: effects.map((effect) => effect.effectId),
+      effects: effects.map((effect) => ({
+        effectId: effect.effectId,
+        status: effect.status,
+        controlLevel: effect.controlLevel ?? 'advisory',
+        kind: effect.kind,
+        resourceKey: effect.resourceKey,
+        evidenceRefs: effect.evidenceRefs,
+      })),
+      unresolvedItems: [],
+      issuedAt: this.#now().toISOString(),
+    };
+    this.#append(
+      {
+        schemaVersion: DOMAIN_SCHEMA_VERSION,
+        eventId: `event-${this.#id()}`,
+        missionId: run.missionId,
+        occurredAt: receipt.issuedAt,
+        type: 'receipt.issued',
+        payload: { receipt },
+      },
+      run.fence,
+    );
+    await mkdir(dirname(this.#branchReceiptFile(run.missionId, branchId)), { recursive: true });
+    await writeFile(
+      this.#branchReceiptFile(run.missionId, branchId),
+      `${JSON.stringify(receipt, null, 2)}\n`,
+      { encoding: 'utf8', mode: 0o600 },
+    );
+    await writeFile(this.#receiptFile(run.missionId), `${JSON.stringify(receipt, null, 2)}\n`, {
+      encoding: 'utf8',
+      mode: 0o600,
+    });
+    run.attempts.delete(attemptId);
+    return receipt;
   }
 
   list(): MissionProjectionV1[] {
@@ -2250,11 +5379,11 @@ export class MissionEngine {
     const candidateStages = spec.attemptPlan.slice(nextCandidateIndex);
     const candidates = await Promise.all(
       candidateStages.map(async (stage): Promise<PlannedRuntimeCandidate> => {
-        const detection = await this.#detect(stage.profile.harness);
+        const detection = await this.#detectStage(stage);
         return {
           stage,
           detection,
-          profile: createProfile(stage, detection, spec.workspace),
+          profile: createProfile(stage, detection, spec.workspace, this.#adapterManifest(stage)),
         };
       }),
     );
@@ -2267,8 +5396,8 @@ export class MissionEngine {
         : candidates.find(
             (candidate) =>
               candidate.stage.stageId === manualOverride.stageId &&
-              profileDefinition(candidate.stage).definitionId ===
-                manualOverride.profileDefinitionId,
+              profileDefinition(candidate.stage, this.#adapterManifest(candidate.stage))
+                .definitionId === manualOverride.profileDefinitionId,
           );
     const sourceFrontier = state.checkpoints.at(-1);
     let sourceComposite =
@@ -2412,8 +5541,10 @@ export class MissionEngine {
     signal?: AbortSignal,
     planned?: PlannedRuntimeCandidate,
   ): Promise<StageExecutionOutcome> {
-    const detection = planned?.detection ?? (await this.#detect(stage.profile.harness));
-    const profile = planned?.profile ?? createProfile(stage, detection, spec.workspace);
+    const detection = planned?.detection ?? (await this.#detectStage(stage));
+    const profile =
+      planned?.profile ??
+      createProfile(stage, detection, spec.workspace, this.#adapterManifest(stage));
     if (planned === undefined) {
       this.#append(
         {
@@ -2491,6 +5622,32 @@ export class MissionEngine {
       this.#setWaiting(missionId, 'Workspace diverged after the latest checkpoint', fence);
       return { status: 'waiting' };
     }
+    const contextMaterial: ContextBindingMaterialV1 | undefined =
+      spec.context === undefined
+        ? undefined
+        : await readContextBinding(spec.context, {
+            workspacePath: spec.workspace,
+            currentWorkspaceDigest: before.workspaceDigest,
+            mode: 'cached',
+          });
+    const contextSnapshotArtifact =
+      contextMaterial === undefined
+        ? undefined
+        : await this.#artifacts.putLine(contextMaterial.boundContent);
+    const contextSourceArtifact =
+      contextMaterial === undefined
+        ? undefined
+        : await this.#artifacts.putLine(contextMaterial.currentContent);
+    const contextEvidenceRefs =
+      contextMaterial === undefined ||
+      contextSnapshotArtifact === undefined ||
+      contextSourceArtifact === undefined
+        ? []
+        : [
+            `context-snapshot:${contextSnapshotArtifact.artifactId}`,
+            `context-source:${contextSourceArtifact.artifactId}`,
+            `workspace:${contextMaterial.currentWorkspaceDigest}`,
+          ];
     const attemptId = `attempt-${this.#id()}`;
     const bindingId = `binding-${this.#id()}`;
     const effectId = `effect-${attemptId}`;
@@ -2619,6 +5776,7 @@ export class MissionEngine {
       authority: 'workspace',
       injectionBudgetTokens: stage.profile.injectionBudgetTokens,
       boundAt: this.#now().toISOString(),
+      runtimeBinding: runtimeBinding(attemptId, profile),
     };
     const effect: EffectV1 = {
       schemaVersion: DOMAIN_SCHEMA_VERSION,
@@ -2743,7 +5901,7 @@ export class MissionEngine {
           attemptId,
           bindingId,
           planNodeId: stage.stageId,
-          sourceProtocol: runtimeProtocol(stage.profile.harness),
+          sourceProtocol: this.#runtimeProtocol(stage),
           ...(causalParentIds.length === 0 ? {} : { causalParentIds }),
         },
         artifact,
@@ -2814,7 +5972,33 @@ export class MissionEngine {
         runtimeEventId: runtimeEvent.runtimeEventId,
       };
     };
-    const prompt = createAttemptPrompt(spec, stage, mission.contract, projectedCapsuleText);
+    const prompt = createAttemptPrompt(
+      spec,
+      stage,
+      mission.contract,
+      projectedCapsuleText,
+      contextMaterial === undefined ? undefined : contextPrompt(contextMaterial),
+    );
+    const promptBytes = Buffer.byteLength(prompt, 'utf8');
+    const promptBudgetBytes = initialPromptByteBudget(stage.profile.injectionBudgetTokens);
+    if (promptBytes > promptBudgetBytes) {
+      this.#observe(
+        missionId,
+        'context.prompt_budget_exceeded',
+        {
+          attemptId,
+          stageId: stage.stageId,
+          promptBytes,
+          promptBudgetBytes,
+          contextFactId: contextMaterial?.contextFactId ?? null,
+        },
+        fence,
+        attemptId,
+      );
+      throw new MissionExecutionError(
+        `Controller prompt is ${String(promptBytes)} bytes, above the ${String(promptBudgetBytes)}-byte Runtime Profile budget`,
+      );
+    }
     const promptArtifact = await this.#artifacts.putLine(prompt);
     const contextSnapshotId = `context-snapshot-${hashPayload({
       attemptId,
@@ -2837,12 +6021,28 @@ export class MissionEngine {
         visibility: 'known',
         completeness: 'partial',
         nativeArtifact: promptArtifact as unknown as JsonValue,
+        ...(contextMaterial === undefined
+          ? {}
+          : {
+              contextBinding: {
+                contextFactId: contextMaterial.contextFactId,
+                mode: contextMaterial.mode,
+                boundWorkspaceDigest: contextMaterial.boundWorkspaceDigest,
+                currentWorkspaceDigest: contextMaterial.currentWorkspaceDigest,
+                boundContextDigest: contextMaterial.boundContextDigest,
+                currentContextDigest: contextMaterial.currentContextDigest,
+                sourceRef: contextMaterial.sourceRef,
+                snapshotRef: contextMaterial.snapshotRef,
+                artifactRefs: contextEvidenceRefs,
+              },
+            }),
         components: [
           'outcome_contract',
           'mission_constraints',
           'acceptance_criteria',
           'stage_instruction',
           ...(capsule === undefined ? [] : ['handoff_capsule']),
+          ...(contextMaterial === undefined ? [] : ['context_snapshot', 'context_freshness']),
           'controller_boundary_instruction',
         ],
         unavailable: [
@@ -2855,6 +6055,25 @@ export class MissionEngine {
       fence,
       attemptId,
     );
+    if (contextMaterial !== undefined) {
+      this.#observe(
+        missionId,
+        'context.freshness',
+        {
+          contextFactId: contextMaterial.contextFactId,
+          boundWorkspaceDigest: contextMaterial.boundWorkspaceDigest,
+          currentWorkspaceDigest: contextMaterial.currentWorkspaceDigest,
+          boundContextDigest: contextMaterial.boundContextDigest,
+          currentContextDigest: contextMaterial.currentContextDigest,
+          mode: contextMaterial.mode,
+          sourceRef: contextMaterial.sourceRef,
+          snapshotRef: contextMaterial.snapshotRef,
+          evidenceRefs: contextEvidenceRefs,
+        },
+        fence,
+        attemptId,
+      );
+    }
     let toolGateway: ToolGateway | undefined;
     let toolGateBinding: ClaudeToolGateBindingV1 | undefined;
     let toolGatewayError: unknown;
@@ -2903,6 +6122,11 @@ export class MissionEngine {
         ? toolGatewayController.signal
         : AbortSignal.any([signal, toolGatewayController.signal]);
     const runtimeResult = await this.#runRuntime(stage, profile, {
+      missionId,
+      branchId,
+      attemptId,
+      bindingId,
+      workspaceKey: mission.workspaceKey,
       workspace: spec.workspace,
       prompt,
       signal: runtimeSignal,
@@ -3021,6 +6245,15 @@ export class MissionEngine {
         aborted: runtimeResult.process.aborted,
         outputSha256: outputHash.digest('hex'),
         outputLines,
+        ...(runtimeResult.outputAccounting === undefined
+          ? {}
+          : {
+              rawOutputSha256: runtimeResult.outputAccounting.rawSha256,
+              rawOutputLines: runtimeResult.outputAccounting.rawLineCount,
+              retainedOutputLines: runtimeResult.outputAccounting.retainedLineCount,
+              droppedOutputLines: runtimeResult.outputAccounting.droppedLineCount,
+              outputCompactionStrategy: runtimeResult.outputAccounting.strategy,
+            }),
         acknowledged,
         handoffOrderingEstablished,
         workspaceUnchangedAtAcknowledgement,
@@ -3167,6 +6400,7 @@ export class MissionEngine {
       );
     }
     const projection = this.#requireMission(missionId);
+    const receiptPlan = this.missionPlan(missionId);
     const state = reconstructExecutionState(this.#store.listEvents(missionId));
     const allPassed = results.every((result) => result.passed);
     const unresolvedEffects = state.effects.filter((effect) =>
@@ -3176,11 +6410,16 @@ export class MissionEngine {
       .filter((_criterion, index) => !results[index]!.passed)
       .map((criterion) => criterion.id);
     const verifiedOutcome = allPassed && unresolvedEffects.length === 0;
+    const receiptRuntimeBindings = runtimeBindingsFromEvents(this.#store.listEvents(missionId), [
+      ...state.plans.keys(),
+    ]);
     const receipt: ReceiptV1 = {
       schemaVersion: DOMAIN_SCHEMA_VERSION,
       receiptId: `receipt-${this.#id()}`,
       missionId,
       contractId: projection.contract.contractId,
+      contractRevisionId: receiptPlan.contractRevision.contractRevisionId,
+      planRevisionId: receiptPlan.planRevision.planRevisionId,
       ...(projection.rootBranchId === undefined
         ? {}
         : { branchId: projection.rootBranchId, rootBranchId: projection.rootBranchId }),
@@ -3200,6 +6439,12 @@ export class MissionEngine {
       verifiedHeadHash: projection.headHash,
       verifiedThroughSeq: projection.lastSeq,
       attemptIds: [...state.plans.keys()],
+      ...(receiptRuntimeBindings.length === 0
+        ? {}
+        : {
+            runtimeBindings: receiptRuntimeBindings,
+            runtimeBindingsDigest: `sha256:${hashPayload(receiptRuntimeBindings)}`,
+          }),
       handoffIds: state.handoffIds,
       effectIds: state.effects.map((effect) => effect.effectId),
       effects: state.effects,
@@ -3231,6 +6476,102 @@ export class MissionEngine {
       receipt,
       verificationResults: results,
     };
+  }
+
+  async #issueOutcomeRegressionRejectedReceipt(
+    missionId: string,
+    childBranchId: string,
+    record: ExecutionForkRecordV1,
+  ): Promise<ReceiptV1> {
+    const existing = this.#store
+      .listEvents(missionId)
+      .find(
+        (event): event is Extract<StoredEventV1, { type: 'receipt.issued' }> =>
+          event.type === 'receipt.issued' &&
+          (event.payload.receipt.branchId ?? event.payload.receipt.rootBranchId) === childBranchId,
+      )?.payload.receipt;
+    if (existing !== undefined) return existing;
+    const mission = this.#requireMission(missionId);
+    const spec = this.#requireSpecSnapshot(missionId);
+    return await this.#withLease(
+      mission.workspaceKey,
+      `outcome-rejected-receipt-${this.#id()}`,
+      async (fence) => {
+        const chain = this.#store.verifyEventChain(missionId);
+        if (!chain.valid) {
+          throw new MissionExecutionError(
+            'Cannot issue a rejected trial Receipt on an invalid chain',
+          );
+        }
+        const projection = this.#requireMission(missionId);
+        const receiptPlan = this.missionPlan(missionId);
+        const effects = reconstructExecutionState(this.#store.listEvents(missionId)).effects;
+        const verifications = spec.acceptanceCriteria.map((criterion) => {
+          const evidence = [...record.runtimeEvidence]
+            .reverse()
+            .find(
+              (candidate) =>
+                candidate.kind === 'verification' &&
+                candidate.evidenceRefs.includes(`criterion:${criterion.id}`),
+            );
+          const passed = evidence?.evidenceRefs.includes('verification:passed') ?? false;
+          return {
+            criterionId: criterion.id,
+            status: passed ? ('passed' as const) : ('failed' as const),
+            evidenceRefs:
+              evidence === undefined
+                ? [`runtime:${record.runtimeResult?.runtimeRunId ?? 'missing'}`]
+                : uniqueStrings([`evidence:${evidence.evidenceId}`, ...evidence.evidenceRefs]),
+          };
+        });
+        const childAttemptId = `fork-attempt-${record.forkId}`;
+        const issuedAt = this.#now().toISOString();
+        const receipt: ReceiptV1 = {
+          schemaVersion: DOMAIN_SCHEMA_VERSION,
+          receiptId: `receipt-${this.#id()}`,
+          missionId,
+          contractId: projection.contract.contractId,
+          contractRevisionId: receiptPlan.contractRevision.contractRevisionId,
+          planRevisionId: receiptPlan.planRevision.planRevisionId,
+          branchId: childBranchId,
+          outcome: 'rejected',
+          verifications,
+          verifiedHeadHash: projection.headHash,
+          verifiedThroughSeq: projection.lastSeq,
+          attemptIds: [childAttemptId],
+          handoffIds: [],
+          effectIds: effects.map((effect) => effect.effectId),
+          effects,
+          unresolvedItems: uniqueStrings([
+            ...(record.runtimeResult?.unresolvedItems ?? ['runtime-result:missing']),
+            ...verifications
+              .filter((verification) => verification.status !== 'passed')
+              .map((verification) => `criterion:${verification.criterionId}`),
+          ]),
+          issuedAt,
+        };
+        this.#store.appendEvent(
+          {
+            schemaVersion: DOMAIN_SCHEMA_VERSION,
+            eventId: `event-${this.#id()}`,
+            missionId,
+            occurredAt: issuedAt,
+            type: 'receipt.issued',
+            payload: { receipt },
+          },
+          fence,
+        );
+        await mkdir(dirname(this.#branchReceiptFile(missionId, childBranchId)), {
+          recursive: true,
+        });
+        await writeFile(
+          this.#branchReceiptFile(missionId, childBranchId),
+          `${JSON.stringify(receipt, null, 2)}\n`,
+          { encoding: 'utf8', mode: 0o600 },
+        );
+        return receipt;
+      },
+    );
   }
 
   async #issueExecutionForkReceipt(
@@ -3286,6 +6627,7 @@ export class MissionEngine {
       );
     }
     const projection = this.#requireMission(missionId);
+    const receiptPlan = this.missionPlan(missionId);
     const effects = reconstructExecutionState(this.#store.listEvents(missionId)).effects;
     const unresolvedEffects = effects.filter((effect) =>
       ['intended', 'dispatch_started', 'executed', 'ambiguous', 'conflict'].includes(effect.status),
@@ -3299,17 +6641,28 @@ export class MissionEngine {
       );
     }
     const childAttemptId = 'fork-attempt-' + record.forkId;
+    const receiptRuntimeBindings = runtimeBindingsFromEvents(this.#store.listEvents(missionId), [
+      childAttemptId,
+    ]);
     const receipt: ReceiptV1 = {
       schemaVersion: DOMAIN_SCHEMA_VERSION,
       receiptId: 'receipt-' + this.#id(),
       missionId,
       contractId: projection.contract.contractId,
+      contractRevisionId: receiptPlan.contractRevision.contractRevisionId,
+      planRevisionId: receiptPlan.planRevision.planRevisionId,
       branchId: childBranchId,
       outcome: 'verified',
       verifications,
       verifiedHeadHash: projection.headHash,
       verifiedThroughSeq: projection.lastSeq,
       attemptIds: [childAttemptId],
+      ...(receiptRuntimeBindings.length === 0
+        ? {}
+        : {
+            runtimeBindings: receiptRuntimeBindings,
+            runtimeBindingsDigest: `sha256:${hashPayload(receiptRuntimeBindings)}`,
+          }),
       handoffIds: [],
       effectIds: effects.map((effect) => effect.effectId),
       effects,
@@ -3345,6 +6698,11 @@ export class MissionEngine {
     stage: AttemptStageSpecV1,
     profile: ProfileV1,
     request: {
+      readonly missionId: string;
+      readonly branchId: string;
+      readonly attemptId: string;
+      readonly bindingId: string;
+      readonly workspaceKey: string;
       readonly workspace: string;
       readonly prompt: string;
       readonly signal?: AbortSignal;
@@ -3354,6 +6712,39 @@ export class MissionEngine {
     },
   ): Promise<RuntimeRunResult> {
     const model = profile.model === 'default' ? undefined : profile.model;
+    if (stage.profile.adapterId !== undefined) {
+      return await this.#adapterHost.run({
+        identity: {
+          executionId: request.attemptId,
+          missionId: request.missionId,
+          branchId: request.branchId,
+          attemptId: request.attemptId,
+          bindingId: request.bindingId,
+        },
+        profile: {
+          profileId: profile.profileId,
+          adapterId: stage.profile.adapterId,
+          harness: stage.profile.harness,
+          model: profile.model,
+          configurationDigest: profile.configurationDigest,
+          ...(profile.reasoningEffort === undefined
+            ? {}
+            : { reasoningEffort: profile.reasoningEffort }),
+          ...(profile.permissionMode === undefined
+            ? {}
+            : { permissionMode: profile.permissionMode }),
+          ...(stage.profile.providerWorkspaceRef === undefined
+            ? {}
+            : { providerWorkspaceRef: stage.profile.providerWorkspaceRef }),
+        },
+        workspaceKey: request.workspaceKey,
+        localWorkspace: request.workspace,
+        instruction: request.prompt,
+        ...(request.signal === undefined ? {} : { signal: request.signal }),
+        onStart: request.onStart,
+        onOutput: request.onOutput,
+      });
+    }
     if (stage.profile.harness === 'codex') {
       return await this.#codex.run({
         ...request,
@@ -3376,6 +6767,11 @@ export class MissionEngine {
         maxTurns: 80,
         noSessionPersistence: true,
       });
+    }
+    if (stage.profile.harness !== 'claude') {
+      throw new MissionExecutionError(
+        `Harness ${stage.profile.harness} requires a registered Adapter`,
+      );
     }
     return await this.#claude.run({
       ...request,
@@ -3589,6 +6985,46 @@ export class MissionEngine {
     if (harness === 'codex') return await this.#codex.detect();
     if (harness === 'qoder') return await this.#qoder.detect();
     return await this.#claude.detect();
+  }
+
+  async #detectStage(stage: AttemptStageSpecV1): Promise<RuntimeDetection> {
+    if (stage.profile.adapterId !== undefined) {
+      return await this.#adapterHost.detect(stage.profile.adapterId, stage.profile.harness);
+    }
+    if (!isSupportedHarnessV1(stage.profile.harness)) {
+      throw new MissionExecutionError(
+        `Harness ${stage.profile.harness} requires a registered Adapter`,
+      );
+    }
+    return await this.#detect(stage.profile.harness);
+  }
+
+  #adapterManifest(stage: AttemptStageSpecV1): AdapterManifestV1 | undefined {
+    return stage.profile.adapterId === undefined
+      ? undefined
+      : this.#adapterHost.manifest(stage.profile.adapterId);
+  }
+
+  #runtimeProtocol(stage: AttemptStageSpecV1): string {
+    if (stage.profile.adapterId !== undefined) {
+      return this.#adapterHost.nativeProtocol(stage.profile.adapterId);
+    }
+    if (!isSupportedHarnessV1(stage.profile.harness)) {
+      throw new MissionExecutionError(
+        `Harness ${stage.profile.harness} requires a registered Adapter`,
+      );
+    }
+    return runtimeProtocol(stage.profile.harness);
+  }
+
+  #runtimeResultProtocol(stage: AttemptStageSpecV1): RuntimeRunResult['outputProtocol'] {
+    if (stage.profile.adapterId !== undefined) return 'adapter-v1';
+    if (!isSupportedHarnessV1(stage.profile.harness)) {
+      throw new MissionExecutionError(
+        `Harness ${stage.profile.harness} requires a registered Adapter`,
+      );
+    }
+    return runtimeProtocol(stage.profile.harness);
   }
 
   async #closeDanglingAttempts(
@@ -4051,6 +7487,372 @@ export class MissionEngine {
   }
 }
 
+function assertExecutablePlanTerminalJoin(spec: MissionSpecV1): void {
+  if (spec.plan === undefined) return;
+  const joins = spec.plan.nodes.filter((node) => node.kind === 'join');
+  const terminalJoins = joins.filter(
+    (joinNode) => !spec.plan!.edges.some((edge) => edge.fromNodeId === joinNode.nodeId),
+  );
+  if (joins.length !== 1 || terminalJoins.length !== 1) {
+    throw new MissionExecutionError(
+      'An explicit executable Mission Plan must contain exactly one terminal join',
+    );
+  }
+}
+
+function assertSupportedExecutableContractRevision(previous: ContractV1, next: ContractV1): void {
+  const previousCriteria = new Map(
+    previous.acceptanceCriteria.map((criterion) => [criterion.criterionId, criterion]),
+  );
+  const nextCriteria = new Map(
+    next.acceptanceCriteria.map((criterion) => [criterion.criterionId, criterion]),
+  );
+  const criterionSetChanged =
+    previousCriteria.size !== previous.acceptanceCriteria.length ||
+    nextCriteria.size !== next.acceptanceCriteria.length ||
+    previousCriteria.size !== nextCriteria.size ||
+    [...previousCriteria.keys()].some((criterionId) => !nextCriteria.has(criterionId));
+  const verifierChanged = [...previousCriteria].some(([criterionId, criterion]) => {
+    const nextCriterion = nextCriteria.get(criterionId);
+    return (
+      nextCriterion === undefined ||
+      nextCriterion.verifier.kind !== criterion.verifier.kind ||
+      hashPayload(nextCriterion.verifier.configuration) !==
+        hashPayload(criterion.verifier.configuration)
+    );
+  });
+  if (criterionSetChanged || verifierChanged) {
+    throw new MissionExecutionError(
+      'Executable acceptance criteria cannot be added, removed, or reconfigured by Contract revision',
+    );
+  }
+}
+
+function activeUnplannedRequirementIds(view: MissionPlanView): string[] {
+  const currentRequirementIds = new Set(
+    view.contractRevision.requirements.map((requirement) => requirement.requirementId),
+  );
+  const plannedRequirementIds = new Set(
+    view.planRevision.nodes.flatMap((node) => node.requirementIds),
+  );
+  return uniqueStrings(
+    view.invalidations.flatMap((invalidation) => invalidation.unplannedRequirementIds),
+  ).filter(
+    (requirementId) =>
+      currentRequirementIds.has(requirementId) && !plannedRequirementIds.has(requirementId),
+  );
+}
+
+function workspacePathState(snapshot: GitWorkspaceSnapshotV1, path: string): string {
+  const entry = snapshot.paths.find((candidate) => candidate.path === path);
+  return hashPayload(
+    entry === undefined
+      ? { path, kind: 'missing', sha256: null }
+      : { path: entry.path, kind: entry.kind, sha256: entry.sha256 },
+  );
+}
+
+function assertSealedPlanWorkspace(snapshot: GitWorkspaceSnapshotV1, commit: string): void {
+  const reconstructedDigest = hashPayload({
+    head: snapshot.head,
+    status: snapshot.status,
+    paths: snapshot.paths,
+  });
+  if (snapshot.head !== commit) {
+    throw new MissionExecutionError('Plan workspace HEAD does not match its sealed commit');
+  }
+  if (snapshot.status.length > 0) {
+    throw new MissionExecutionError(
+      `Plan workspace commit is not clean: ${snapshot.status
+        .map((entry) => `${entry.code} ${entry.path}`)
+        .join(', ')}`,
+    );
+  }
+  if (reconstructedDigest !== snapshot.workspaceDigest) {
+    throw new MissionExecutionError('Plan workspace digest cannot be reconstructed');
+  }
+}
+
+function currentPlanArtifactByNode(
+  view: MissionPlanView,
+): Map<string, MissionPlanArtifactRecordV1> {
+  const result = new Map<string, MissionPlanArtifactRecordV1>();
+  for (const record of view.execution.artifacts) {
+    const artifact = record.artifact;
+    const node = view.planRevision.nodes.find(
+      (candidate) => candidate.nodeId === artifact.producedByNodeId,
+    );
+    if (
+      node === undefined ||
+      artifact.missionId !== view.planRevision.missionId ||
+      artifact.planId !== view.planRevision.planId ||
+      artifact.planRevisionId !== view.planRevision.planRevisionId ||
+      artifact.contractRevisionId !== view.contractRevision.contractRevisionId ||
+      artifact.producerNodeVersion !== node.nodeVersion ||
+      !planArtifactHasPassingEvidence(artifact)
+    ) {
+      continue;
+    }
+    result.set(artifact.producedByNodeId, record);
+  }
+  return result;
+}
+
+function planAttemptFence(attempt: ActiveMissionPlanNodeRun): StaleAttemptFenceV1 | undefined {
+  // A live Contract revision may set this property while the caller is
+  // awaiting a native Runtime or verifier. Keep the read behind a function so
+  // TypeScript does not treat an earlier observation as permanently stable.
+  return attempt.fence;
+}
+
+function planArtifactHasPassingEvidence(artifact: PlanArtifactV1): boolean {
+  return artifact.verifierEvidence.some((evidence) => {
+    if (
+      evidence.evaluator !== 'deterministic' ||
+      evidence.subjectId !== artifact.artifactId ||
+      evidence.subjectDigest !== artifact.artifactDigest
+    ) {
+      return false;
+    }
+    const result = evidence.result as unknown as Record<string, unknown>;
+    return result.passed === true || result.status === 'passed';
+  });
+}
+
+function createMissionPlanNodePrompt(
+  view: MissionPlanView,
+  node: MissionPlanNodeSpecV1,
+  stage: AttemptStageSpecV1,
+): string {
+  const requirementById = new Map(
+    view.contractRevision.requirements.map((requirement) => [
+      requirement.requirementId,
+      requirement,
+    ]),
+  );
+  const requirements = node.requirementIds
+    .map((requirementId) => {
+      const requirement = requirementById.get(requirementId);
+      if (requirement === undefined) {
+        throw new MissionExecutionError(
+          `Plan node ${node.nodeId} references missing requirement ${requirementId}`,
+        );
+      }
+      return `- ${requirement.requirementId}: ${requirement.statement}`;
+    })
+    .join('\n');
+  const outputs = node.declaredOutputKeys.map(assertSafePlanOutputPath).map((path) => `- ${path}`);
+  return [
+    `MissionBraid Mission Plan node ${node.nodeId}`,
+    `Contract revision: ${view.contractRevision.contractRevisionId} (revision ${String(view.contractRevision.revisionNumber)})`,
+    `Plan revision: ${view.planRevision.planRevisionId} (revision ${String(view.planRevision.revisionNumber)})`,
+    `Requirements for this node:\n${requirements}`,
+    `Current node instruction: ${stage.instruction}`,
+    `You may change only these declared output paths:\n${outputs.join('\n')}`,
+    'Work only inside the provided isolated Git worktree. Read and obey AGENTS.md. Do not commit, push, publish, deploy, install dependencies, or modify tests. Run the declared local checks when useful, then exit.',
+  ].join('\n\n');
+}
+
+function createMissionPlanConsolidationPrompt(
+  view: MissionPlanView,
+  node: MissionPlanNodeSpecV1,
+  stage: AttemptStageSpecV1,
+  sources: readonly MissionPlanArtifactRecordV1[],
+): string {
+  const outputs = node.declaredOutputKeys.map(assertSafePlanOutputPath);
+  return [
+    `MissionBraid consolidation node ${node.nodeId}`,
+    `Contract revision: ${view.contractRevision.contractRevisionId} (revision ${String(view.contractRevision.revisionNumber)})`,
+    `Plan revision: ${view.planRevision.planRevisionId} (revision ${String(view.planRevision.revisionNumber)})`,
+    'The controller has already materialized these verified immutable source artifacts:',
+    ...sources.map(
+      (source) =>
+        `- ${source.artifact.producedByNodeId}: ${source.artifact.artifactId} @ ${source.sourceCommit}`,
+    ),
+    `Current node instruction: ${stage.instruction}`,
+    `You may add or change only the consolidation output paths:\n${outputs.map((path) => `- ${path}`).join('\n')}`,
+    'Inspect the integrated result, write the requested audit output, run the local final verifier if useful, and exit. Do not alter the materialized source files. Do not commit, push, publish, deploy, install dependencies, or modify tests.',
+  ].join('\n\n');
+}
+
+function assertSafePlanOutputPath(value: string): string {
+  const normalized = value.replaceAll('\\', '/');
+  if (
+    normalized.length === 0 ||
+    normalized.startsWith('/') ||
+    normalized === '..' ||
+    normalized.startsWith('../') ||
+    normalized.includes('/../')
+  ) {
+    throw new MissionExecutionError(`Plan output path ${value} is not workspace-relative`);
+  }
+  return normalized;
+}
+
+function remapVerifierWorkspace(
+  verifier: CommandVerifierSpecV1,
+  sourceWorkspace: string,
+  targetWorkspace: string,
+): CommandVerifierSpecV1 {
+  const remap = (value: string): string => value.replaceAll(sourceWorkspace, targetWorkspace);
+  return {
+    ...verifier,
+    args: verifier.args.map(remap),
+    cwd: remap(verifier.cwd),
+  };
+}
+
+function gitExec(workspace: string, args: readonly string[]): void {
+  try {
+    execFileSync('git', ['-C', workspace, ...args], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      maxBuffer: 32 * 1024 * 1024,
+    });
+  } catch (error) {
+    throw new MissionExecutionError(
+      `Git workspace operation failed: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
+    );
+  }
+}
+
+function gitText(workspace: string, args: readonly string[]): string {
+  try {
+    return execFileSync('git', ['-C', workspace, ...args], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      maxBuffer: 32 * 1024 * 1024,
+    }).trim();
+  } catch (error) {
+    throw new MissionExecutionError(
+      `Git workspace query failed: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
+    );
+  }
+}
+
+function runtimeThrownResult(
+  runtime: string,
+  outputProtocol: RuntimeRunResult['outputProtocol'],
+  error: unknown,
+  startedAt: string,
+  endedAt: Date,
+): RuntimeRunResult {
+  return {
+    runtime,
+    outputProtocol,
+    process: {
+      invocation: { command: runtime, args: [], cwd: process.cwd() },
+      pid: null,
+      exitCode: null,
+      signal: null,
+      startedAt,
+      endedAt: endedAt.toISOString(),
+      durationMs: Math.max(0, endedAt.getTime() - Date.parse(startedAt)),
+      aborted: false,
+      stdoutLineCount: 0,
+      stderrLineCount: 0,
+      spawnError: {
+        name: error instanceof Error ? error.name : 'Error',
+        message: error instanceof Error ? error.message : String(error),
+      },
+    },
+  };
+}
+
+async function assertDiagnosticInterventionMatchesContext(
+  spec: MissionSpecV1,
+  checkpoint: CompositeCheckpointManifestV1,
+  candidate: { readonly detector: string; readonly supportingEvidenceRefs: readonly string[] },
+  failureInput: MissionFailureIntelligenceProjectionV1['failureIntelligenceInput'],
+  intervention: CheckpointInterventionV1,
+): Promise<void> {
+  if (candidate.detector !== 'stale-context') return;
+  if (intervention.kind !== 'context') {
+    throw new MissionExecutionError(
+      'A stale-context diagnostic candidate requires a Context-only Intervention',
+    );
+  }
+  if (spec.context === undefined) {
+    throw new MissionExecutionError(
+      'A stale-context diagnostic candidate has no declared Mission Context binding',
+    );
+  }
+  const candidateRefs = new Set(candidate.supportingEvidenceRefs);
+  const freshness = (failureInput.contextFreshness ?? []).find((item) =>
+    [item.evidenceId, item.contextFactId, ...item.evidenceRefs].some((ref) =>
+      candidateRefs.has(ref),
+    ),
+  );
+  if (freshness === undefined || freshness.contextFactId !== spec.context.factId) {
+    throw new MissionExecutionError(
+      'The stale-context candidate is not bound to the declared Mission Context fact',
+    );
+  }
+  const checkpointWorkspaceDigest = checkpoint.workspace.workspaceDigest;
+  if (checkpointWorkspaceDigest === null) {
+    throw new MissionExecutionError(
+      'A stale-context diagnostic requires a Checkpoint with a recoverable workspace digest',
+    );
+  }
+  const currentWorkspace = snapshotGitWorkspace(spec.workspace);
+  if (currentWorkspace.workspaceDigest !== checkpointWorkspaceDigest) {
+    throw new MissionExecutionError(
+      'The source workspace diverged after the diagnostic Checkpoint; refresh the boundary before retrying',
+    );
+  }
+  if (intervention.beforeDigest === undefined) {
+    throw new MissionExecutionError(
+      'A stale-context diagnostic requires the cached Context digest as beforeDigest',
+    );
+  }
+  let cached;
+  try {
+    cached = await readContextBinding(spec.context, {
+      workspacePath: spec.workspace,
+      currentWorkspaceDigest: checkpointWorkspaceDigest,
+      mode: 'cached',
+    });
+  } catch (error) {
+    throw new MissionExecutionError('The cached Context snapshot could not be read', {
+      cause: error,
+    });
+  }
+  if (intervention.targetRef !== `context:${spec.context.factId}`) {
+    throw new MissionExecutionError(
+      'The stale-context Intervention target must match the declared Context fact',
+    );
+  }
+  if (intervention.beforeDigest !== cached.boundContextDigest) {
+    throw new MissionExecutionError(
+      'The stale-context Intervention beforeDigest does not match the cached Context snapshot',
+    );
+  }
+  let refreshed;
+  try {
+    refreshed = await readContextBinding(spec.context, {
+      workspacePath: spec.workspace,
+      currentWorkspaceDigest: checkpointWorkspaceDigest,
+      mode: 'refreshed',
+    });
+  } catch (error) {
+    throw new MissionExecutionError('The declared Context source could not be refreshed', {
+      cause: error,
+    });
+  }
+  if (intervention.afterDigest !== refreshed.currentContextDigest) {
+    throw new MissionExecutionError(
+      'The stale-context Intervention afterDigest does not match the current Context source',
+    );
+  }
+  if (intervention.authorityChange !== 'unchanged') {
+    throw new MissionExecutionError(
+      'A stale-context diagnostic Intervention cannot change execution authority',
+    );
+  }
+}
+
 function createContract(spec: MissionSpecV1, now: Date): ContractV1 {
   const contractBody = {
     objective: spec.objective,
@@ -4245,6 +8047,10 @@ function timelineEntry(
         data: {
           receiptId: event.payload.receipt.receiptId,
           outcome: event.payload.receipt.outcome,
+          runtimeBindings: (event.payload.receipt.runtimeBindings ?? []).map((binding) => ({
+            ...binding,
+          })),
+          runtimeBindingsDigest: event.payload.receipt.runtimeBindingsDigest ?? null,
           unresolvedItems: [...(event.payload.receipt.unresolvedItems ?? [])],
         },
       };
@@ -4307,6 +8113,8 @@ function observationLabel(kind: string): string {
     'runtime.process_started': 'Runtime process started',
     'runtime.process_finished': 'Runtime process finished',
     'context.controller_prompt': 'Observable controller context recorded',
+    'context.freshness': 'Context freshness compared',
+    'context.prompt_budget_exceeded': 'Controller prompt exceeds Runtime budget',
     'verification.completed': 'Acceptance criterion verified',
     'failure.observed': 'Failure observed',
   };
@@ -4389,6 +8197,98 @@ function projectMissionEffects(events: readonly StoredEventV1[]): EffectV1[] {
   return [...effects.values()].sort((left, right) => left.effectId.localeCompare(right.effectId));
 }
 
+function incidentScenarioIntervention(scenario: IncidentScenarioV1): CheckpointInterventionV1 {
+  const artifact = scenario.artifacts.find((candidate) => candidate.kind === 'intervention');
+  if (artifact === undefined) {
+    throw new MissionExecutionError('Incident Scenario has no Intervention artifact');
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(artifact.content) as unknown;
+  } catch (error) {
+    throw new MissionExecutionError('Incident Scenario Intervention is not valid JSON', {
+      cause: error,
+    });
+  }
+  if (
+    !isJsonObject(parsed) ||
+    typeof parsed.interventionId !== 'string' ||
+    parsed.interventionId !== scenario.interventionId ||
+    ![
+      'context',
+      'prompt',
+      'tool',
+      'permission-narrowing',
+      'profile',
+      'workspace',
+      'guidance',
+    ].includes(String(parsed.kind)) ||
+    typeof parsed.targetRef !== 'string' ||
+    (parsed.beforeDigest !== undefined && typeof parsed.beforeDigest !== 'string') ||
+    typeof parsed.afterDigest !== 'string' ||
+    typeof parsed.description !== 'string' ||
+    (parsed.authorityChange !== 'unchanged' && parsed.authorityChange !== 'narrowed')
+  ) {
+    throw new MissionExecutionError('Incident Scenario Intervention is incomplete or mismatched');
+  }
+  return parsed as unknown as CheckpointInterventionV1;
+}
+
+function verifyMissionOutcomeStudioRerun(run: MissionOutcomeStudioRerunV1): void {
+  const { runId: _runId, runHash: _runHash, ...core } = run;
+  const expectedHash = hashPayload(core);
+  if (
+    run.runHash !== expectedHash ||
+    run.runId !== `outcome-kernel-rerun-${expectedHash.slice(0, 32)}`
+  ) {
+    throw new MissionExecutionError('Outcome Studio Kernel rerun identity does not match content');
+  }
+  if (
+    !Number.isSafeInteger(run.trialCount) ||
+    run.trialCount <= 0 ||
+    run.trials.length !== run.trialCount ||
+    new Set(run.trials.map((trial) => trial.branchId)).size !== run.trials.length ||
+    new Set(run.trials.map((trial) => trial.attemptId)).size !== run.trials.length ||
+    new Set(run.trials.map((trial) => trial.bindingId)).size !== run.trials.length ||
+    run.trials.some(
+      (trial, index) =>
+        trial.trialIndex !== index ||
+        trial.sourceProfileId !== run.sourceProfileId ||
+        trial.targetProfileId !== run.targetProfileId ||
+        trial.targetStageId !== run.targetStageId ||
+        trial.profileSelectionId !== run.profileSelectionId ||
+        !/^[a-f0-9]{64}$/.test(trial.plannerDecisionHash),
+    ) ||
+    run.sourceProfileId === run.targetProfileId ||
+    run.targetProfileDefinitionId.trim().length === 0 ||
+    run.profileSelectionId.trim().length === 0
+  ) {
+    throw new MissionExecutionError('Outcome Studio Kernel rerun trial identities are invalid');
+  }
+  verifyStudioOutcomeReceipt(run.receipt);
+  verifyOutcomeCiResult(run.ciResult);
+  const receiptProfileBinding = run.receipt.runtimeProfileBinding;
+  const ciProfileBinding = run.ciResult.runtimeProfileBinding;
+  if (
+    run.receipt.branchId !== run.targetBranchId ||
+    run.receipt.agentRevisionId !== run.targetAgentRevisionId ||
+    run.ciResult.scenarioId !== run.scenarioId ||
+    run.ciResult.receiptId !== run.receipt.receiptId ||
+    run.trials.at(-1)?.branchId !== run.targetBranchId ||
+    run.trials.at(-1)?.targetProfileId !== run.targetProfileId ||
+    receiptProfileBinding === undefined ||
+    ciProfileBinding === undefined ||
+    receiptProfileBinding.sourceProfileId !== run.sourceProfileId ||
+    receiptProfileBinding.targetProfileId !== run.targetProfileId ||
+    receiptProfileBinding.targetStageId !== run.targetStageId ||
+    receiptProfileBinding.targetProfileDefinitionId !== run.targetProfileDefinitionId ||
+    receiptProfileBinding.profileSelectionId !== run.profileSelectionId ||
+    hashPayload(receiptProfileBinding) !== hashPayload(ciProfileBinding)
+  ) {
+    throw new MissionExecutionError('Outcome Studio Kernel rerun bindings are inconsistent');
+  }
+}
+
 function gitObject(workspace: string, revision: string): string {
   let value: string;
   try {
@@ -4411,9 +8311,34 @@ function uniqueStrings(values: readonly string[]): string[] {
   return [...new Set(values)].sort((left, right) => left.localeCompare(right, 'en'));
 }
 
-function profileDefinition(stage: AttemptStageSpecV1): RuntimeProfileDefinitionV1 {
+function adapterIdentity(manifest?: AdapterManifestV1): RuntimeAdapterIdentityV1 | undefined {
+  return manifest === undefined
+    ? undefined
+    : {
+        adapterId: manifest.adapterId,
+        adapterVersion: manifest.adapterVersion,
+        transport: manifest.transport,
+        nativeProtocol: manifest.nativeProtocol,
+      };
+}
+
+function runtimeBinding(attemptId: string, profile: ProfileV1): RuntimeBindingV1 {
+  return {
+    attemptId,
+    profileId: profile.profileId,
+    harness: profile.harness,
+    ...(profile.adapter === undefined ? {} : profile.adapter),
+  };
+}
+
+function profileDefinition(
+  stage: AttemptStageSpecV1,
+  manifest?: AdapterManifestV1,
+): RuntimeProfileDefinitionV1 {
   const configuration = {
     harness: stage.profile.harness,
+    adapterId: stage.profile.adapterId ?? null,
+    providerWorkspaceRef: stage.profile.providerWorkspaceRef ?? null,
     requestedModel: stage.profile.model,
     requestedReasoningEffort: stage.profile.reasoningEffort ?? null,
     permissionCeiling: stage.profile.permissionMode ?? null,
@@ -4430,13 +8355,17 @@ function profileDefinition(stage: AttemptStageSpecV1): RuntimeProfileDefinitionV
       ? {}
       : { permissionCeiling: stage.profile.permissionMode }),
     injectionBudgetTokens: stage.profile.injectionBudgetTokens,
+    ...(manifest === undefined ? {} : { adapter: adapterIdentity(manifest)! }),
   };
 }
 
-function uniqueProfileDefinitions(spec: MissionSpecV1): RuntimeProfileDefinitionV1[] {
+function uniqueProfileDefinitions(
+  spec: MissionSpecV1,
+  manifestFor: (stage: AttemptStageSpecV1) => AdapterManifestV1 | undefined = () => undefined,
+): RuntimeProfileDefinitionV1[] {
   const definitions = new Map<string, RuntimeProfileDefinitionV1>();
   for (const stage of spec.attemptPlan) {
-    const definition = profileDefinition(stage);
+    const definition = profileDefinition(stage, manifestFor(stage));
     definitions.set(definition.definitionId, definition);
   }
   return [...definitions.values()];
@@ -4446,9 +8375,14 @@ function createProfile(
   stage: AttemptStageSpecV1,
   detection: RuntimeDetection,
   workspace: string,
+  manifest?: AdapterManifestV1,
 ): ProfileV1 {
-  const definition = profileDefinition(stage);
-  const permissionMode = resolvedPermission(stage.profile.harness, stage.profile.permissionMode);
+  const definition = profileDefinition(stage, manifest);
+  const permissionMode = resolvedPermission(
+    stage.profile.harness,
+    stage.profile.permissionMode,
+    stage.profile.adapterId,
+  );
   const catalogObservation: RuntimeCatalogObservationV1 = {
     observationId: `catalog-${hashPayload({ ...detection, checkedAt: detection.checkedAt }).slice(0, 28)}`,
     harness: stage.profile.harness,
@@ -4544,7 +8478,7 @@ function createProfile(
     definition,
     catalogObservation,
     effective,
-    adapterCapabilities: adapterCapabilities(stage),
+    adapterCapabilities: adapterCapabilities(stage, manifest),
   };
   const digest = hashPayload(snapshotConfiguration);
   return {
@@ -4558,12 +8492,13 @@ function createProfile(
     ...(detection.version === null ? {} : { runtimeVersion: detection.version }),
     injectionBudgetTokens: stage.profile.injectionBudgetTokens,
     permissionMode,
-    capabilities: resolvedProfileCapabilities(stage, permissionMode),
+    capabilities: resolvedProfileCapabilities(stage, permissionMode, manifest),
     configurationDigest: digest,
+    ...(manifest === undefined ? {} : { adapter: adapterIdentity(manifest)! }),
     definition,
     catalogObservation,
     effective,
-    adapterCapabilities: adapterCapabilities(stage),
+    adapterCapabilities: adapterCapabilities(stage, manifest),
     resolvedAt: detection.checkedAt,
   };
 }
@@ -4577,7 +8512,11 @@ function plannerRequirements(
   const requiredProfileCapabilities = uniqueStrings(
     resolvedProfileCapabilities(
       sourceStage,
-      resolvedPermission(sourceStage.profile.harness, sourceStage.profile.permissionMode),
+      resolvedPermission(
+        sourceStage.profile.harness,
+        sourceStage.profile.permissionMode,
+        sourceStage.profile.adapterId,
+      ),
     ),
   );
   const minimumAdapterCapabilities: NonNullable<
@@ -4693,6 +8632,35 @@ function plannerHandoffStates(
   ];
 }
 
+function plannerProfileReboundStates(
+  checkpoint: CompositeCheckpointManifestV1,
+  contract: ContractV1,
+): readonly CandidateHandoffStateV1[] {
+  const visibleContext = checkpoint.components.find(
+    (component) => component.component === 'visible-context',
+  );
+  const effectFrontier = checkpoint.components.find(
+    (component) => component.component === 'effect-frontier',
+  );
+  return [
+    plannerHandoffState(
+      'outcome-contract',
+      checkpoint.source.contractId === contract.contractId ? 'exact' : 'blocking',
+    ),
+    plannerHandoffState(
+      'workspace',
+      checkpoint.workspace.state === 'restorable-artifact' ? 'exact' : 'blocking',
+    ),
+    plannerHandoffState(
+      'visible-context',
+      visibleContext?.disposition === 'portable' || visibleContext?.disposition === 'recoverable'
+        ? 'summarized'
+        : 'unavailable',
+    ),
+    plannerHandoffState('effect-frontier', effectFrontier === undefined ? 'unavailable' : 'exact'),
+  ];
+}
+
 function compositeCoversHandoffFrontier(
   checkpoint: CompositeCheckpointManifestV1,
   frontier: CheckpointRecord,
@@ -4782,7 +8750,7 @@ function discoverPresence(workspace: string, candidates: readonly string[]): Jso
     .map((candidate) => ({ path: candidate, present: true }));
 }
 
-function discoverSkillManifests(workspace: string, harness: SupportedHarnessV1): JsonValue[] {
+function discoverSkillManifests(workspace: string, harness: string): JsonValue[] {
   const projectCandidates = ['.agents/skills', '.codex/skills', '.claude/skills'];
   const userCandidates = [
     resolve(homedir(), '.agents/skills'),
@@ -4813,7 +8781,24 @@ function discoverSkillManifests(workspace: string, harness: SupportedHarnessV1):
   });
 }
 
-function adapterCapabilities(stage: AttemptStageSpecV1): AdapterCapabilitiesV1 {
+function adapterCapabilities(
+  stage: AttemptStageSpecV1,
+  manifest?: AdapterManifestV1,
+): AdapterCapabilitiesV1 {
+  if (manifest !== undefined) {
+    const get = (name: keyof typeof manifest.capabilities) => manifest.capabilities[name].fidelity;
+    return {
+      observe: get('observe'),
+      contextCapture: get('context-capture'),
+      steer: get('steer'),
+      interrupt: get('interrupt'),
+      preToolGate: get('pre-tool-gate'),
+      resume: get('resume'),
+      nativeFork: get('native-fork'),
+      workspaceRestore: get('workspace-restore'),
+      externalEffectControl: get('external-effect-control'),
+    };
+  }
   return {
     observe: 'native',
     contextCapture: 'unknown',
@@ -4827,7 +8812,20 @@ function adapterCapabilities(stage: AttemptStageSpecV1): AdapterCapabilitiesV1 {
   };
 }
 
-function resolvedProfileCapabilities(stage: AttemptStageSpecV1, permissionMode: string): string[] {
+function resolvedProfileCapabilities(
+  stage: AttemptStageSpecV1,
+  permissionMode: string,
+  manifest?: AdapterManifestV1,
+): string[] {
+  if (manifest !== undefined) {
+    return [
+      `adapter:${manifest.adapterId}`,
+      `transport:${manifest.transport}`,
+      ...Object.entries(manifest.capabilities)
+        .filter(([, item]) => item.status === 'supported')
+        .map(([name, item]) => `adapter-capability:${name}:${item.fidelity}`),
+    ];
+  }
   const harness = stage.profile.harness;
   const capabilities = ['workspace-read', 'command-execution'];
   const workspaceWrite =
@@ -4853,6 +8851,7 @@ function createAttemptPrompt(
   stage: AttemptStageSpecV1,
   contract: ContractV1,
   capsuleText?: string,
+  contextText?: string,
 ): string {
   const criteria = contract.acceptanceCriteria
     .map((criterion) => `- ${criterion.criterionId}: ${criterion.description}`)
@@ -4864,11 +8863,20 @@ function createAttemptPrompt(
     constraints.length === 0 ? 'Constraints: none declared' : `Constraints:\n${constraints}`,
     `Original acceptance criteria:\n${criteria}`,
     capsuleText === undefined ? '' : capsuleText,
+    contextText === undefined ? '' : contextText,
     `Current stage (${stage.stageId}): ${stage.instruction}`,
     'Stay inside the provided workspace. Obey its AGENTS.md. Do not push, publish, deploy, install dependencies, access the network, or modify tests unless the Mission explicitly requires it.',
   ]
     .filter((part) => part.length > 0)
     .join('\n\n');
+}
+
+function initialPromptByteBudget(injectionBudgetTokens: number): number {
+  const bytes = injectionBudgetTokens * 4;
+  if (!Number.isSafeInteger(bytes) || bytes <= 0) {
+    throw new MissionExecutionError('Runtime Profile injection budget is invalid');
+  }
+  return Math.min(bytes, 64 * 1024);
 }
 
 function processResultSucceeded(result: RuntimeRunResult): boolean {
@@ -4939,6 +8947,22 @@ function findQoderFailure(
   return undefined;
 }
 
+function runtimeBindingsFromEvents(
+  events: readonly StoredEventV1[],
+  attemptIds: readonly string[],
+): RuntimeBindingV1[] {
+  const wanted = new Set(attemptIds);
+  return events
+    .filter((event) => event.type === 'attempt.bound')
+    .map((event) => event.payload.binding)
+    .filter(
+      (binding): binding is AttemptBindingV1 & { readonly runtimeBinding: RuntimeBindingV1 } =>
+        wanted.has(binding.attemptId) && binding.runtimeBinding !== undefined,
+    )
+    .map((binding) => binding.runtimeBinding)
+    .sort((left, right) => left.attemptId.localeCompare(right.attemptId, 'en'));
+}
+
 function reconstructExecutionState(events: readonly StoredEventV1[]): ExecutionState {
   const plans = new Map<string, AttemptPlanRecord>();
   const baselines = new Map<string, AttemptBaselineRecord>();
@@ -4985,7 +9009,8 @@ function reconstructExecutionState(events: readonly StoredEventV1[]): ExecutionS
       if (
         typeof data.attemptId === 'string' &&
         typeof data.stageId === 'string' &&
-        (data.harness === 'codex' || data.harness === 'qoder' || data.harness === 'claude') &&
+        typeof data.harness === 'string' &&
+        data.harness.trim() !== '' &&
         typeof data.profileId === 'string' &&
         ((typeof data.branchId === 'string' && typeof data.bindingId === 'string') ||
           (data.branchId === undefined && data.bindingId === undefined))
@@ -5156,10 +9181,16 @@ function codexSandbox(value: string | undefined): CodexSandbox {
   throw new MissionExecutionError(`Unsupported Codex permission mode ${value}`);
 }
 
-function resolvedPermission(harness: SupportedHarnessV1, value: string | undefined): string {
+function resolvedPermission(
+  harness: string,
+  value: string | undefined,
+  adapterId?: string,
+): string {
+  if (adapterId !== undefined) return value ?? 'adapter-default';
   if (harness === 'codex') return codexSandbox(value);
   if (harness === 'qoder') return qoderPermission(value);
-  return claudePermission(value);
+  if (harness === 'claude') return claudePermission(value);
+  throw new MissionExecutionError(`Harness ${harness} requires a registered Adapter`);
 }
 
 function qoderPermission(value: string | undefined): QoderPermissionMode {

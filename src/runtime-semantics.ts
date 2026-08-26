@@ -190,6 +190,7 @@ function visit(value: unknown, context: VisitContext, candidates: Candidate[]): 
   const nativeId = nativeIdentifier(record);
   const parentToolId = explicitParentIdentifier(record) ?? context.parentToolId;
   const identity = nativeId ?? context.path;
+  const handledToolResult = structuredToolResultEnvelope(record)?.result;
 
   extractContext(record, tags, identity, candidates);
   extractMessage(record, tags, role, identity, candidates);
@@ -204,6 +205,7 @@ function visit(value: unknown, context: VisitContext, candidates: Candidate[]): 
   const childRole = wrapperRole ?? explicitRole ?? context.inheritedRole;
   const childParentToolId = nativeId ?? parentToolId;
   for (const [key, member] of Object.entries(record)) {
+    if (member === handledToolResult) continue;
     visit(
       member,
       {
@@ -352,12 +354,30 @@ function extractTool(
   parentToolId: string | undefined,
   identity: string,
   candidates: Candidate[],
-): { readonly request: boolean; readonly result: boolean; readonly name?: string } {
+): {
+  readonly request: boolean;
+  readonly result: boolean;
+  readonly failed: boolean;
+  readonly name?: string;
+} {
+  const wrappedResult = structuredToolResultEnvelope(record);
   const request = isToolRequest(tags, record);
-  const result = isToolResult(tags, record);
+  const result = isToolResult(tags, record) || wrappedResult !== undefined;
   const name = toolName(record, tags);
-  const toolIdentity = nativeId ?? toolResultIdentifier(record) ?? identity;
-  const toolCallId = nativeId ?? toolResultIdentifier(record);
+  const toolCallId = wrappedResult?.toolCallId ?? nativeId ?? toolResultIdentifier(record);
+  const toolIdentity = toolCallId ?? identity;
+  const resultRecord = wrappedResult?.result ?? record;
+  const exitCode = result
+    ? safeInteger(
+        resultRecord.exit_code ?? resultRecord.exitCode ?? record.exit_code ?? record.exitCode,
+      )
+    : undefined;
+  const explicitIsError = result
+    ? boolean(resultRecord.is_error ?? resultRecord.isError ?? record.is_error ?? record.isError)
+    : undefined;
+  const isError =
+    explicitIsError ?? (phase === 'failed' ? true : phase === 'completed' ? false : undefined);
+  const resultFailed = result && (isError === true || (exitCode !== undefined && exitCode !== 0));
 
   if (request) {
     candidates.push({
@@ -374,8 +394,11 @@ function extractTool(
     });
   }
   if (result) {
-    const exitCode = safeInteger(record.exit_code ?? record.exitCode);
-    const isError = boolean(record.is_error ?? record.isError) ?? phase === 'failed';
+    const resultPhase = resultFailed
+      ? 'failed'
+      : phase !== 'unknown'
+        ? phase
+        : normalizedStatus(resultRecord.status ?? resultRecord.kind);
     candidates.push({
       identity: `tool-result:${toolIdentity}`,
       evidence: 'explicit',
@@ -386,7 +409,7 @@ function extractTool(
         ...(parentToolId === undefined
           ? {}
           : { parentToolCallIdDigest: digestIdentifier(parentToolId) }),
-        phase,
+        phase: resultPhase,
         ...(isError === undefined ? {} : { isError }),
         ...(exitCode === undefined ? {} : { exitCode }),
       },
@@ -427,7 +450,7 @@ function extractTool(
     });
   }
 
-  return { request, result, ...(name === undefined ? {} : { name }) };
+  return { request, result, failed: resultFailed, ...(name === undefined ? {} : { name }) };
 }
 
 function extractWorkspaceChange(
@@ -541,7 +564,7 @@ function extractFailure(
   record: Record<string, unknown>,
   tags: readonly string[],
   phase: RuntimeSemanticPhaseV1,
-  tool: { readonly request: boolean; readonly result: boolean },
+  tool: { readonly request: boolean; readonly result: boolean; readonly failed: boolean },
   identity: string,
   candidates: Candidate[],
 ): void {
@@ -551,6 +574,7 @@ function extractFailure(
     status === 'failed' ||
     record.is_error === true ||
     record.isError === true ||
+    tool.failed ||
     tags.some((tag) => tag === 'error' || tag.endsWith('_failed') || tag === 'failure');
   if (!explicit) return;
 
@@ -570,6 +594,30 @@ function extractFailure(
       isError: true,
     },
   });
+}
+
+function structuredToolResultEnvelope(
+  record: Record<string, unknown>,
+): { readonly result: Record<string, unknown>; readonly toolCallId?: string } | undefined {
+  const result = isRecord(record.tool_use_result)
+    ? record.tool_use_result
+    : isRecord(record.toolUseResult)
+      ? record.toolUseResult
+      : undefined;
+  if (result === undefined) return undefined;
+
+  const message = isRecord(record.message) ? record.message : undefined;
+  const content = message?.content;
+  const toolResultPart = Array.isArray(content)
+    ? content.find(
+        (part): part is Record<string, unknown> =>
+          isRecord(part) && isToolResult(recordTags(part), part),
+      )
+    : undefined;
+  if (toolResultPart === undefined) return undefined;
+
+  const toolCallId = toolResultIdentifier(toolResultPart);
+  return { result, ...(toolCallId === undefined ? {} : { toolCallId }) };
 }
 
 function fallbackCandidate(
@@ -939,12 +987,24 @@ function deduplicateCandidates(candidates: readonly Candidate[]): Candidate[] {
       current === undefined ||
       fallbackEvidenceRank(candidate.evidence) > fallbackEvidenceRank(current.evidence) ||
       (candidate.evidence === current.evidence &&
-        JSON.stringify(candidate.details).length > JSON.stringify(current.details).length)
+        candidateDetailRank(candidate.details) > candidateDetailRank(current.details))
     ) {
       selected.set(key, candidate);
     }
   }
   return [...selected.values()];
+}
+
+function candidateDetailRank(details: RuntimeSemanticFactDetailsV1): number {
+  if (details.kind !== 'tool_result') return JSON.stringify(details).length;
+  return (
+    (details.exitCode === undefined ? 0 : 1_000) +
+    (details.isError === undefined ? 0 : 500) +
+    (details.phase === 'unknown' ? 0 : 250) +
+    (details.toolName === undefined ? 0 : 20) +
+    (details.toolCallIdDigest === undefined ? 0 : 10) +
+    (details.parentToolCallIdDigest === undefined ? 0 : 5)
+  );
 }
 
 function assertArtifactBinding(event: AgentRuntimeEventV1, artifact: NativeArtifactContent): void {

@@ -1,16 +1,20 @@
 import { spawn } from 'node:child_process';
+import { access } from 'node:fs/promises';
 import { createServer } from 'node:net';
+import { join } from 'node:path';
 
 export async function launchHeadlessWorkbench(url, userDataDir) {
   const port = await freePort();
-  const executable = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-  const process = spawn(
+  const executable = await browserExecutable();
+  const platformArguments = process.platform === 'linux' ? ['--no-sandbox'] : [];
+  const child = spawn(
     executable,
     [
       '--headless=new',
       '--disable-gpu',
       '--no-first-run',
       '--no-default-browser-check',
+      ...platformArguments,
       `--remote-debugging-port=${String(port)}`,
       `--user-data-dir=${userDataDir}`,
       url,
@@ -28,7 +32,7 @@ export async function launchHeadlessWorkbench(url, userDataDir) {
     await wait(100);
   }
   if (!target?.webSocketDebuggerUrl) {
-    process.kill('SIGTERM');
+    child.kill('SIGTERM');
     throw new Error('Chrome DevTools endpoint did not become ready.');
   }
   const client = await cdp(target.webSocketDebuggerUrl);
@@ -44,13 +48,44 @@ export async function launchHeadlessWorkbench(url, userDataDir) {
     },
     close: async () => {
       client.close();
-      process.kill('SIGTERM');
+      child.kill('SIGTERM');
       await Promise.race([
-        new Promise((resolveExit) => process.once('exit', resolveExit)),
+        new Promise((resolveExit) => child.once('exit', resolveExit)),
         wait(2_000),
       ]);
     },
   };
+}
+
+async function browserExecutable() {
+  const configured = process.env.MISSIONBRAID_BROWSER_EXECUTABLE ?? process.env.CHROME_PATH;
+  const candidates = [
+    configured,
+    process.platform === 'darwin'
+      ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+      : undefined,
+    process.platform === 'linux' ? '/usr/bin/google-chrome' : undefined,
+    process.platform === 'linux' ? '/usr/bin/google-chrome-stable' : undefined,
+    process.platform === 'linux' ? '/usr/bin/chromium' : undefined,
+    process.platform === 'linux' ? '/usr/bin/chromium-browser' : undefined,
+    process.platform === 'win32' && process.env.LOCALAPPDATA
+      ? join(process.env.LOCALAPPDATA, 'Google', 'Chrome', 'Application', 'chrome.exe')
+      : undefined,
+    process.platform === 'win32' && process.env.PROGRAMFILES
+      ? join(process.env.PROGRAMFILES, 'Google', 'Chrome', 'Application', 'chrome.exe')
+      : undefined,
+  ].filter((candidate) => typeof candidate === 'string' && candidate.length > 0);
+
+  for (const candidate of candidates) {
+    try {
+      await access(candidate);
+      return candidate;
+    } catch {}
+  }
+
+  throw new Error(
+    'No supported Chrome or Chromium executable was found. Set MISSIONBRAID_BROWSER_EXECUTABLE.',
+  );
 }
 
 export function wait(milliseconds) {

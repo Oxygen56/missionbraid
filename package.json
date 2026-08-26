@@ -1,9 +1,18 @@
 {
   "name": "missionbraid",
   "version": "1.0.0",
+  "packageManager": "pnpm@11.18.0",
   "private": false,
   "description": "Local-first Agent Runtime Workbench for native coding agents.",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Oxygen56/missionbraid.git"
+  },
+  "homepage": "https://github.com/Oxygen56/missionbraid#readme",
+  "bugs": {
+    "url": "https://github.com/Oxygen56/missionbraid/issues"
+  },
   "type": "module",
   "engines": {
     "node": ">=24 <27"
@@ -36,6 +45,14 @@
     "./adapter-conformance/v1": {
       "types": "./dist/src/adapter-conformance.d.ts",
       "import": "./dist/src/adapter-conformance.js"
+    },
+    "./process-provider": {
+      "types": "./dist/src/process-provider.d.ts",
+      "import": "./dist/src/process-provider.js"
+    },
+    "./process-provider/v1": {
+      "types": "./dist/src/process-provider.d.ts",
+      "import": "./dist/src/process-provider.js"
     },
     "./package-contract": {
       "types": "./dist/src/package-contract.d.ts",
@@ -72,10 +89,60 @@
   },
   "files": [
     "dist",
-    "docs/adapter-sdk.md",
+    "src",
+    "scripts",
+    "docs",
+    "evidence/README.md",
+    "evidence/e0-local-2026-08-24.json",
+    "evidence/e1-blocked-local-2026-08-24.json",
+    "evidence/e1-checkpoint-helper-local-2026-08-24.json",
+    "evidence/e1-context-isolated-reproduction-local-2026-08-24.json",
+    "evidence/e1-local-2026-08-24.json",
+    "evidence/iteration-2-three-harness-local-2026-08-25.json",
+    "evidence/iteration-3-flight-recorder-local-2026-08-26.json",
+    "evidence/iteration-4-external-effect-local-2026-08-26.json",
+    "evidence/iteration-4-tool-gateway-local-2026-08-26.json",
+    "evidence/iteration-5-checkpoint-replay-local-2026-08-26.json",
+    "evidence/iteration-5-execution-fork-local-2026-08-26.json",
+    "evidence/iteration-6-adaptive-handoff-local-2026-08-26.json",
+    "evidence/iteration-7-stale-context-2026-08-26.json",
+    "evidence/iteration-8-multi-agent-revision-local-2026-08-26.json",
+    "evidence/iteration-9-outcome-ci-result.json",
+    "evidence/iteration-9-outcome-regression-local-2026-08-26.json",
+    "evidence/kandev-v0.91.0-provider-check-local-2026-08-24.json",
+    "evidence/unified-workbench-codex-qoder-local-2026-08-24.json",
+    "examples/minimal-adapter.ts",
+    "examples/acp-adapter",
+    "examples/e0-fixture/README.md",
+    "examples/e0-fixture/mission.yaml",
+    "examples/e0-fixture/verify.mjs",
+    "examples/e1-fixture/README.md",
+    "examples/e1-fixture/mission.yaml",
+    "examples/e1-fixture/hidden-verifier",
+    "examples/e1-fixture/template",
+    "examples/i2-fixture",
+    "examples/i3-flight-recorder-fixture",
+    "examples/i4-tool-gateway-fixture",
+    "examples/i5-checkpoint-replay-fixture",
+    "examples/i5-execution-fork-fixture",
+    "examples/i6-adaptive-handoff-fixture",
+    "examples/i8-multi-agent-revision-fixture",
+    "examples/i9-outcome-regression-fixture",
+    "examples/kandev-provider-check",
+    "examples/process-provider-adapter",
     "examples/third-party-adapter",
+    "examples/v1-flagship-fixture",
     "README.md",
     "README.zh-CN.md",
+    "CONTRIBUTING.md",
+    "CODE_OF_CONDUCT.md",
+    "SECURITY.md",
+    "pnpm-workspace.yaml",
+    "tsconfig.json",
+    "tsconfig.build.json",
+    "vitest.config.ts",
+    ".prettierrc.json",
+    ".nvmrc",
     "LICENSE",
     "NOTICE"
   ],
@@ -91,13 +158,13 @@
     "prepack": "pnpm build"
   },
   "dependencies": {
-    "yaml": "2.8.1"
+    "yaml": "2.8.3"
   },
   "devDependencies": {
     "@types/node": "24.10.1",
     "prettier": "3.6.2",
     "tsx": "4.20.6",
     "typescript": "5.9.3",
-    "vitest": "3.2.4"
+    "vitest": "3.2.6"
   }
 }

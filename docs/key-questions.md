@@ -1,9 +1,17 @@
 # Key Product Decisions and Technical Questions
 
 > **Status:** these answers define the accepted target architecture. “Today”
-> includes the verified pre-alpha Codex/Qoder vertical slice and the Iteration 2
-> same-host real Codex/Qoder/Claude Workbench validation. “Target” describes
-> later capabilities still scheduled in the ten-iteration roadmap.
+> includes the same-host real-Runtime evidence for Iterations 1–8: the live
+> Flight Recorder, native Tool Gateway, Composite Checkpoint/Execution Fork,
+> four Replay semantics, controlled adaptive Handoff, and one stale-Context
+> daily-debugging case. Iteration 8 has a retained same-host controlled-fixture
+> record using real local Qoder/Qwen3.8-Max and Claude Code/deepseek-v4-pro
+> through Workbench HTTP. Iterations 9–10 have
+> implementation/API or package slices. Independent external reproduction and
+> production evidence remains open.
+> Iteration 7's
+> stale-Context diagnostic loop is now recorded as same-host local evidence;
+> its provider-internal and generalization boundaries remain explicit.
 
 ## 1. Why build a Workbench instead of another Agent launcher?
 
@@ -153,6 +161,13 @@ Where useful, MissionBraid creates a diagnostic branch that changes one
 declared dimension. If evidence remains insufficient, the correct result is
 `unknown`.
 
+The Iteration 7 record confirms one stale-Context mechanism in a controlled
+fixture: an isolated new Qoder Attempt/process keeps the same Harness/Profile,
+Contract, and authority while applying a declared Context refresh. It is not
+the original native Session continuing, does not prove every hidden or
+unobserved input stayed equal, and does not establish multi-layer attribution
+or general diagnosis accuracy.
+
 ## 10. How does the planner choose a Runtime Profile?
 
 The accepted flow is:
@@ -185,6 +200,15 @@ Agents on an obsolete revision are stopped or fenced. Branch histories never
 merge in place; a join creates a consolidation Attempt over provenance-bound
 artifacts, and workspace integration is a new Effect.
 
+The current implementation executes independent ready nodes concurrently in
+isolated Git worktrees. It advances a node only with Artifact evidence bound to
+the current Plan, Contract, and node version plus a passing deterministic
+verifier. A live revision fences the affected Attempt, explicitly adopts an
+unaffected verified Artifact into the new revision, reruns the invalidated
+frontier, and consolidates selected source commits in a new Attempt. This chain
+has controlled process-boundary integration coverage and a retained
+[same-host real-Runtime record](../evidence/iteration-8-multi-agent-revision-local-2026-08-26.json).
+
 ## 12. Who decides that the Mission is complete?
 
 Neither the model nor the Harness. They may report completion, but the Mission
@@ -212,37 +236,61 @@ task/worktree/process behavior. It does not prove a Kandev-backed Mission.
 
 ## 14. What is implemented and what is still a design?
 
-Implemented today:
+Implemented and evidenced today (same-host, local pre-alpha):
 
 - bilingual local Workbench and Mission Kernel;
 - Codex, Qoder, and Claude Code execution Adapters;
-- a default root Branch for new Missions, without Fork semantics yet;
 - Runtime Profile Definition, Catalog Observation, immutable effective
   Snapshot, and Attempt Binding;
 - source-scoped Event IR linked to sanitized, content-addressed native
-  artifacts;
-- durable events plus command/outbox dispatch and restart restoration;
-- workspace baseline/checkpoint evidence (digest/delta, not a restorable
-  snapshot) and Handoff Capsule;
-- independent verifier and Outcome Receipt;
-- one clean-public-clone Codex-to-Qoder evidence path and one clean-revision,
-  same-host Codex/Qoder/Claude Code evidence path.
+  artifacts, with live Context Graph and context-diff projections;
+- durable events, command/outbox dispatch, and restart restoration;
+- a native Claude Code pre-tool boundary and queryable external Effect
+  reconciliation;
+- Git-backed Composite Checkpoints, isolated Execution Fork Branches, and
+  Playback, Cached Replay, Counterfactual Resampling, and Execution Fork
+  semantics;
+- deterministic Profile filtering/ranking and a controlled adaptive Handoff
+  Capsule path;
+- one same-host controlled stale-Context diagnostic Branch: a new Qoder
+  Attempt/process keeps the recorded Harness/Profile, Contract, and authority,
+  applies a declared Context refresh, passes an out-of-process deterministic
+  Verifier, and saves a restart-stable regression scenario;
+- executable Mission Plan coordination through the Workbench/API: parallel
+  isolated node Attempts, live revision fencing, verified Artifact reuse, a new
+  consolidation Attempt, and a Receipt bound to the latest Contract and Plan;
+- controller-run out-of-process verifier, Branch-bound Outcome Receipts, and
+  the public Adapter SDK/package contract.
 
-The [Iteration 2 record](../evidence/iteration-2-three-harness-local-2026-08-25.json)
-proves that user result at the same-host local level: all three real Attempts
-succeeded, 1,066 source-linked Runtime events and sanitized native artifacts
-were retained, the Receipt was verified, and Mission head, Receipt, source
-sequences, and causal links remained stable after restart.
+The [evidence index](../evidence/README.md) records the exact retained Runtime
+boundaries for Iterations 1–8. They are local same-host results, not native
+session migration, natural failure recovery, cross-host reproduction,
+production readiness, or third-party adoption. The Iteration 8 record covers
+Workbench HTTP creation, start, live revision, query, and completion with real
+local Qoder/Qwen3.8-Max and Claude Code/deepseek-v4-pro; selective interruption
+and reuse, independent consolidation, the latest-revision Receipt, and restart
+consistency are retained.
 
-Not implemented today:
+Still open beyond that bounded Iteration 7 record:
 
-- live Event IR transport, the Context Graph, and context diffs;
-- pre-tool gating and interactive debugger;
-- composite executable fork/replay;
-- adaptive Profile planning;
-- general failure attribution;
-- multi-Agent Mission graphs;
-- packaged Adapter SDK or broad Harness execution.
+- broader Failure Intelligence coverage, automatic diagnosis accuracy, and
+  multi-layer evidence beyond the recorded stale-Context mechanism;
+
+Still open at stronger evidence or delivery levels:
+
+- Iteration 9 external CI execution and regression-quality evidence;
+- Iteration 10 registry publication and independent clean installation.
+
+The [Iteration 7 stale-Context record](../evidence/iteration-7-stale-context-2026-08-26.json)
+now proves one same-host local case: an old cached Context led to a rejected
+Mission; a new isolated Attempt/process on the same Qoder Profile, Contract,
+and authority applied the declared Context refresh and passed the deterministic
+Verifier; and the diagnosis, Receipt, and saved scenario survived restart. The
+fixture controls the visible Snapshot and instruction boundary; this is not the
+original native Session continuing, and the refreshed cache is used only for
+that diagnostic Attempt. It does not establish equality of every hidden or
+unobserved input, provider-internal Context capture, multi-layer attribution,
+diagnosis accuracy across incidents, or production recovery.
 
 The [product requirements](product-requirements.md), [final
 architecture](architecture.md), and [ten-iteration roadmap](roadmap.md) keep

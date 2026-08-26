@@ -125,14 +125,8 @@ describe('Mission Plan DAG and live revisions', () => {
         }),
       ]),
     );
-    expect(impact.staleAttemptFences).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          attemptId: 'attempt-b',
-          reason: 'obsolete-contract-revision',
-          acceptsFurtherEffects: false,
-        }),
-      ]),
+    expect(impact.staleAttemptFences).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ attemptId: 'attempt-b' })]),
     );
     expect(impact.rebindableRunningAttemptIds).toEqual(['attempt-b']);
     expect(impact.authorityTransfer).toBe('none');

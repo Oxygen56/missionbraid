@@ -37,6 +37,7 @@ import type {
 } from './engine.js';
 import type { RuntimeCatalogEntry } from './runtime-catalog.js';
 import type { MissionFailureIntelligenceProjectionV1 } from './mission-failure-intelligence.js';
+import { loadMissionSpec } from './spec.js';
 
 const roots: string[] = [];
 
@@ -156,6 +157,49 @@ describe('MissionBraid local app', () => {
         missionId: 'mission-app-1',
         commandId: 'command-app-1',
       });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('creates an explicit Plan as pending without enqueueing the legacy resume path', async () => {
+    const fixture = await createWorkspace();
+    const state = new FakeEngineState();
+    const app = await startMissionBraidApp({
+      stateDir: fixture.stateDir,
+      port: 0,
+      engineFactory: () => new FakeEngine(state),
+      discoverRuntimes: async () => readyCatalog(),
+      now: incrementingClock(),
+      id: () => 'plan-draft-fixture',
+    });
+    try {
+      const response = await fetch(`${app.url}/api/v1/missions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(planMissionInput(fixture.workspace)),
+      });
+      expect(response.status).toBe(201);
+      const created = (await response.json()) as Record<string, unknown>;
+      expect(created).toMatchObject({
+        missionId: 'mission-app-1',
+        status: 'pending',
+        operation: null,
+      });
+      expect(created).not.toHaveProperty('commandId');
+      expect(state.commands.size).toBe(0);
+      expect(state.resumeCalls).toBe(0);
+
+      const draftFiles = await readdir(join(fixture.stateDir, 'drafts'));
+      expect(draftFiles).toHaveLength(1);
+      const spec = loadMissionSpec(join(fixture.stateDir, 'drafts', draftFiles[0]!));
+      expect(spec.acceptanceCriteria.map((criterion) => criterion.id)).toEqual([
+        'workstream-a',
+        'workstream-b',
+        'mission-outcome',
+      ]);
+      expect(spec.plan?.nodes.map((node) => node.kind)).toEqual(['task', 'task', 'join']);
+      expect(spec.plan?.edges).toHaveLength(2);
     } finally {
       await app.close();
     }
@@ -596,7 +640,7 @@ describe('MissionBraid local app', () => {
             baseCheckpointId: checkpoint.checkpointId,
             baseCheckpointDigest: checkpoint.manifestHash,
             changedVariable: { dimension: 'tool', key: 'tool:search', operation: 'replace' },
-            preserve: ['outcome-contract', 'all-other-observable-inputs'],
+            preserve: ['outcome-contract', 'checkpointed-comparison-boundary'],
             expectedDiscriminator: 'tool result changes',
             requiresExplicitAuthorization: true,
             missingPreconditions: [],
@@ -1585,6 +1629,114 @@ function missionInput(workspace: string): Record<string, unknown> {
         injectionBudgetTokens: 1_600,
       },
     ],
+  };
+}
+
+function planMissionInput(workspace: string): Record<string, unknown> {
+  return {
+    title: 'App fixture Plan Mission',
+    objective: 'Combine two independently verified workstreams.',
+    workspace,
+    constraints: ['Complete workstream A.', 'Complete workstream B.'],
+    acceptanceCriteria: [
+      {
+        id: 'workstream-a',
+        description: 'Workstream A passes its verifier.',
+        verifier: { executable: 'node', args: ['verify-a.mjs'], timeoutMs: 30_000 },
+      },
+      {
+        id: 'workstream-b',
+        description: 'Workstream B passes its verifier.',
+        verifier: { executable: 'node', args: ['verify-b.mjs'], timeoutMs: 30_000 },
+      },
+      {
+        id: 'mission-outcome',
+        description: 'The integrated result passes its verifier.',
+        verifier: { executable: 'node', args: ['verify-all.mjs'], timeoutMs: 30_000 },
+      },
+    ],
+    stages: [
+      {
+        stageId: 'qoder-workstream',
+        harness: 'qoder',
+        model: 'Qwen3.8-Max',
+        reasoningEffort: 'medium',
+        permissionMode: 'bypass_permissions',
+        injectionBudgetTokens: 1_600,
+        instruction: 'Complete workstream A and change only workstream-a.txt.',
+      },
+      {
+        stageId: 'claude-workstream',
+        harness: 'claude',
+        model: 'deepseek-v4-pro',
+        reasoningEffort: 'medium',
+        permissionMode: 'bypassPermissions',
+        injectionBudgetTokens: 1_600,
+        instruction: 'Complete workstream B and change only workstream-b.txt.',
+      },
+      {
+        stageId: 'qoder-consolidation',
+        harness: 'qoder',
+        model: 'Qwen3.8-Max',
+        reasoningEffort: 'medium',
+        permissionMode: 'bypass_permissions',
+        injectionBudgetTokens: 1_600,
+        instruction: 'Combine both verified artifacts and change only integrated.txt.',
+      },
+    ],
+    plan: {
+      nodes: [
+        {
+          nodeId: 'workstream-a',
+          kind: 'task',
+          title: 'Workstream A',
+          requirementIds: ['constraint-1', 'acceptance-workstream-a'],
+          stageId: 'qoder-workstream',
+          acceptanceCriterionIds: ['workstream-a'],
+          declaredOutputKeys: ['workstream-a.txt'],
+          requiredAuthorityScopes: ['workspace'],
+        },
+        {
+          nodeId: 'workstream-b',
+          kind: 'task',
+          title: 'Workstream B',
+          requirementIds: ['constraint-2', 'acceptance-workstream-b'],
+          stageId: 'claude-workstream',
+          acceptanceCriterionIds: ['workstream-b'],
+          declaredOutputKeys: ['workstream-b.txt'],
+          requiredAuthorityScopes: ['workspace'],
+        },
+        {
+          nodeId: 'consolidate',
+          kind: 'join',
+          title: 'Consolidate',
+          requirementIds: [
+            'objective',
+            'acceptance-workstream-a',
+            'acceptance-workstream-b',
+            'acceptance-mission-outcome',
+          ],
+          stageId: 'qoder-consolidation',
+          acceptanceCriterionIds: ['mission-outcome'],
+          declaredOutputKeys: ['integrated.txt'],
+          requiredAuthorityScopes: ['workspace'],
+        },
+      ],
+      edges: [
+        {
+          fromNodeId: 'workstream-a',
+          toNodeId: 'consolidate',
+          relation: 'join-input',
+          evidenceRefs: ['artifact:workstream-a'],
+        },
+        {
+          fromNodeId: 'workstream-b',
+          toNodeId: 'consolidate',
+          relation: 'join-input',
+          evidenceRefs: ['artifact:workstream-b'],
+        },
+      ],
+    },
   };
 }
 

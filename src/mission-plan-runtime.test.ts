@@ -18,7 +18,7 @@ describe('Mission Plan runtime projection', () => {
       producerNodeVersion: 'node-version-task-a',
       requirementIds: ['req-a'],
       sourceArtifactIds: [],
-      verifierEvidence: [],
+      verifierEvidence: [passedVerifier('artifact-a', 'sha256:artifact-a')],
       evidenceRefs: ['verifier:task-a'],
     };
     const projection = projectMissionPlanRuntime({
@@ -52,7 +52,7 @@ describe('Mission Plan runtime projection', () => {
           missionId: plan.missionId,
           sourcePlanRevisionId: plan.planRevisionId,
           sourceContractRevisionId: plan.contractRevisionId,
-          targetContractRevisionId: 'contract-revision-next',
+          targetContractRevisionId: plan.contractRevisionId,
           changedRequirementIds: ['req-a'],
           changedAuthorityScopes: [],
           directlyImpactedNodeIds: ['task-a'],
@@ -105,6 +105,178 @@ describe('Mission Plan runtime projection', () => {
     });
     expect(projection.nodes.find((node) => node.nodeId === 'task-a')?.status).toBe('failed');
     expect(projection.nodes.find((node) => node.nodeId === 'task-b')?.status).toBe('unknown');
+  });
+
+  it('ignores Attempts and Artifacts that are not bound to the current revisions and node version', () => {
+    const plan = planFixture();
+    const projection = projectMissionPlanRuntime({
+      plan,
+      activeAttempts: [
+        {
+          ...attempt('attempt-old-plan', 'task-a'),
+          planRevisionId: 'plan-revision-old',
+          status: 'running',
+        },
+        {
+          ...attempt('attempt-old-contract', 'task-a'),
+          contractRevisionId: 'contract-revision-old',
+          status: 'running',
+        },
+        {
+          ...attempt('attempt-old-node', 'task-a'),
+          nodeVersion: 'node-version-task-a-old',
+          status: 'running',
+        },
+      ],
+      finishedAttempts: [
+        {
+          ...attempt('attempt-finished-old', 'task-a'),
+          planRevisionId: 'plan-revision-old',
+          terminalStatus: 'succeeded',
+        },
+      ],
+      artifacts: [
+        {
+          ...artifact('artifact-old-plan', 'task-a', plan),
+          planRevisionId: 'plan-revision-old',
+        },
+        {
+          ...artifact('artifact-old-contract', 'task-a', plan),
+          contractRevisionId: 'contract-revision-old',
+        },
+        {
+          ...artifact('artifact-old-node', 'task-a', plan),
+          producerNodeVersion: 'node-version-task-a-old',
+        },
+      ],
+    });
+
+    expect(projection.nodes.find((node) => node.nodeId === 'task-a')).toEqual(
+      expect.objectContaining({
+        status: 'ready',
+        activeAttemptIds: [],
+        finishedAttemptIds: [],
+        artifactIds: [],
+      }),
+    );
+  });
+
+  it('keeps a finished node unknown until an artifact has matching passed verifier evidence', () => {
+    const plan = planFixture();
+    const emptyVerifier = artifact('artifact-empty', 'task-a', plan, []);
+    const wrongSubject = artifact('artifact-wrong-subject', 'task-b', plan, [
+      passedVerifier('another-artifact', 'sha256:artifact-wrong-subject'),
+    ]);
+
+    const projection = projectMissionPlanRuntime({
+      plan,
+      finishedAttempts: [
+        { ...attempt('attempt-a', 'task-a'), terminalStatus: 'succeeded' },
+        { ...attempt('attempt-b', 'task-b'), terminalStatus: 'succeeded' },
+      ],
+      artifacts: [emptyVerifier, wrongSubject],
+    });
+
+    expect(projection.nodes.find((node) => node.nodeId === 'task-a')?.status).toBe('unknown');
+    expect(projection.nodes.find((node) => node.nodeId === 'task-b')?.status).toBe('unknown');
+    expect(projection.completedNodeIds).toEqual([]);
+  });
+
+  it('keeps a parent invalidation as history without making revised same-name nodes stale', () => {
+    const previousPlan = planFixture();
+    const plan: MissionPlanRevisionV1 = {
+      ...previousPlan,
+      planRevisionId: 'plan-revision-runtime-next',
+      revisionDigest: 'sha256:plan-runtime-next',
+      revisionNumber: 2,
+      parentPlanRevisionId: previousPlan.planRevisionId,
+      contractRevisionId: 'contract-revision-runtime-next',
+      nodes: previousPlan.nodes.map((node) =>
+        node.nodeId === 'task-a' ? { ...node, nodeVersion: 'node-version-task-a-next' } : node,
+      ),
+    };
+    const projection = projectMissionPlanRuntime({
+      plan,
+      activeAttempts: [attempt('attempt-parent', 'task-a')],
+      artifacts: [artifact('artifact-parent', 'task-a', previousPlan)],
+      invalidations: [
+        {
+          schemaVersion: 'missionbraid.dev/selective-invalidation/v1',
+          invalidationId: 'invalidation-parent-to-current',
+          missionId: plan.missionId,
+          sourcePlanRevisionId: previousPlan.planRevisionId,
+          sourceContractRevisionId: previousPlan.contractRevisionId,
+          targetContractRevisionId: plan.contractRevisionId,
+          changedRequirementIds: ['req-a'],
+          changedAuthorityScopes: [],
+          directlyImpactedNodeIds: ['task-a'],
+          invalidatedNodeIds: ['task-a', 'join'],
+          replanFrontierNodeIds: ['task-a'],
+          reusableNodeIds: ['task-b', 'task-c'],
+          invalidatedArtifactIds: ['artifact-parent'],
+          reusableArtifactIds: [],
+          unplannedRequirementIds: [],
+          staleAttemptFences: [],
+          rebindableRunningAttemptIds: [],
+          authorityTransfer: 'none',
+          evidenceRefs: ['event:revision'],
+        },
+      ],
+    });
+
+    expect(projection.invalidationIds).toEqual(['invalidation-parent-to-current']);
+    expect(projection.staleNodeIds).toEqual([]);
+    expect(projection.nodes.find((node) => node.nodeId === 'task-a')).toEqual(
+      expect.objectContaining({
+        status: 'ready',
+        activeAttemptIds: [],
+        artifactIds: [],
+        invalidationIds: ['invalidation-parent-to-current'],
+      }),
+    );
+  });
+
+  it('ignores invalidations targeting another Contract or unrelated Plan history', () => {
+    const plan = planFixture();
+    const baseInvalidation = {
+      schemaVersion: 'missionbraid.dev/selective-invalidation/v1' as const,
+      missionId: plan.missionId,
+      sourceContractRevisionId: plan.contractRevisionId,
+      changedRequirementIds: ['req-a'],
+      changedAuthorityScopes: [],
+      directlyImpactedNodeIds: ['task-a'],
+      invalidatedNodeIds: ['task-a'],
+      replanFrontierNodeIds: ['task-a'],
+      reusableNodeIds: ['task-b', 'task-c', 'join'],
+      invalidatedArtifactIds: [],
+      reusableArtifactIds: [],
+      unplannedRequirementIds: [],
+      staleAttemptFences: [],
+      rebindableRunningAttemptIds: [],
+      authorityTransfer: 'none' as const,
+      evidenceRefs: ['event:revision'],
+    };
+    const projection = projectMissionPlanRuntime({
+      plan,
+      invalidations: [
+        {
+          ...baseInvalidation,
+          invalidationId: 'invalidation-other-contract',
+          sourcePlanRevisionId: plan.planRevisionId,
+          targetContractRevisionId: 'contract-revision-other',
+        },
+        {
+          ...baseInvalidation,
+          invalidationId: 'invalidation-unrelated-plan',
+          sourcePlanRevisionId: 'plan-revision-unrelated',
+          targetContractRevisionId: plan.contractRevisionId,
+        },
+      ],
+    });
+
+    expect(projection.invalidationIds).toEqual([]);
+    expect(projection.staleNodeIds).toEqual([]);
+    expect(projection.nodes.find((node) => node.nodeId === 'task-a')?.status).toBe('ready');
   });
 });
 
@@ -184,5 +356,44 @@ function attempt(attemptId: string, nodeId: string) {
     status: 'finished' as const,
     authorityRefs: [],
     evidenceRefs: [`attempt:${attemptId}`],
+  };
+}
+
+function artifact(
+  artifactId: string,
+  nodeId: string,
+  plan: MissionPlanRevisionV1,
+  verifierEvidence = [passedVerifier(artifactId, `sha256:${artifactId}`)],
+): PlanArtifactV1 {
+  return {
+    schemaVersion: 'missionbraid.dev/plan-artifact/v1',
+    artifactId,
+    artifactDigest: `sha256:${artifactId}`,
+    missionId: plan.missionId,
+    planId: plan.planId,
+    planRevisionId: plan.planRevisionId,
+    contractRevisionId: plan.contractRevisionId,
+    producedByNodeId: nodeId,
+    producerNodeVersion: `node-version-${nodeId}`,
+    requirementIds: ['req-a'],
+    sourceArtifactIds: [],
+    verifierEvidence,
+    evidenceRefs: [`verifier:${artifactId}`],
+  };
+}
+
+function passedVerifier(subjectId: string, subjectDigest: string) {
+  return {
+    evidenceId: `evidence-${subjectId}`,
+    evaluator: 'deterministic' as const,
+    verifierId: 'fixture-verifier/v1',
+    subjectId,
+    subjectDigest,
+    result: {
+      criterionId: 'fixture-verification',
+      status: 'passed' as const,
+      evidenceRefs: [`verifier:${subjectId}`],
+    },
+    evidenceRefs: [`verifier:${subjectId}`],
   };
 }

@@ -1,12 +1,20 @@
-import { basename, isAbsolute, resolve } from 'node:path';
+import { existsSync, realpathSync } from 'node:fs';
+import { basename, isAbsolute, relative, resolve, sep } from 'node:path';
 
 import { stringify as stringifyYaml } from 'yaml';
 
 import {
   MISSION_SPEC_VERSION,
+  isSupportedHarnessV1,
   type AttemptProfileSpecV1,
+  type HarnessIdV1,
   type AttemptStageSpecV1,
-  type SupportedHarnessV1,
+  type MissionContextSpecV1,
+  type MissionPlanEdgeRelationSpecV1,
+  type MissionPlanEdgeSpecV1,
+  type MissionPlanGraphSpecV1,
+  type MissionPlanNodeKindSpecV1,
+  type MissionPlanNodeSpecV1,
 } from './spec.js';
 
 const ROOT_FIELDS = new Set([
@@ -14,13 +22,31 @@ const ROOT_FIELDS = new Set([
   'objective',
   'workspace',
   'constraints',
+  'context',
   'verifier',
+  'acceptanceCriteria',
   'stages',
+  'plan',
 ]);
 const VERIFIER_FIELDS = new Set(['executable', 'args', 'timeoutMs']);
+const ACCEPTANCE_CRITERION_FIELDS = new Set(['id', 'description', 'verifier']);
+const PLAN_FIELDS = new Set(['nodes', 'edges']);
+const PLAN_NODE_FIELDS = new Set([
+  'nodeId',
+  'kind',
+  'title',
+  'requirementIds',
+  'stageId',
+  'acceptanceCriterionIds',
+  'declaredOutputKeys',
+  'requiredAuthorityScopes',
+]);
+const PLAN_EDGE_FIELDS = new Set(['fromNodeId', 'toNodeId', 'relation', 'evidenceRefs']);
 const STAGE_FIELDS = new Set([
   'stageId',
   'harness',
+  'adapterId',
+  'providerWorkspaceRef',
   'model',
   'reasoningEffort',
   'permissionMode',
@@ -69,9 +95,17 @@ export interface MissionDraftVerifierInput {
   readonly timeoutMs: number;
 }
 
+export interface MissionDraftAcceptanceCriterionInput {
+  readonly id: string;
+  readonly description: string;
+  readonly verifier: MissionDraftVerifierInput;
+}
+
 export interface MissionDraftStageInput {
   readonly stageId: string;
-  readonly harness: SupportedHarnessV1;
+  readonly harness: HarnessIdV1;
+  readonly adapterId?: string;
+  readonly providerWorkspaceRef?: string;
   readonly model: string;
   readonly reasoningEffort?: string;
   readonly permissionMode?: string;
@@ -84,13 +118,26 @@ export interface MissionDraftStageInput {
   readonly breakpoint?: 'mutable-tools';
 }
 
+export interface MissionDraftContextInput {
+  readonly factId: string;
+  /** Current Context source, relative to the Mission workspace or absolute. */
+  readonly source: string;
+  /** Cached Context document, relative to the Mission workspace or absolute. */
+  readonly snapshot: string;
+}
+
 export interface MissionDraftInput {
   readonly title: string;
   readonly objective: string;
   readonly workspace: string;
   readonly constraints?: readonly string[];
-  readonly verifier: MissionDraftVerifierInput;
+  readonly context?: MissionDraftContextInput;
+  /** Legacy shorthand for one `mission-outcome` acceptance criterion. */
+  readonly verifier?: MissionDraftVerifierInput;
+  /** Explicit criteria are required by independently verified Plan nodes. */
+  readonly acceptanceCriteria?: readonly MissionDraftAcceptanceCriterionInput[];
   readonly stages: readonly MissionDraftStageInput[];
+  readonly plan?: MissionPlanGraphSpecV1;
 }
 
 export interface MissionDraftDocumentV1 {
@@ -99,6 +146,7 @@ export interface MissionDraftDocumentV1 {
   readonly objective: string;
   readonly workspace: string;
   readonly constraints: readonly string[];
+  readonly context?: MissionContextSpecV1;
   readonly acceptanceCriteria: readonly {
     readonly id: string;
     readonly description: string;
@@ -111,6 +159,7 @@ export interface MissionDraftDocumentV1 {
     };
   }[];
   readonly attemptPlan: readonly AttemptStageSpecV1[];
+  readonly plan?: MissionPlanGraphSpecV1;
 }
 
 export interface MissionDraftOutput {
@@ -138,7 +187,8 @@ export function createMissionDraft(input: unknown): MissionDraftOutput {
       : requireArray(root.constraints, 'input.constraints').map((constraint, index) =>
           requireNonEmptyString(constraint, `input.constraints[${String(index)}]`),
         );
-  const verifier = parseVerifier(root.verifier, workspace);
+  const context = root.context === undefined ? undefined : parseContext(root.context, workspace);
+  const acceptanceCriteria = parseAcceptanceCriteria(root, workspace);
   const stageRecords = requireArray(root.stages, 'input.stages');
   if (stageRecords.length < 1 || stageRecords.length > 3) {
     throw new MissionDraftError(
@@ -147,6 +197,10 @@ export function createMissionDraft(input: unknown): MissionDraftOutput {
   }
   const parsedStages = stageRecords.map((stage, index) => parseStage(stage, index));
   assertUniqueStageIds(parsedStages);
+  const plan =
+    root.plan === undefined
+      ? undefined
+      : parsePlan(root.plan, constraints, acceptanceCriteria, parsedStages);
   const attemptPlan = parsedStages.map((stage, index): AttemptStageSpecV1 => {
     const instruction = stage.instruction ?? defaultStageInstruction(parsedStages, index);
     return {
@@ -154,7 +208,11 @@ export function createMissionDraft(input: unknown): MissionDraftOutput {
       profile: stage.profile,
       instruction,
       ...(stage.breakpoint === undefined ? {} : { breakpoint: stage.breakpoint }),
-      onFailure: index === parsedStages.length - 1 ? 'stop' : 'handoff',
+      // `attemptPlan` remains the ordered fallback route when an explicit DAG
+      // is also present. Plan-node execution has its own failure semantics and
+      // does not consume this field, while `/resume` must still be able to move
+      // from a failed non-terminal Runtime to the next declared candidate.
+      onFailure: index !== parsedStages.length - 1 ? 'handoff' : 'stop',
     };
   });
 
@@ -164,14 +222,10 @@ export function createMissionDraft(input: unknown): MissionDraftOutput {
     objective,
     workspace,
     constraints,
-    acceptanceCriteria: [
-      {
-        id: 'mission-outcome',
-        description: 'The declared verifier exits successfully for the original Mission objective.',
-        verifier,
-      },
-    ],
+    ...(context === undefined ? {} : { context }),
+    acceptanceCriteria,
     attemptPlan,
+    ...(plan === undefined ? {} : { plan }),
   };
   assertNoCredentialMaterial(document, 'mission');
   return {
@@ -190,35 +244,222 @@ interface ParsedStage {
 function parseVerifier(
   value: unknown,
   workspace: string,
+  path = 'input.verifier',
 ): MissionDraftDocumentV1['acceptanceCriteria'][number]['verifier'] {
-  const verifier = requireStrictRecord(value, 'input.verifier', VERIFIER_FIELDS);
-  const executable = requireNonEmptyString(verifier.executable, 'input.verifier.executable');
+  const verifier = requireStrictRecord(value, path, VERIFIER_FIELDS);
+  const executable = requireNonEmptyString(verifier.executable, `${path}.executable`);
   if (SHELL_EXECUTABLES.has(basename(executable).toLowerCase())) {
     throw new MissionDraftError(
-      'input.verifier.executable must invoke the verifier directly, not through a shell',
+      `${path}.executable must invoke the verifier directly, not through a shell`,
     );
   }
-  const args = requireArray(verifier.args, 'input.verifier.args').map((argument, index) =>
-    requireNonEmptyString(argument, `input.verifier.args[${String(index)}]`),
+  const args = requireArray(verifier.args, `${path}.args`).map((argument, index) =>
+    requireNonEmptyString(argument, `${path}.args[${String(index)}]`),
   );
   return {
     kind: 'command',
     executable,
     args,
     cwd: workspace,
-    timeoutMs: requirePositiveInteger(verifier.timeoutMs, 'input.verifier.timeoutMs'),
+    timeoutMs: requirePositiveInteger(verifier.timeoutMs, `${path}.timeoutMs`),
   };
+}
+
+function parseAcceptanceCriteria(
+  root: Record<string, unknown>,
+  workspace: string,
+): MissionDraftDocumentV1['acceptanceCriteria'] {
+  if (root.acceptanceCriteria === undefined) {
+    return [
+      {
+        id: 'mission-outcome',
+        description: 'The declared verifier exits successfully for the original Mission objective.',
+        verifier: parseVerifier(root.verifier, workspace),
+      },
+    ];
+  }
+  if (root.verifier !== undefined) {
+    throw new MissionDraftError('input must use either verifier or acceptanceCriteria, not both');
+  }
+  const criteria = requireArray(root.acceptanceCriteria, 'input.acceptanceCriteria').map(
+    (candidate, index) => {
+      const path = `input.acceptanceCriteria[${String(index)}]`;
+      const criterion = requireStrictRecord(candidate, path, ACCEPTANCE_CRITERION_FIELDS);
+      return {
+        id: requireIdentifier(criterion.id, `${path}.id`),
+        description: requireNonEmptyString(criterion.description, `${path}.description`),
+        verifier: parseVerifier(criterion.verifier, workspace, `${path}.verifier`),
+      };
+    },
+  );
+  if (criteria.length === 0) {
+    throw new MissionDraftError('input.acceptanceCriteria must not be empty');
+  }
+  assertUniqueStrings(
+    criteria.map((criterion) => criterion.id),
+    'input.acceptanceCriteria contains duplicate id values',
+  );
+  return criteria;
+}
+
+function parsePlan(
+  value: unknown,
+  constraints: readonly string[],
+  acceptanceCriteria: MissionDraftDocumentV1['acceptanceCriteria'],
+  stages: readonly ParsedStage[],
+): MissionPlanGraphSpecV1 {
+  const plan = requireStrictRecord(value, 'input.plan', PLAN_FIELDS);
+  const knownStageIds = new Set(stages.map((stage) => stage.stageId));
+  const knownCriterionIds = new Set(acceptanceCriteria.map((criterion) => criterion.id));
+  const knownRequirementIds = new Set([
+    'objective',
+    ...constraints.map((_constraint, index) => `constraint-${String(index + 1)}`),
+    ...acceptanceCriteria.map((criterion) => `acceptance-${criterion.id}`),
+  ]);
+  const nodes = requireArray(plan.nodes, 'input.plan.nodes').map(
+    (candidate, index): MissionPlanNodeSpecV1 => {
+      const path = `input.plan.nodes[${String(index)}]`;
+      const node = requireStrictRecord(candidate, path, PLAN_NODE_FIELDS);
+      const nodeId = requireIdentifier(node.nodeId, `${path}.nodeId`);
+      const stageId = requireIdentifier(node.stageId, `${path}.stageId`);
+      if (!knownStageIds.has(stageId)) {
+        throw new MissionDraftError(`${path}.stageId references unknown stage ${stageId}`);
+      }
+      const requirementIds = requireIdentifierArray(node.requirementIds, `${path}.requirementIds`);
+      if (requirementIds.length === 0) {
+        throw new MissionDraftError(`${path}.requirementIds must not be empty`);
+      }
+      for (const requirementId of requirementIds) {
+        if (!knownRequirementIds.has(requirementId)) {
+          throw new MissionDraftError(
+            `${path}.requirementIds references unknown Contract requirement ${requirementId}`,
+          );
+        }
+      }
+      const acceptanceCriterionIds = requireIdentifierArray(
+        node.acceptanceCriterionIds,
+        `${path}.acceptanceCriterionIds`,
+      );
+      for (const criterionId of acceptanceCriterionIds) {
+        if (!knownCriterionIds.has(criterionId)) {
+          throw new MissionDraftError(
+            `${path}.acceptanceCriterionIds references unknown criterion ${criterionId}`,
+          );
+        }
+      }
+      return {
+        nodeId,
+        kind: requirePlanNodeKind(node.kind, `${path}.kind`),
+        title: requireNonEmptyString(node.title, `${path}.title`),
+        requirementIds,
+        stageId,
+        acceptanceCriterionIds,
+        declaredOutputKeys: requireStringArray(
+          node.declaredOutputKeys,
+          `${path}.declaredOutputKeys`,
+        ),
+        requiredAuthorityScopes: requireStringArray(
+          node.requiredAuthorityScopes,
+          `${path}.requiredAuthorityScopes`,
+        ),
+      };
+    },
+  );
+  if (nodes.length === 0) throw new MissionDraftError('input.plan.nodes must not be empty');
+  assertUniqueStrings(
+    nodes.map((node) => node.nodeId),
+    'input.plan.nodes contains duplicate nodeId values',
+  );
+  assertUniqueStrings(
+    nodes.map((node) => node.stageId),
+    'input.plan.nodes must bind each stageId to only one node',
+  );
+
+  const knownNodeIds = new Set(nodes.map((node) => node.nodeId));
+  const edges = requireArray(plan.edges, 'input.plan.edges').map(
+    (candidate, index): MissionPlanEdgeSpecV1 => {
+      const path = `input.plan.edges[${String(index)}]`;
+      const edge = requireStrictRecord(candidate, path, PLAN_EDGE_FIELDS);
+      const fromNodeId = requireIdentifier(edge.fromNodeId, `${path}.fromNodeId`);
+      const toNodeId = requireIdentifier(edge.toNodeId, `${path}.toNodeId`);
+      if (!knownNodeIds.has(fromNodeId) || !knownNodeIds.has(toNodeId)) {
+        throw new MissionDraftError(`${path} references an unknown plan node`);
+      }
+      if (fromNodeId === toNodeId) {
+        throw new MissionDraftError(`${path} cannot point to the same node`);
+      }
+      return {
+        fromNodeId,
+        toNodeId,
+        relation: requirePlanEdgeRelation(edge.relation, `${path}.relation`),
+        evidenceRefs: requireStringArray(edge.evidenceRefs, `${path}.evidenceRefs`),
+      };
+    },
+  );
+  assertUniqueStrings(
+    edges.map((edge) => `${edge.fromNodeId}\0${edge.toNodeId}\0${edge.relation}`),
+    'input.plan.edges contains duplicate edges',
+  );
+  return { nodes, edges };
+}
+
+function parseContext(value: unknown, workspace: string): MissionContextSpecV1 {
+  const context = requireStrictRecord(
+    value,
+    'input.context',
+    new Set(['factId', 'source', 'snapshot']),
+  );
+  const factId = requireIdentifier(context.factId, 'input.context.factId');
+  return {
+    factId,
+    source: resolveContextPath(
+      requireNonEmptyString(context.source, 'input.context.source'),
+      workspace,
+      'input.context.source',
+    ),
+    snapshot: resolveContextPath(
+      requireNonEmptyString(context.snapshot, 'input.context.snapshot'),
+      workspace,
+      'input.context.snapshot',
+    ),
+  };
+}
+
+function resolveContextPath(value: string, workspace: string, path: string): string {
+  const candidate = canonicalizePath(
+    resolve(isAbsolute(value) ? value : resolve(workspace, value)),
+  );
+  const relativePath = relative(canonicalizePath(workspace), candidate);
+  if (relativePath === '..' || relativePath.startsWith(`..${sep}`) || isAbsolute(relativePath)) {
+    throw new MissionDraftError(`${path} must remain inside input.workspace`);
+  }
+  return candidate;
+}
+
+function canonicalizePath(value: string): string {
+  return existsSync(value) ? realpathSync(value) : value;
 }
 
 function parseStage(value: unknown, index: number): ParsedStage {
   const path = `input.stages[${String(index)}]`;
   const stage = requireStrictRecord(value, path, STAGE_FIELDS);
   const stageId = requireIdentifier(stage.stageId, `${path}.stageId`);
-  const harness = requireHarness(stage.harness, `${path}.harness`);
+  const adapterId =
+    stage.adapterId === undefined
+      ? undefined
+      : requireIdentifier(stage.adapterId, `${path}.adapterId`);
+  const harness = requireHarness(stage.harness, `${path}.harness`, adapterId);
+  const providerWorkspaceRef =
+    stage.providerWorkspaceRef === undefined
+      ? undefined
+      : requireNonEmptyString(stage.providerWorkspaceRef, `${path}.providerWorkspaceRef`);
+  if (providerWorkspaceRef !== undefined && adapterId === undefined) {
+    throw new MissionDraftError(`${path}.providerWorkspaceRef requires ${path}.adapterId`);
+  }
   const permissionMode =
     stage.permissionMode === undefined
       ? undefined
-      : requirePermissionMode(stage.permissionMode, harness, `${path}.permissionMode`);
+      : requirePermissionMode(stage.permissionMode, harness, adapterId, `${path}.permissionMode`);
   const instruction =
     stage.instruction === undefined
       ? undefined
@@ -227,10 +468,17 @@ function parseStage(value: unknown, index: number): ParsedStage {
     stage.breakpoint === undefined
       ? undefined
       : requireBreakpoint(stage.breakpoint, harness, `${path}.breakpoint`);
+  if (adapterId !== undefined && breakpoint !== undefined) {
+    throw new MissionDraftError(
+      `${path}.breakpoint is not available through the generic Adapter v1 host`,
+    );
+  }
   return {
     stageId,
     profile: {
       harness,
+      ...(adapterId === undefined ? {} : { adapterId }),
+      ...(providerWorkspaceRef === undefined ? {} : { providerWorkspaceRef }),
       model: requireNonEmptyString(stage.model, `${path}.model`),
       ...(stage.reasoningEffort === undefined
         ? {}
@@ -251,11 +499,7 @@ function parseStage(value: unknown, index: number): ParsedStage {
   };
 }
 
-function requireBreakpoint(
-  value: unknown,
-  harness: SupportedHarnessV1,
-  path: string,
-): 'mutable-tools' {
+function requireBreakpoint(value: unknown, harness: HarnessIdV1, path: string): 'mutable-tools' {
   if (value !== 'mutable-tools') {
     throw new MissionDraftError(`${path} must be mutable-tools`);
   }
@@ -284,10 +528,11 @@ function defaultStageInstruction(stages: readonly ParsedStage[], index: number):
     : `Continue the same Mission with ${displayHarness(current.profile.harness)} from the existing workspace and controller-provided Handoff Capsule, preserve accepted prior work, and leave the workspace ready for the declared verifier.`;
 }
 
-function displayHarness(harness: SupportedHarnessV1): string {
+function displayHarness(harness: HarnessIdV1): string {
   if (harness === 'codex') return 'Codex';
   if (harness === 'qoder') return 'Qoder';
-  return 'Claude Code';
+  if (harness === 'claude') return 'Claude Code';
+  return harness;
 }
 
 function requireStrictRecord(
@@ -327,12 +572,54 @@ function requireIdentifier(value: unknown, path: string): string {
   return identifier;
 }
 
+function requireIdentifierArray(value: unknown, path: string): string[] {
+  const identifiers = requireArray(value, path).map((candidate, index) =>
+    requireIdentifier(candidate, `${path}[${String(index)}]`),
+  );
+  assertUniqueStrings(identifiers, `${path} contains duplicate values`);
+  return identifiers;
+}
+
+function requireStringArray(value: unknown, path: string): string[] {
+  const strings = requireArray(value, path).map((candidate, index) =>
+    requireNonEmptyString(candidate, `${path}[${String(index)}]`),
+  );
+  assertUniqueStrings(strings, `${path} contains duplicate values`);
+  return strings;
+}
+
+function requirePlanNodeKind(value: unknown, path: string): MissionPlanNodeKindSpecV1 {
+  if (
+    value !== 'task' &&
+    value !== 'review' &&
+    value !== 'diagnostic' &&
+    value !== 'branch' &&
+    value !== 'join'
+  ) {
+    throw new MissionDraftError(`${path} has an unsupported plan node kind`);
+  }
+  return value;
+}
+
+function requirePlanEdgeRelation(value: unknown, path: string): MissionPlanEdgeRelationSpecV1 {
+  if (
+    value !== 'depends-on' &&
+    value !== 'review-input' &&
+    value !== 'diagnostic-input' &&
+    value !== 'branch-input' &&
+    value !== 'join-input'
+  ) {
+    throw new MissionDraftError(`${path} has an unsupported plan edge relation`);
+  }
+  return value;
+}
+
 function requireAbsoluteWorkspace(value: unknown): string {
   const workspace = requireNonEmptyString(value, 'input.workspace');
   if (!isAbsolute(workspace)) {
     throw new MissionDraftError('input.workspace must be an absolute path');
   }
-  return resolve(workspace);
+  return canonicalizePath(resolve(workspace));
 }
 
 function requirePositiveInteger(value: unknown, path: string): number {
@@ -342,15 +629,22 @@ function requirePositiveInteger(value: unknown, path: string): number {
   return value;
 }
 
-function requireHarness(value: unknown, path: string): SupportedHarnessV1 {
-  if (value !== 'codex' && value !== 'qoder' && value !== 'claude') {
+function requireHarness(value: unknown, path: string, adapterId?: string): HarnessIdV1 {
+  const harness = requireIdentifier(value, path);
+  if (adapterId === undefined && !isSupportedHarnessV1(harness)) {
     throw new MissionDraftError(`${path} must be codex, qoder, or claude`);
   }
-  return value;
+  return harness;
 }
 
-function requirePermissionMode(value: unknown, harness: SupportedHarnessV1, path: string): string {
+function requirePermissionMode(
+  value: unknown,
+  harness: HarnessIdV1,
+  adapterId: string | undefined,
+  path: string,
+): string {
   const permissionMode = requireNonEmptyString(value, path);
+  if (adapterId !== undefined) return permissionMode;
   const supported =
     harness === 'codex'
       ? CODEX_PERMISSION_MODES
@@ -368,6 +662,10 @@ function assertUniqueStageIds(stages: readonly ParsedStage[]): void {
   if (new Set(ids).size !== ids.length) {
     throw new MissionDraftError('input.stages contains duplicate stageId values');
   }
+}
+
+function assertUniqueStrings(values: readonly string[], message: string): void {
+  if (new Set(values).size !== values.length) throw new MissionDraftError(message);
 }
 
 function assertNoCredentialMaterial(

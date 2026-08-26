@@ -1,12 +1,51 @@
 {
   "schemaVersion": "missionbraid.dev/package-smoke/v1",
-  "generatedAt": "2026-08-25T21:15:07.027Z",
+  "generatedAt": "2026-08-26T10:46:23.578Z",
   "evidenceLevel": "internal-clean-install",
   "package": {
     "name": "missionbraid",
     "version": "1.0.0",
-    "tarballSha256": "541d501626ba0e418bc8fdfb504da1fd6c892024fc9982764f60c262793f70ca",
-    "packedFileCount": 159,
+    "tarballSha256": "d59f567c1ba68f2453b8d5874cf19a5e1c5bc987e7b5245fc588ab433c583cd7",
+    "packedFileCount": 413,
+    "sidecarAbsentFromPackage": true,
+    "markdownLocalLinks": {
+      "markdownFileCount": 37,
+      "checkedLocalLinkCount": 202,
+      "unresolvedLocalLinkCount": 0
+    },
+    "sourceCandidateBundle": {
+      "schemaVersion": "missionbraid.dev/source-candidate-bundle/v1",
+      "filename": "missionbraid-1.0.0-source-candidate.tgz",
+      "constructionMethod": "Extract the untouched npm-pack tarball, inject the exact repository pnpm-lock.yaml at package root, then create a separate gzip tar archive.",
+      "standardTarball": "missionbraid-1.0.0.tgz",
+      "bundleSha256": "a5c7fa1e4b4e5c2667d2a7e0ed592e2b54d4ce4dbce6f84d0cca63f649be874a",
+      "lockfileSha256": "4f51931f6e6479f3828e8daf8b5fa06f038c5638d485492e987af34de0b98a59",
+      "reproduction": {
+        "root": "extracted-tarball/package",
+        "frozenInstall": {
+          "command": "pnpm install --frozen-lockfile",
+          "exitCode": 0,
+          "lockfile": "pnpm-lock.yaml",
+          "summary": "Done in 539ms using pnpm v11.18.0"
+        },
+        "typecheck": {
+          "command": "pnpm typecheck",
+          "exitCode": 0,
+          "summary": "tsc completed without diagnostics"
+        },
+        "build": {
+          "command": "pnpm build",
+          "exitCode": 0,
+          "summary": "package build completed"
+        },
+        "vitest": {
+          "command": "pnpm vitest run",
+          "exitCode": 0,
+          "summary": ["Test Files  51 passed (51)", "Tests  362 passed (362)"]
+        },
+        "repositoryFallbackUsed": false
+      }
+    },
     "manifestContract": {
       "schemaVersion": "missionbraid.dev/package-contract/v1",
       "conforms": true,
@@ -21,23 +60,184 @@
     "sdkV1": "1.0.0",
     "conformance": "missionbraid.dev/adapter-conformance/v1",
     "conformanceV1": "missionbraid.dev/adapter-conformance/v1",
+    "processProvider": "1.0.0",
+    "processProviderV1": "1.0.0",
     "packageContract": "missionbraid.dev/package-contract/v1",
     "outcomeStudio": "missionbraid.dev/outcome-ci-result/v1",
     "missionPlan": "missionbraid.dev/mission-plan/v1",
     "missionPlanRuntime": "missionbraid.dev/mission-plan-runtime/v1"
   },
-  "adapterConformance": {
-    "passed": true,
-    "adapterId": "example.third-party-direct",
-    "adapterVersion": "1.0.0",
-    "evidenceLevel": "local-conformance",
-    "failedChecks": []
+  "adapterExamples": {
+    "direct": {
+      "adapterId": "example.third-party-direct",
+      "transport": "direct",
+      "passed": true,
+      "evidenceLevel": "local-conformance",
+      "eventStream": "Accepted 1 ordered sanitized evidence event(s)."
+    },
+    "acp": {
+      "adapterId": "example.acp-stdio",
+      "transport": "acp",
+      "passed": true,
+      "evidenceLevel": "local-conformance",
+      "eventStream": "Accepted 3 ordered sanitized evidence event(s)."
+    },
+    "provider-backed": {
+      "adapterId": "example.process-provider",
+      "transport": "provider-backed",
+      "passed": true,
+      "evidenceLevel": "local-conformance",
+      "eventStream": "Accepted 4 ordered sanitized evidence event(s)."
+    }
+  },
+  "cleanContextExternalConsumer": {
+    "evidenceLevel": "internal-clean-context-external-consumer-style",
+    "adapterId": "consumer.clean-write-file",
+    "harnessId": "consumer-harness",
+    "conformancePassed": true,
+    "sourceImportsOnlyInstalledPackage": true,
+    "cliMission": {
+      "missionId": "mission-1c739150-f3b2-4693-b958-826c55eddacb",
+      "status": "succeeded",
+      "receiptOutcome": "verified",
+      "identityChain": {
+        "adapterEcho": {
+          "adapterId": "consumer.clean-write-file",
+          "profileId": "profile-snapshot-34d924c7b118a5a8a04b81489b98",
+          "attemptId": "attempt-4119433f-e908-4b08-8ee0-62a50754ff56"
+        },
+        "receiptRuntimeBinding": {
+          "adapterId": "consumer.clean-write-file",
+          "adapterVersion": "1.0.0",
+          "attemptId": "attempt-4119433f-e908-4b08-8ee0-62a50754ff56",
+          "harness": "consumer-harness",
+          "nativeProtocol": "clean-consumer/v1",
+          "profileId": "profile-snapshot-34d924c7b118a5a8a04b81489b98",
+          "transport": "direct"
+        },
+        "equalityChecks": {
+          "adapterIdMatches": true,
+          "profileIdMatches": true,
+          "attemptIdMatches": true
+        }
+      },
+      "startedFromInstalledBin": true
+    },
+    "workbenchMission": {
+      "missionId": "mission-3235a173-06e2-4b35-bae6-980b8cba099b",
+      "status": "succeeded",
+      "receiptIssued": true,
+      "startedFromInstalledBin": true,
+      "createdFromWorkbenchForm": true,
+      "harnessId": "consumer-harness",
+      "ordinaryIdentityChain": {
+        "adapter": {
+          "adapterId": "consumer.clean-write-file",
+          "adapterVersion": "1.0.0",
+          "nativeProtocol": "clean-consumer/v1",
+          "transport": "direct"
+        },
+        "profileDefinitionId": "profile-definition-b6d79c15dbdcf8aaef425910d9f7",
+        "profileSnapshotId": "profile-snapshot-e667024f7503b0c336538f507bee",
+        "attemptId": "attempt-0a196070-b2f4-457e-adb6-4f1f22989c0b",
+        "bindingId": "binding-980d91e8-1221-4033-b9fe-40946fd9016d",
+        "attemptRuntimeBinding": {
+          "adapterId": "consumer.clean-write-file",
+          "adapterVersion": "1.0.0",
+          "attemptId": "attempt-0a196070-b2f4-457e-adb6-4f1f22989c0b",
+          "harness": "consumer-harness",
+          "nativeProtocol": "clean-consumer/v1",
+          "profileId": "profile-snapshot-e667024f7503b0c336538f507bee",
+          "transport": "direct"
+        },
+        "adapterEcho": {
+          "adapterId": "consumer.clean-write-file",
+          "profileId": "profile-snapshot-e667024f7503b0c336538f507bee",
+          "attemptId": "attempt-0a196070-b2f4-457e-adb6-4f1f22989c0b"
+        },
+        "receiptRuntimeBinding": {
+          "adapterId": "consumer.clean-write-file",
+          "adapterVersion": "1.0.0",
+          "attemptId": "attempt-0a196070-b2f4-457e-adb6-4f1f22989c0b",
+          "harness": "consumer-harness",
+          "nativeProtocol": "clean-consumer/v1",
+          "profileId": "profile-snapshot-e667024f7503b0c336538f507bee",
+          "transport": "direct"
+        },
+        "equalityChecks": {
+          "manifestMatchesProfile": true,
+          "profileIdMatchesAdapterEcho": true,
+          "attemptIdMatchesAdapterEcho": true,
+          "bindingMatchesAdapterEcho": true,
+          "receiptMatchesAdapterEcho": true
+        }
+      },
+      "executionFork": {
+        "checkpointId": "checkpoint-3c3d70fdbaae8b93bd90e35643ae069286362613d0cc4be39ab2aee7c5963ef6",
+        "childBranchId": "branch-installed-external-adapter-fork",
+        "receiptOutcome": "verified",
+        "sameAdapterHarnessObserved": true,
+        "identityChain": {
+          "adapterEcho": {
+            "adapterId": "consumer.clean-write-file",
+            "profileId": "profile-snapshot-e667024f7503b0c336538f507bee",
+            "attemptId": "fork-attempt-execution-fork-8470dd3bb44695501c69277fccd8fe6050a6e5ac7adacb5731028cb58b9e7872"
+          },
+          "receiptRuntimeBinding": {
+            "adapterId": "consumer.clean-write-file",
+            "adapterVersion": "1.0.0",
+            "attemptId": "fork-attempt-execution-fork-8470dd3bb44695501c69277fccd8fe6050a6e5ac7adacb5731028cb58b9e7872",
+            "harness": "consumer-harness",
+            "nativeProtocol": "clean-consumer/v1",
+            "profileId": "profile-snapshot-e667024f7503b0c336538f507bee",
+            "transport": "direct"
+          },
+          "targetLineage": {
+            "targetProfileId": "profile-snapshot-e667024f7503b0c336538f507bee",
+            "runtimeBinding": {
+              "attemptId": "fork-attempt-execution-fork-8470dd3bb44695501c69277fccd8fe6050a6e5ac7adacb5731028cb58b9e7872",
+              "profileId": "profile-snapshot-e667024f7503b0c336538f507bee",
+              "harness": "consumer-harness",
+              "adapterId": "consumer.clean-write-file",
+              "adapterVersion": "1.0.0",
+              "nativeProtocol": "clean-consumer/v1",
+              "transport": "direct"
+            }
+          },
+          "equalityChecks": {
+            "adapterIdMatches": true,
+            "profileIdMatches": true,
+            "attemptIdMatches": true
+          }
+        },
+        "isolatedWorkspaceMutation": true
+      }
+    }
   },
   "installedProduct": {
     "cliHelp": "passed",
     "daemonStartedFromInstalledBin": true,
     "workbenchHttpStatus": 200,
     "missionApiHttpStatus": 200,
+    "runtimeInventoryHttpStatus": 200,
+    "externalAdapterInventoried": true,
+    "adapterMissionExecutedOverHttp": true,
+    "adapterMissionCreatedFromWorkbenchForm": true,
+    "externalAdapterExecutionFork": "verified",
+    "storeMigration": {
+      "sourceSchemaVersion": 1,
+      "targetSchemaVersion": 2,
+      "missionId": "mission-installed-migration-v1",
+      "missionPreserved": true,
+      "eventChainPreserved": true,
+      "originalEventCount": 1,
+      "migratedEventCount": 1,
+      "originalHeadHash": "88455570418c5abd33be7b7c6dcd3402f9d4a90bbea35b31b731f3eeb0d63030",
+      "migratedHeadHash": "88455570418c5abd33be7b7c6dcd3402f9d4a90bbea35b31b731f3eeb0d63030",
+      "workbenchMissionListRead": true,
+      "workbenchMissionDetailRead": true,
+      "startedFromInstalledBin": true
+    },
     "cleanShutdown": true,
     "suppliedStateDirectoryInitialized": true
   },

@@ -6,6 +6,7 @@ import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+import { AdapterRegistryV1, type MissionBraidAdapterV1 } from './adapter-sdk.js';
 import { MissionEngine, type MissionExecutionResult } from './engine.js';
 import { startMissionBraidApp } from './app.js';
 import {
@@ -19,6 +20,7 @@ interface ParsedArguments {
   readonly subject?: string;
   readonly stateDir: string;
   readonly workspace?: string;
+  readonly adapterModules: readonly string[];
 }
 
 export async function main(argv = process.argv.slice(2)): Promise<number> {
@@ -70,7 +72,12 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     }
     try {
       const options = parseAppArguments(argv.slice(1));
-      const app = await startMissionBraidApp(options);
+      const adapterRegistry = await loadAdapterRegistryV1(options.adapterModules);
+      const app = await startMissionBraidApp({
+        stateDir: options.stateDir,
+        port: options.port,
+        adapterRegistry,
+      });
       process.stdout.write(`MissionBraid is ready at ${app.url}\n`);
       await waitForInterrupt();
       await app.close();
@@ -92,7 +99,20 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     return 64;
   }
 
-  const engine = new MissionEngine({ stateDir: parsed.stateDir });
+  let adapterRegistry: AdapterRegistryV1;
+  try {
+    adapterRegistry = await loadAdapterRegistryV1(parsed.adapterModules);
+  } catch (error) {
+    process.stderr.write(
+      `${error instanceof Error ? error.message : String(error)}\n\n${usage()}\n`,
+    );
+    return 64;
+  }
+
+  const engine = new MissionEngine({
+    stateDir: parsed.stateDir,
+    adapterRegistry,
+  });
   const controller = new AbortController();
   const interrupt = (): void => controller.abort();
   process.once('SIGINT', interrupt);
@@ -222,10 +242,11 @@ export function parseArguments(argv: readonly string[]): ParsedArguments {
     rawCommand === 'list' ? (rawSubject === undefined ? rest : [rawSubject, ...rest]) : rest;
   let stateDir = resolve(homedir(), '.missionbraid');
   let workspace: string | undefined;
+  const adapterModules: string[] = [];
   for (let index = 0; index < optionArguments.length; index += 1) {
     const flag = optionArguments[index];
     if (flag === '--json') continue;
-    if (flag !== '--state-dir' && flag !== '--workspace') {
+    if (flag !== '--state-dir' && flag !== '--workspace' && flag !== '--adapter') {
       throw new Error(`Unknown option ${String(flag)}`);
     }
     const value = optionArguments[index + 1];
@@ -233,7 +254,8 @@ export function parseArguments(argv: readonly string[]): ParsedArguments {
       throw new Error(`${flag} requires a value`);
     }
     if (flag === '--state-dir') stateDir = resolve(value);
-    else workspace = resolve(value);
+    else if (flag === '--workspace') workspace = resolve(value);
+    else adapterModules.push(resolve(value));
     index += 1;
   }
   if (rawCommand !== 'create' && rawCommand !== 'run' && workspace !== undefined) {
@@ -249,15 +271,51 @@ export function parseArguments(argv: readonly string[]): ParsedArguments {
         }),
     stateDir,
     ...(workspace === undefined ? {} : { workspace }),
+    adapterModules,
   };
+}
+
+/** Load external Adapter modules without exposing Mission Kernel mutation ports. */
+export async function loadAdapterRegistryV1(
+  modulePaths: readonly string[],
+): Promise<AdapterRegistryV1> {
+  const registry = new AdapterRegistryV1();
+  for (const modulePath of modulePaths) {
+    const module = (await import(pathToFileURL(modulePath).href)) as Record<string, unknown>;
+    const candidates = adapterCandidates(module, modulePath);
+    for (const adapter of candidates) registry.register(adapter);
+  }
+  return registry;
+}
+
+function adapterCandidates(
+  module: Record<string, unknown>,
+  modulePath: string,
+): readonly MissionBraidAdapterV1[] {
+  const candidates = Array.isArray(module.adapters)
+    ? module.adapters
+    : module.default !== undefined
+      ? [module.default]
+      : module.adapter !== undefined
+        ? [module.adapter]
+        : [];
+  if (candidates.length === 0) {
+    throw new TypeError(`Adapter module ${modulePath} must export default, adapter, or adapters`);
+  }
+  return candidates.map((candidate, index) => {
+    if (typeof candidate !== 'object' || candidate === null) {
+      throw new TypeError(`Adapter module ${modulePath} export ${String(index)} is not an Adapter`);
+    }
+    return candidate as MissionBraidAdapterV1;
+  });
 }
 
 function usage(): string {
   return `MissionBraid
 
-  missionbraid create <mission.yaml> [--workspace <git-worktree>] [--state-dir <dir>]
-  missionbraid run <mission.yaml> [--workspace <git-worktree>] [--state-dir <dir>]
-  missionbraid resume <mission-id> [--state-dir <dir>]
+  missionbraid create <mission.yaml> [--workspace <git-worktree>] [--adapter <module.mjs>] [--state-dir <dir>]
+  missionbraid run <mission.yaml> [--workspace <git-worktree>] [--adapter <module.mjs>] [--state-dir <dir>]
+  missionbraid resume <mission-id> [--adapter <module.mjs>] [--state-dir <dir>]
   missionbraid status <mission-id> [--state-dir <dir>] [--json]
   missionbraid verify <mission-id> [--state-dir <dir>]
   missionbraid list [--state-dir <dir>]
@@ -271,18 +329,20 @@ function runtimeCatalogUsage(): string {
 }
 
 function appUsage(): string {
-  return 'missionbraid app [--state-dir <dir>] [--port <number>]';
+  return 'missionbraid app [--state-dir <dir>] [--port <number>] [--adapter <module.mjs>]';
 }
 
 export function parseAppArguments(argv: readonly string[]): {
   readonly stateDir: string;
   readonly port: number;
+  readonly adapterModules: readonly string[];
 } {
   let stateDir = resolve(homedir(), '.missionbraid');
   let port = 4317;
+  const adapterModules: string[] = [];
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
-    if (flag !== '--state-dir' && flag !== '--port') {
+    if (flag !== '--state-dir' && flag !== '--port' && flag !== '--adapter') {
       throw new Error(`Unknown app option ${String(flag)}`);
     }
     const value = argv[index + 1];
@@ -291,15 +351,17 @@ export function parseAppArguments(argv: readonly string[]): {
     }
     if (flag === '--state-dir') {
       stateDir = resolve(value);
-    } else {
+    } else if (flag === '--port') {
       port = Number(value);
       if (!Number.isSafeInteger(port) || port < 0 || port > 65_535) {
         throw new Error('--port must be an integer from 0 to 65535');
       }
+    } else {
+      adapterModules.push(resolve(value));
     }
     index += 1;
   }
-  return { stateDir, port };
+  return { stateDir, port, adapterModules };
 }
 
 function waitForInterrupt(): Promise<void> {

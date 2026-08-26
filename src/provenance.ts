@@ -14,7 +14,7 @@ export interface ProvenanceChangedPathV1 {
 export interface ProvenanceStageV1 {
   readonly checkpointId: string;
   readonly stageId: string;
-  readonly harness: 'codex' | 'qoder' | 'claude';
+  readonly harness: string;
   readonly attemptId: string;
   readonly branchId: string;
   readonly bindingId: string;

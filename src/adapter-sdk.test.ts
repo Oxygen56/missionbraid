@@ -22,6 +22,7 @@ describe('Adapter SDK v1 contract', () => {
     expect(adapter.manifest).toMatchObject({
       apiVersion: '1.0.0',
       adapterId: 'example.minimal-direct',
+      harnessId: 'minimal-direct',
       transport: 'direct',
     });
     expect(Object.keys(adapter.manifest.capabilities).sort()).toEqual(
@@ -53,6 +54,13 @@ describe('Adapter SDK v1 contract', () => {
 
   it('rejects missing and self-contradictory capability declarations', () => {
     const valid = createMinimalDirectAdapter().manifest;
+    expect(() =>
+      validateAdapterManifestV1({
+        ...valid,
+        harnessId: '   ',
+      }),
+    ).toThrow('harnessId');
+
     const { steer: _steer, ...missingSteer } = valid.capabilities;
     expect(() =>
       validateAdapterManifestV1({

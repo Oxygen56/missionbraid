@@ -5,6 +5,7 @@ import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 import { APP_CSS, APP_HTML, APP_JAVASCRIPT } from './app-page.js';
+import { AdapterRegistryV1 } from './adapter-sdk.js';
 import type { NativeArtifactContent } from './artifact-store.js';
 import type { CompositeCheckpointManifestV1 } from './composite-checkpoint.js';
 import type { ContextGraphV1 } from './context-graph.js';
@@ -26,12 +27,16 @@ import {
   type MissionCheckpointReplayResultV1,
   type MissionPlanView,
   type MissionPlanRuntimeProjectionV1,
+  type MissionPlanExecutionResultV1,
   type ReviseMissionContractInputV1,
   type ReviseMissionContractResultV1,
+  type MissionOutcomeStudioRerunV1,
+  type MissionOutcomeStudioRerunRequestV1,
   type MissionOutcomeStudioScenarioCollectionV1,
 } from './engine.js';
 import type { MissionFailureIntelligenceProjectionV1 } from './mission-failure-intelligence.js';
 import type { MissionOutcomeStudioViewV1 } from './mission-outcome-studio.js';
+import type { OutcomeBranchSelectionV1 } from './outcome-studio.js';
 import type { CheckpointReplayRecordV1 } from './checkpoint-replay.js';
 import type { MissionCheckpointReplayRequestV1 } from './mission-checkpoint-replay.js';
 import { createMissionDraft, MissionDraftError } from './mission-draft.js';
@@ -87,6 +92,10 @@ export interface AppEngine {
     missionId: string,
     input: ReviseMissionContractInputV1,
   ): Promise<ReviseMissionContractResultV1>;
+  executeMissionPlan?(
+    missionId: string,
+    signal?: AbortSignal,
+  ): Promise<MissionPlanExecutionResultV1>;
   createCompositeCheckpoint?(
     missionId: string,
     requestedAttemptId?: string,
@@ -110,6 +119,19 @@ export interface AppEngine {
     branchId?: string,
   ): Promise<MissionOutcomeStudioScenarioCollectionV1>;
   exportOutcomeStudioScenarios?(missionId: string): Promise<string>;
+  selectOutcomeStudioBranch?(
+    missionId: string,
+    branchId: string,
+    authorityRef: string,
+    authorityKind?: 'human' | 'external-authority',
+  ): Promise<OutcomeBranchSelectionV1>;
+  outcomeStudioSelections?(missionId: string): readonly OutcomeBranchSelectionV1[];
+  rerunOutcomeStudioScenario?(
+    missionId: string,
+    scenarioId: string,
+    input: MissionOutcomeStudioRerunRequestV1,
+  ): Promise<MissionOutcomeStudioRerunV1>;
+  outcomeStudioReruns?(missionId: string): readonly MissionOutcomeStudioRerunV1[];
   replayCheckpoint?(
     missionId: string,
     checkpointId: string,
@@ -142,6 +164,8 @@ export interface MissionBraidAppOptions {
   readonly stateDir?: string;
   readonly host?: string;
   readonly port?: number;
+  /** Registered public Adapters available to both inventory and Mission execution. */
+  readonly adapterRegistry?: AdapterRegistryV1;
   readonly engineFactory?: (stateDir: string) => AppEngine;
   readonly discoverRuntimes?: () => Promise<readonly RuntimeCatalogEntry[]>;
   readonly now?: () => Date;
@@ -156,7 +180,7 @@ export interface MissionBraidApp {
   close(): Promise<void>;
 }
 
-type OperationAction = 'run' | 'resume' | 'verify';
+type OperationAction = 'run' | 'resume' | 'verify' | 'plan';
 type OperationPhase = 'queued' | 'running' | 'completed' | 'failed' | 'interrupted';
 
 interface OperationView {
@@ -176,6 +200,10 @@ interface RunningOperation {
   promise: Promise<void>;
 }
 
+interface RunningPlanOperation extends RunningOperation {
+  readonly engine: AppEngine;
+}
+
 export async function startMissionBraidApp(
   options: MissionBraidAppOptions = {},
 ): Promise<MissionBraidApp> {
@@ -190,12 +218,15 @@ export async function startMissionBraidApp(
   const stateDir = resolve(options.stateDir ?? join(homedir(), '.missionbraid'));
   await mkdir(stateDir, { recursive: true });
 
+  const adapterRegistry = options.adapterRegistry ?? new AdapterRegistryV1();
   const engineFactory =
-    options.engineFactory ?? ((directory) => new MissionEngine({ stateDir: directory }));
+    options.engineFactory ??
+    ((directory) => new MissionEngine({ stateDir: directory, adapterRegistry }));
   const discoverRuntimes = options.discoverRuntimes ?? discoverRuntimeCatalog;
   const now = options.now ?? (() => new Date());
   const id = options.id ?? randomUUID;
   const operations = new Map<string, RunningOperation>();
+  const planOperations = new Map<string, RunningPlanOperation>();
   const eventStreams = new Set<ServerResponse>();
   const supervisorId = `supervisor-${id()}`;
   let closing = false;
@@ -266,6 +297,60 @@ export async function startMissionBraidApp(
     return operation.view;
   };
 
+  const launchPlan = (missionId: string): OperationView => {
+    const existing = planOperations.get(missionId);
+    if (existing?.view.phase === 'running') return existing.view;
+    const controller = new AbortController();
+    const engine = engineFactory(stateDir);
+    if (engine.executeMissionPlan === undefined) {
+      engine.close();
+      throw new AppHttpError(
+        501,
+        'MISSION_PLAN_EXECUTION_UNAVAILABLE',
+        'Mission Plan execution is unavailable.',
+      );
+    }
+    const commandId = `plan-operation-${id()}`;
+    const operation: RunningPlanOperation = {
+      commandId,
+      engine,
+      controller,
+      view: {
+        commandId,
+        action: 'plan',
+        phase: 'running',
+        startedAt: now().toISOString(),
+      },
+      promise: Promise.resolve(),
+    };
+    operations.set(missionId, operation);
+    planOperations.set(missionId, operation);
+    operation.promise = (async () => {
+      try {
+        const result = await engine.executeMissionPlan!(missionId, controller.signal);
+        operation.view = {
+          ...operation.view,
+          phase: 'completed',
+          endedAt: now().toISOString(),
+          resultStatus: result.status,
+          ...(result.waitingReason === undefined ? {} : { error: result.waitingReason }),
+        };
+      } catch (error) {
+        operation.view = {
+          ...operation.view,
+          phase: controller.signal.aborted ? 'interrupted' : 'failed',
+          endedAt: now().toISOString(),
+          error: error instanceof Error ? error.message : String(error),
+        };
+      } finally {
+        planOperations.delete(missionId);
+        engine.close();
+        if (!closing) void drainCommands();
+      }
+    })();
+    return operation.view;
+  };
+
   const queueView = (command: MissionCommandV1, action: OperationAction): OperationView => {
     const operation: RunningOperation = {
       commandId: command.commandId,
@@ -321,6 +406,7 @@ export async function startMissionBraidApp(
     if (request.method === 'GET' && url.pathname === '/api/v1/runtimes') {
       sendJson(response, 200, {
         runtimes: await discoverRuntimes(),
+        adapters: adapterRegistry.list(),
         providers: [
           {
             id: 'local-direct',
@@ -370,6 +456,11 @@ export async function startMissionBraidApp(
       }
       return;
     }
+    const executeMissionPlanId = matchMissionPlanExecute(url.pathname);
+    if (executeMissionPlanId !== undefined && request.method === 'POST') {
+      sendJson(response, 202, { operation: launchPlan(executeMissionPlanId) });
+      return;
+    }
     const missionPlanId = matchMissionPlan(url.pathname);
     if (missionPlanId !== undefined && request.method === 'GET') {
       const engine = engineFactory(stateDir);
@@ -396,6 +487,23 @@ export async function startMissionBraidApp(
     }
     const reviseMissionId = matchMissionContractRevision(url.pathname);
     if (reviseMissionId !== undefined && request.method === 'POST') {
+      const activePlan = planOperations.get(reviseMissionId);
+      if (activePlan?.view.phase === 'running') {
+        if (activePlan.engine.reviseMissionContract === undefined) {
+          throw new AppHttpError(501, 'MISSION_PLAN_UNAVAILABLE');
+        }
+        const body = requireJsonRecord(await readJson(request));
+        const result = await activePlan.engine.reviseMissionContract(reviseMissionId, {
+          contract: body.contract as ReviseMissionContractInputV1['contract'],
+          requirements: body.requirements as ReviseMissionContractInputV1['requirements'],
+          reason: requireJsonString(body.reason, 'reason'),
+          evidenceRefs: body.evidenceRefs === undefined ? [] : (body.evidenceRefs as string[]),
+          authorityChanges:
+            body.authorityChanges as ReviseMissionContractInputV1['authorityChanges'],
+        });
+        sendJson(response, 201, result);
+        return;
+      }
       const engine = engineFactory(stateDir);
       try {
         if (engine.reviseMissionContract === undefined)
@@ -451,6 +559,55 @@ export async function startMissionBraidApp(
       snapshotGitWorkspace(draft.document.workspace);
       const runtimes = await discoverRuntimes();
       for (const stage of draft.document.attemptPlan) {
+        if (stage.profile.adapterId !== undefined) {
+          const adapter = adapterRegistry.get(stage.profile.adapterId);
+          if (adapter === undefined) {
+            throw new AppHttpError(
+              409,
+              'ADAPTER_NOT_REGISTERED',
+              `${stage.profile.adapterId} is not registered for Mission execution.`,
+              { adapterId: stage.profile.adapterId },
+            );
+          }
+          if (adapter.manifest.harnessId !== stage.profile.harness) {
+            throw new AppHttpError(
+              409,
+              'ADAPTER_HARNESS_MISMATCH',
+              `${stage.profile.adapterId} is bound to Harness ${adapter.manifest.harnessId}, not ${stage.profile.harness}.`,
+              {
+                adapterId: stage.profile.adapterId,
+                expectedHarnessId: adapter.manifest.harnessId,
+                receivedHarnessId: stage.profile.harness,
+              },
+            );
+          }
+          let discovery;
+          try {
+            discovery = await adapter.discover({ observedAt: now().toISOString() });
+          } catch (error) {
+            throw new AppHttpError(
+              409,
+              'ADAPTER_NOT_READY',
+              `${stage.profile.adapterId} discovery failed.`,
+              {
+                adapterId: stage.profile.adapterId,
+                reason: error instanceof Error ? error.message : String(error),
+              },
+            );
+          }
+          const authenticationReady =
+            discovery.authentication.status !== 'known' ||
+            discovery.authentication.value === 'ready';
+          if (discovery.status !== 'ready' || !authenticationReady) {
+            throw new AppHttpError(
+              409,
+              'ADAPTER_NOT_READY',
+              `${stage.profile.adapterId} is not ready for Mission execution.`,
+              { adapterId: stage.profile.adapterId, status: discovery.status },
+            );
+          }
+          continue;
+        }
         const runtime = runtimes.find((candidate) => candidate.id === stage.profile.harness);
         if (runtime?.status !== 'ready-supported') {
           throw new AppHttpError(
@@ -470,15 +627,25 @@ export async function startMissionBraidApp(
       await writeFile(missionFile, draft.yaml, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
       const engine = engineFactory(stateDir);
       let created: MissionCreationResult;
-      let command: MissionCommandV1;
+      let command: MissionCommandV1 | undefined;
       try {
         created = await engine.create(missionFile);
         if (closing) {
           throw new AppHttpError(503, 'APP_STOPPING', 'MissionBraid app is stopping.');
         }
-        command = await engine.acceptCommand(created.missionId, 'resume', `create:${missionFile}`);
+        if (draft.document.plan === undefined) {
+          command = await engine.acceptCommand(
+            created.missionId,
+            'resume',
+            `create:${missionFile}`,
+          );
+        }
       } finally {
         engine.close();
+      }
+      if (command === undefined) {
+        sendJson(response, 201, { ...created, operation: null });
+        return;
       }
       const operation = queueView(command, 'run');
       void drainCommands();
@@ -629,6 +796,9 @@ export async function startMissionBraidApp(
           checkpointId: requireExecutionForkString(raw.checkpointId, 'checkpointId'),
           intervention: body.intervention,
           ...(body.stageId === undefined ? {} : { stageId: body.stageId }),
+          ...(body.targetProfileDefinitionId === undefined
+            ? {}
+            : { targetProfileDefinitionId: body.targetProfileDefinitionId }),
           ...(body.childBranchId === undefined ? {} : { childBranchId: body.childBranchId }),
         });
         sendJson(response, 201, { executionFork: result.record, receipt: result.receipt });
@@ -653,6 +823,9 @@ export async function startMissionBraidApp(
           checkpointId: checkpointFork.checkpointId,
           intervention: body.intervention,
           ...(body.stageId === undefined ? {} : { stageId: body.stageId }),
+          ...(body.targetProfileDefinitionId === undefined
+            ? {}
+            : { targetProfileDefinitionId: body.targetProfileDefinitionId }),
           ...(body.childBranchId === undefined ? {} : { childBranchId: body.childBranchId }),
         });
         sendJson(response, 201, { executionFork: result.record, receipt: result.receipt });
@@ -684,6 +857,109 @@ export async function startMissionBraidApp(
       return;
     }
     const outcomeStudioMissionId = matchMissionOutcomeStudio(url.pathname);
+    const outcomeStudioSelectionsMissionId = matchMissionOutcomeStudioSelections(url.pathname);
+    if (
+      outcomeStudioSelectionsMissionId !== undefined &&
+      (request.method === 'GET' || request.method === 'POST')
+    ) {
+      const engine = engineFactory(stateDir);
+      try {
+        if (request.method === 'GET') {
+          if (engine.outcomeStudioSelections === undefined) {
+            throw new AppHttpError(
+              501,
+              'OUTCOME_STUDIO_UNAVAILABLE',
+              'Outcome Studio selection is unavailable.',
+            );
+          }
+          sendJson(response, 200, {
+            missionId: outcomeStudioSelectionsMissionId,
+            selections: engine.outcomeStudioSelections(outcomeStudioSelectionsMissionId),
+          });
+        } else {
+          if (engine.selectOutcomeStudioBranch === undefined) {
+            throw new AppHttpError(
+              501,
+              'OUTCOME_STUDIO_UNAVAILABLE',
+              'Outcome Studio selection is unavailable.',
+            );
+          }
+          const body = requireJsonRecord(await readJson(request));
+          const branchId = requireJsonString(body.branchId, 'branchId');
+          const authorityRef = requireJsonString(body.authorityRef, 'authorityRef');
+          const authorityKind =
+            body.authorityKind === undefined
+              ? 'human'
+              : requireJsonString(body.authorityKind, 'authorityKind');
+          if (authorityKind !== 'human' && authorityKind !== 'external-authority') {
+            throw new AppHttpError(
+              400,
+              'INVALID_OUTCOME_SELECTION',
+              'authorityKind must be human or external-authority.',
+            );
+          }
+          sendJson(
+            response,
+            201,
+            await engine.selectOutcomeStudioBranch(
+              outcomeStudioSelectionsMissionId,
+              branchId,
+              authorityRef,
+              authorityKind,
+            ),
+          );
+        }
+      } finally {
+        engine.close();
+      }
+      return;
+    }
+    const outcomeStudioScenarioRuns = matchMissionOutcomeStudioScenarioRuns(url.pathname);
+    if (
+      outcomeStudioScenarioRuns !== undefined &&
+      (request.method === 'GET' || request.method === 'POST')
+    ) {
+      const engine = engineFactory(stateDir);
+      try {
+        if (request.method === 'GET') {
+          if (engine.outcomeStudioReruns === undefined) {
+            throw new AppHttpError(
+              501,
+              'OUTCOME_STUDIO_UNAVAILABLE',
+              'Outcome Studio scenario reruns are unavailable.',
+            );
+          }
+          sendJson(response, 200, {
+            missionId: outcomeStudioScenarioRuns.missionId,
+            scenarioId: outcomeStudioScenarioRuns.scenarioId,
+            runs: engine
+              .outcomeStudioReruns(outcomeStudioScenarioRuns.missionId)
+              .filter((run) => run.scenarioId === outcomeStudioScenarioRuns.scenarioId),
+          });
+        } else {
+          if (engine.rerunOutcomeStudioScenario === undefined) {
+            throw new AppHttpError(
+              501,
+              'OUTCOME_STUDIO_UNAVAILABLE',
+              'Outcome Studio scenario reruns are unavailable.',
+            );
+          }
+          const body = requireOutcomeStudioRerunBody(await readJson(request));
+          sendJson(
+            response,
+            201,
+            await engine.rerunOutcomeStudioScenario(
+              outcomeStudioScenarioRuns.missionId,
+              outcomeStudioScenarioRuns.scenarioId,
+              body,
+            ),
+          );
+        }
+      } finally {
+        engine.close();
+      }
+      return;
+    }
     const outcomeStudioScenarioExportMissionId = matchMissionOutcomeStudioScenarioExport(
       url.pathname,
     );
@@ -883,6 +1159,23 @@ export async function startMissionBraidApp(
             outcomeStudio = null;
           }
         }
+        const outcomeStudioScenarios =
+          engine.outcomeStudioScenarios === undefined
+            ? { missionId, scenarios: [], ciResults: [] }
+            : engine.outcomeStudioScenarios(missionId);
+        const outcomeStudioReruns = engine.outcomeStudioReruns?.(missionId) ?? [];
+        const outcomeStudioSelections = engine.outcomeStudioSelections?.(missionId) ?? [];
+        let executionPlannerCandidates: readonly MissionExecutionPlannerCandidateV1[] = [];
+        if (engine.executionPlannerCandidates !== undefined) {
+          try {
+            executionPlannerCandidates = engine.executionPlannerCandidates(missionId);
+          } catch {
+            // Schema-v1 Missions predate persisted specification snapshots.
+            // Their authoritative projection and event chain remain readable
+            // even though no planner candidates can be reconstructed.
+            executionPlannerCandidates = [];
+          }
+        }
         sendJson(response, 200, {
           ...status,
           timeline: engine.timeline(missionId),
@@ -898,8 +1191,11 @@ export async function startMissionBraidApp(
           missionPlan,
           missionPlanRuntime,
           outcomeStudio,
+          outcomeStudioScenarios,
+          outcomeStudioReruns,
+          outcomeStudioSelections,
           executionPlanner: {
-            candidates: engine.executionPlannerCandidates?.(missionId) ?? [],
+            candidates: executionPlannerCandidates,
             override: engine.executionPlannerOverride?.(missionId) ?? null,
           },
           capabilities: {
@@ -908,7 +1204,9 @@ export async function startMissionBraidApp(
             executeDiagnosticFork: engine.executeDiagnosticFork !== undefined,
             failureIntelligence: engine.failureIntelligence !== undefined,
             outcomeStudio: engine.outcomeStudio !== undefined,
+            rerunOutcomeStudioScenario: engine.rerunOutcomeStudioScenario !== undefined,
             missionPlanRuntime: engine.missionPlanRuntime !== undefined,
+            executeMissionPlan: engine.executeMissionPlan !== undefined,
             replayCheckpoint: engine.replayCheckpoint !== undefined,
             setExecutionPlannerOverride: engine.setExecutionPlannerOverride !== undefined,
             clearExecutionPlannerOverride: engine.clearExecutionPlannerOverride !== undefined,
@@ -1062,6 +1360,11 @@ function matchMissionPlan(pathname: string): string | undefined {
   return match?.[1] === undefined ? undefined : decodeURIComponent(match[1]);
 }
 
+function matchMissionPlanExecute(pathname: string): string | undefined {
+  const match = pathname.match(/^\/api\/v1\/missions\/([^/]+)\/plan\/execute$/);
+  return match?.[1] === undefined ? undefined : decodeURIComponent(match[1]);
+}
+
 function matchMissionPlanRuntime(pathname: string): string | undefined {
   const match = pathname.match(/^\/api\/v1\/missions\/([^/]+)\/plan\/runtime$/);
   return match?.[1] === undefined ? undefined : decodeURIComponent(match[1]);
@@ -1080,6 +1383,22 @@ function matchMissionFailureIntelligence(pathname: string): string | undefined {
 function matchMissionOutcomeStudio(pathname: string): string | undefined {
   const match = pathname.match(/^\/api\/v1\/missions\/([^/]+)\/outcome-studio$/);
   return match?.[1] === undefined ? undefined : decodeURIComponent(match[1]);
+}
+
+function matchMissionOutcomeStudioSelections(pathname: string): string | undefined {
+  const match = pathname.match(/^\/api\/v1\/missions\/([^/]+)\/outcome-studio\/selections$/);
+  return match?.[1] === undefined ? undefined : decodeURIComponent(match[1]);
+}
+
+function matchMissionOutcomeStudioScenarioRuns(
+  pathname: string,
+): { readonly missionId: string; readonly scenarioId: string } | undefined {
+  const match = pathname.match(
+    /^\/api\/v1\/missions\/([^/]+)\/outcome-studio\/scenarios\/([^/]+)\/runs$/,
+  );
+  return match?.[1] === undefined || match[2] === undefined
+    ? undefined
+    : { missionId: decodeURIComponent(match[1]), scenarioId: decodeURIComponent(match[2]) };
 }
 
 function matchMissionOutcomeStudioScenarios(pathname: string): string | undefined {
@@ -1345,6 +1664,7 @@ function requireCheckpointReplayString(value: unknown, field: string, limit = 51
 function requireExecutionForkBody(value: unknown): {
   readonly intervention: MissionExecutionForkRequestV1['intervention'];
   readonly stageId?: string;
+  readonly targetProfileDefinitionId?: string;
   readonly childBranchId?: string;
 } {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
@@ -1388,9 +1708,28 @@ function requireExecutionForkBody(value: unknown): {
     ...(body.stageId === undefined
       ? {}
       : { stageId: requireExecutionForkString(body.stageId, 'stageId') }),
+    ...(body.targetProfileDefinitionId === undefined
+      ? {}
+      : {
+          targetProfileDefinitionId: requireExecutionForkString(
+            body.targetProfileDefinitionId,
+            'targetProfileDefinitionId',
+          ),
+        }),
     ...(body.childBranchId === undefined
       ? {}
       : { childBranchId: requireExecutionForkString(body.childBranchId, 'childBranchId') }),
+  };
+}
+
+function requireOutcomeStudioRerunBody(value: unknown): MissionOutcomeStudioRerunRequestV1 {
+  const body = requireJsonRecord(value);
+  return {
+    targetStageId: requireExecutionForkString(body.targetStageId, 'targetStageId'),
+    targetProfileDefinitionId: requireExecutionForkString(
+      body.targetProfileDefinitionId,
+      'targetProfileDefinitionId',
+    ),
   };
 }
 

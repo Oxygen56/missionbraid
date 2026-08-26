@@ -1,2 +1,9 @@
 dist/**/*.test.*
 dist/**/*.map
+evidence/iteration-10-package-smoke-local-*.json
+**/.missionbraid/
+**/.env
+**/.env.*
+**/*.db
+**/*.db-shm
+**/*.db-wal

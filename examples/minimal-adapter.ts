@@ -47,6 +47,7 @@ export const MINIMAL_DIRECT_ADAPTER_MANIFEST = {
   schemaVersion: ADAPTER_MANIFEST_SCHEMA_VERSION,
   apiVersion: ADAPTER_API_VERSION,
   adapterId: 'example.minimal-direct',
+  harnessId: 'minimal-direct',
   displayName: 'Minimal Direct Adapter',
   adapterVersion: '1.0.0',
   transport: 'direct',

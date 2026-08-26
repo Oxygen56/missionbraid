@@ -6,16 +6,47 @@ production adoption are different results.
 
 ## Start here
 
-The strongest current product-shaped results are the
-[Iteration 5 Checkpoint/Replay record](iteration-5-checkpoint-replay-local-2026-08-26.json)
-and its real-workspace
-[Iteration 5 Execution Fork](iteration-5-execution-fork-local-2026-08-26.json).
-They build on the retained
+Start with the record for the product question being evaluated:
+
+- daily Agent debugging: [Iteration 7 stale-Context diagnosis](iteration-7-stale-context-2026-08-26.json);
+- execution-state branching: [Iteration 5 Execution Fork](iteration-5-execution-fork-local-2026-08-26.json)
+  and its broader [Checkpoint/Replay record](iteration-5-checkpoint-replay-local-2026-08-26.json);
+- conditional Runtime change: [Iteration 6 adaptive Handoff](iteration-6-adaptive-handoff-local-2026-08-26.json).
+- live Mission revision: [Iteration 8 multi-Agent revision](iteration-8-multi-agent-revision-local-2026-08-26.json).
+
+The Iteration 8 record is a same-host controlled-Git-fixture proof. Workbench
+HTTP creates, starts, revises, queries, and completes the Mission while real
+local Qoder/Qwen3.8-Max and Claude Code/deepseek-v4-pro execute distinct work.
+The revision interrupts the affected Claude work, reuses the unaffected
+verifier-backed Qoder Artifact without rerunning it, and starts a fresh Claude
+Attempt plus an independent consolidation Attempt. The Receipt binds the latest
+Contract and Plan revisions, and restart reconstructs the same state. It does
+not establish production use, cross-host or distributed execution, independent
+external reproduction, provider-internal state, or natural-failure behavior.
+
+The retained Runtime records above build on the
 [Iteration 3 live flight recorder](iteration-3-flight-recorder-local-2026-08-26.json),
 [Iteration 4 native Tool Gateway](iteration-4-tool-gateway-local-2026-08-26.json),
 [Iteration 4 external Effect recovery](iteration-4-external-effect-local-2026-08-26.json),
 and earlier
 [Iteration 2 three-Harness Workbench run](iteration-2-three-harness-local-2026-08-25.json).
+
+The Iteration 7 record is a same-host local real-Runtime proof built on the
+Iteration 3 Flight Recorder and Iteration 5 Execution Fork. In a controlled
+fixture, a real Qoder/Qwen3.8-Max Attempt uses old cached Context and fails a
+controller-run, out-of-process deterministic verifier. Failure Intelligence
+records the freshness mismatch; the Workbench creates an isolated child Branch
+and starts a new Qoder Attempt/process with the same Harness/Profile, Contract,
+and authority plus a declared Context refresh intervention. The verifier then
+passes, Outcome Studio saves the regression scenario, and restart reconstructs
+the diagnosis, Receipt, and scenario. This is not continuation of the original
+native Session, and the structured invariants do not prove every hidden or
+unobserved input stayed equal. It confirms only this stale-Context mechanism,
+not multi-layer attribution or diagnosis accuracy. The fixture controls the
+visible Context Snapshot and instruction boundary; the refreshed cache is used
+only for this diagnostic Attempt and is not portable or persisted for later
+Attempts. Provider-internal Context capture, independent external reproduction,
+and production reliability remain open.
 
 The Iteration 2 record captures one clean-revision, same-host local Mission
 submitted through the normal Workbench API:
@@ -50,7 +81,7 @@ semantics. These records do **not** prove a Codex-authored parent commit,
 native session migration, a natural Harness failure, cross-host or third-party
 reproduction, hostile-Runtime isolation, production readiness, or adoption.
 
-## Iterations 2–5 local validation
+## Iterations 2–8 local evidence
 
 Iteration 2 is implemented in source, including Codex/Qoder/Claude Code
 execution Adapters, the root Branch, the four-part Runtime Profile model,
@@ -67,39 +98,40 @@ Checkpoint, isolated child worktree, fresh Codex process, Branch-bound Receipt,
 no-repeat Effect inheritance, restart reconstruction, and local evidence for
 all four Replay semantics. Iteration 6 has a separate same-host record for a
 controlled Codex interruption followed by deterministic Profile selection and
-native Handoff. Iterations 7–9 currently have implementation/API/local-test
-slices but no real-Runtime evidence; Iteration 10 has an internal clean-install
-package smoke. Stronger cross-host, independent, or production evidence remains
-open.
+native Handoff. Iteration 7 now has the linked same-host stale-Context record.
+Iteration 8 has the linked same-host controlled-Git-fixture real-Runtime record.
+Iteration 9 retains an implementation/API/local-test
+slice and Iteration 10 has an internal clean-install package smoke. Stronger
+cross-host, independent external, or production evidence remains open.
 
 ## Evidence catalog
 
-| Record                                                                                          | Evidence level                                                         | What it establishes                                                                                                                                                                    | What it does not establish                                                                                                                           |
-| ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [Iteration 5 Checkpoint/Replay](iteration-5-checkpoint-replay-local-2026-08-26.json)            | Same-host real Codex/Qoder/Claude, browser, and local proof controller | Restorable Composite Checkpoint; Playback, Cached Replay, Counterfactual Resampling, and Execution Fork records; no-tool/no-repeat semantics; restart                                  | Native session fork/resume or migration, natural Harness failure, cross-host, production, independent reproduction                                   |
-| [Iteration 5 Execution Fork](iteration-5-execution-fork-local-2026-08-26.json)                  | Same-host real Codex, browser, and Git worktree                        | Controller-sealed parent boundary, Git-backed Checkpoint, isolated fresh-Codex child Branch, both Receipts, no-repeat Effect, restart                                                  | Codex-authored commit, native session fork/resume, other Harnesses, cross-host, production, independent reproduction                                 |
-| [Iteration 6 adaptive Handoff](iteration-6-adaptive-handoff-local-2026-08-26.json)              | Same-host real Codex/Qoder/Claude and browser; controlled interruption | Preferred Profile success without fallback; controlled Codex interruption; deterministic filter/rank; Capsule ACK before first target tool; no-repeat Effect; verifier/Receipt/restart | Natural model/quota/network failure, restorable Handoff workspace, native session migration/resume, cross-host, production, independent reproduction |
-| [Iteration 4 native Tool Gateway](iteration-4-tool-gateway-local-2026-08-26.json)               | Same-host real native hook and browser                                 | Pre-dispatch block, browser input modification, Kernel decision before release, same-Mission Receipt, restart                                                                          | Universal Harness control, child-process containment, production or external reproduction                                                            |
-| [Iteration 4 external Effect recovery](iteration-4-external-effect-local-2026-08-26.json)       | Same-host real HTTP target and controller crash                        | Durable intent, one dispatch, controller `SIGKILL`, lookup-before-retry reconciliation, Receipt, restart                                                                               | Non-queryable targets, universal exactly-once, production or external reproduction                                                                   |
-| [Iteration 3 live flight recorder](iteration-3-flight-recorder-local-2026-08-26.json)           | Same-host live real Runtime and browser                                | Live Codex/Claude events, Context Graph, failed-test causality, redaction, latency, restart                                                                                            | Hidden model state, all Harness semantics, production or external reproduction                                                                       |
-| [Iteration 2 Codex→Qoder→Claude](iteration-2-three-harness-local-2026-08-25.json)               | Same-host local real Runtime                                           | Three real Attempts, Runtime model, source-scoped Event IR/native artifacts, cooperative Handoff ordering, Receipt, restart                                                            | Tool gate, auto-routing, Fork/Replay, cross-host or production results                                                                               |
-| [Unified Workbench Codex→Qoder](unified-workbench-codex-qoder-local-2026-08-24.json)            | Clean-public-clone local real Runtime                                  | Product entry, ordered real Attempts, matching checkpoint/baseline workspace snapshot, distinct workspace digests, Receipt, restart                                                    | Enforced pre-mutation gate, automatic planning, broad adapters, third-party or production results                                                    |
-| [E0 controller recovery](e0-local-2026-08-24.json)                                              | Local real Runtime                                                     | One controlled Mission recovers after controller `SIGKILL` and closes against the original Contract                                                                                    | Independent reproduction or general crash safety                                                                                                     |
-| [E1 interrupted Codex→Qoder](e1-local-2026-08-24.json)                                          | Local real Runtime                                                     | Meaningful Codex checkpoint, Qoder continuation, original verifier and Receipt                                                                                                         | Arbitrary task or Runtime compatibility                                                                                                              |
-| [Task-context-isolated E1 reproduction](e1-context-isolated-reproduction-local-2026-08-24.json) | Clean-public-clone, separate local task context                        | Fresh Mission state/workspace reproduced the controlled E1 path                                                                                                                        | New host, new user configuration, or third-party reproduction                                                                                        |
-| [Checkpoint-helper E1 validation](e1-checkpoint-helper-local-2026-08-24.json)                   | Local real Runtime with exact interruption helper                      | Helper-bound interruption point and resulting verified Receipts                                                                                                                        | General interruption policy or production automation                                                                                                 |
-| [Earlier blocked E1](e1-blocked-local-2026-08-24.json)                                          | Retained local failure history                                         | Qoder stopped before acknowledgement and MissionBraid issued no false Receipt                                                                                                          | Successful continuity                                                                                                                                |
-| [Kandev v0.91.0 public-interface check](kandev-v0.91.0-provider-check-local-2026-08-24.json)    | Clean-clone local compatibility check                                  | Fresh-create and deduplicated rerun for checked task, worktree, and custom-process endpoints                                                                                           | Kandev-backed Mission, full Session/Agent lifecycle, Outcome Receipt, Provider support                                                               |
+| Record                                                                                          | Evidence level                                                                 | What it establishes                                                                                                                                                                        | What it does not establish                                                                                                                                   |
+| ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [Iteration 8 multi-Agent revision](iteration-8-multi-agent-revision-local-2026-08-26.json)      | Same-host real Qoder and Claude Code; controlled Git fixture; Workbench HTTP   | Create/start/revise/query/complete flow; selective interruption and verified reuse; independent consolidation; latest-revision Receipt; restart consistency                                | Production, cross-host/distributed execution, independent external reproduction, provider-internal state, natural failure                                    |
+| [Iteration 7 stale Context](iteration-7-stale-context-2026-08-26.json)                          | Same-host real Qoder; controlled fixture; out-of-process verifier; new Attempt | Old cached Context caused rejection; freshness evidence led to a declared refresh in an isolated new Attempt with the same Profile, Contract, and authority; regression saved and restored | Original native Session resume, equality of hidden inputs, multi-layer attribution, diagnosis accuracy/recall, cross-host, production, external reproduction |
+| [Iteration 5 Checkpoint/Replay](iteration-5-checkpoint-replay-local-2026-08-26.json)            | Same-host real Codex/Qoder/Claude, browser, and local proof controller         | Restorable Composite Checkpoint; Playback, Cached Replay, Counterfactual Resampling, and Execution Fork records; no-tool/no-repeat semantics; restart                                      | Native session fork/resume or migration, natural Harness failure, cross-host, production, independent reproduction                                           |
+| [Iteration 5 Execution Fork](iteration-5-execution-fork-local-2026-08-26.json)                  | Same-host real Codex, browser, and Git worktree                                | Controller-sealed parent boundary, Git-backed Checkpoint, isolated fresh-Codex child Branch, both Receipts, no-repeat Effect, restart                                                      | Codex-authored commit, native session fork/resume, other Harnesses, cross-host, production, independent reproduction                                         |
+| [Iteration 6 adaptive Handoff](iteration-6-adaptive-handoff-local-2026-08-26.json)              | Same-host real Codex/Qoder/Claude and browser; controlled interruption         | Preferred Profile success without fallback; controlled Codex interruption; deterministic filter/rank; Capsule ACK before first target tool; no-repeat Effect; verifier/Receipt/restart     | Natural model/quota/network failure, restorable Handoff workspace, native session migration/resume, cross-host, production, independent reproduction         |
+| [Iteration 4 native Tool Gateway](iteration-4-tool-gateway-local-2026-08-26.json)               | Same-host real native hook and browser                                         | Pre-dispatch block, browser input modification, Kernel decision before release, same-Mission Receipt, restart                                                                              | Universal Harness control, child-process containment, production or external reproduction                                                                    |
+| [Iteration 4 external Effect recovery](iteration-4-external-effect-local-2026-08-26.json)       | Same-host real HTTP target and controller crash                                | Durable intent, one dispatch, controller `SIGKILL`, lookup-before-retry reconciliation, Receipt, restart                                                                                   | Non-queryable targets, universal exactly-once, production or external reproduction                                                                           |
+| [Iteration 3 live flight recorder](iteration-3-flight-recorder-local-2026-08-26.json)           | Same-host live real Runtime and browser                                        | Live Codex/Claude events, Context Graph, failed-test causality, redaction, latency, restart                                                                                                | Hidden model state, all Harness semantics, production or external reproduction                                                                               |
+| [Iteration 2 Codex→Qoder→Claude](iteration-2-three-harness-local-2026-08-25.json)               | Same-host local real Runtime                                                   | Three real Attempts, Runtime model, source-scoped Event IR/native artifacts, cooperative Handoff ordering, Receipt, restart                                                                | Tool gate, auto-routing, Fork/Replay, cross-host or production results                                                                                       |
+| [Unified Workbench Codex→Qoder](unified-workbench-codex-qoder-local-2026-08-24.json)            | Clean-public-clone local real Runtime                                          | Product entry, ordered real Attempts, matching checkpoint/baseline workspace snapshot, distinct workspace digests, Receipt, restart                                                        | Enforced pre-mutation gate, automatic planning, broad adapters, third-party or production results                                                            |
+| [E0 controller recovery](e0-local-2026-08-24.json)                                              | Local real Runtime                                                             | One controlled Mission recovers after controller `SIGKILL` and closes against the original Contract                                                                                        | Independent reproduction or general crash safety                                                                                                             |
+| [E1 interrupted Codex→Qoder](e1-local-2026-08-24.json)                                          | Local real Runtime                                                             | Meaningful Codex checkpoint, Qoder continuation, original verifier and Receipt                                                                                                             | Arbitrary task or Runtime compatibility                                                                                                                      |
+| [Task-context-isolated E1 reproduction](e1-context-isolated-reproduction-local-2026-08-24.json) | Clean-public-clone, separate local task context                                | Fresh Mission state/workspace reproduced the controlled E1 path                                                                                                                            | New host, new user configuration, or third-party reproduction                                                                                                |
+| [Checkpoint-helper E1 validation](e1-checkpoint-helper-local-2026-08-24.json)                   | Local real Runtime with exact interruption helper                              | Helper-bound interruption point and resulting verified Receipts                                                                                                                            | General interruption policy or production automation                                                                                                         |
+| [Earlier blocked E1](e1-blocked-local-2026-08-24.json)                                          | Retained local failure history                                                 | Qoder stopped before acknowledgement and MissionBraid issued no false Receipt                                                                                                              | Successful continuity                                                                                                                                        |
+| [Kandev v0.91.0 public-interface check](kandev-v0.91.0-provider-check-local-2026-08-24.json)    | Clean-clone local compatibility check                                          | Fresh-create and deduplicated rerun for checked task, worktree, and custom-process endpoints                                                                                               | Kandev-backed Mission, full Session/Agent lifecycle, Outcome Receipt, Provider support                                                                       |
 
-The following iterations are represented by implementation and API tests, not
-real-Runtime product evidence:
+The following later iterations do not yet have the retained real-Runtime
+evidence level represented above:
 
-| Slice                            | Evidence level                       | What is available                                                                                                        | Boundary                                                              |
-| -------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
-| Iteration 7 Failure Intelligence | Implementation/API/local tests       | Event-chain projection of runtime, context, tool, workspace, verification, checkpoint, and diagnostic-candidate evidence | No real fault run or independent diagnosis accuracy claim             |
-| Iteration 8 Mission Plan runtime | Implementation/API/local tests       | Versioned plan DAG, selective invalidation, node execution projection, and Workbench/API view                            | No multi-Agent execution/revision study or real planner outcome claim |
-| Iteration 9 Outcome Studio       | Implementation/API/local tests       | Agent Revision dimensions, evaluation/incident/CI projections, scenario save/export APIs                                 | No benchmark, CI pipeline, or regression-quality claim                |
-| Iteration 10 package contract    | Internal clean-install package smoke | Tarball manifest, public exports, adapter conformance, installed CLI/Workbench startup                                   | No registry publication or independent external reproduction          |
+| Slice                         | Evidence level                       | What is available                                                                        | Boundary                                                     |
+| ----------------------------- | ------------------------------------ | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Iteration 9 Outcome Studio    | Implementation/API/local tests       | Agent Revision dimensions, evaluation/incident/CI projections, scenario save/export APIs | No benchmark, CI pipeline, or regression-quality claim       |
+| Iteration 10 package contract | Internal clean-install package smoke | Tarball manifest, public exports, adapter conformance, installed CLI/Workbench startup   | No registry publication or independent external reproduction |
 
 ## Reading a record
 
@@ -130,5 +162,8 @@ instructions, Skills, MCP configuration, and other host state. The next
 evidence-level upgrade is a third-party or cross-host reproduction under a
 documented Runtime Profile boundary. The Iteration 6 planner result is a
 controlled-interruption demonstration rather than a natural-failure benchmark;
-the Iteration 7–9 slices are not runtime evidence; and the Iteration 10 smoke
-does not establish registry publication or independent external installation.
+the Iteration 8 proof is a controlled same-host fixture rather than production,
+cross-host, independent, provider-internal, or natural-failure evidence; the
+Iteration 9 slice is not runtime evidence; and the Iteration 10
+smoke does not establish registry publication or independent external
+installation.

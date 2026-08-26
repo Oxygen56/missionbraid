@@ -147,17 +147,18 @@ export async function runAdapterConformanceSuiteV1(
   }
 
   const events: AdapterNativeEventV1[] = [];
+  const hostPorts: AdapterHostPortsV1 = Object.freeze({
+    evidence: Object.freeze({
+      append: async (event: AdapterNativeEventV1) => {
+        events.push(event);
+      },
+    }),
+    ...(fixture.toolGate === undefined ? {} : { toolGate: fixture.toolGate }),
+  });
   let result: AdapterRunResultV1;
   try {
     result = await withTimeout(
-      adapter.run(fixture.runRequest, {
-        evidence: {
-          append: async (event) => {
-            events.push(event);
-          },
-        },
-        ...(fixture.toolGate === undefined ? {} : { toolGate: fixture.toolGate }),
-      }),
+      adapter.run(fixture.runRequest, hostPorts),
       timeoutMs,
       'Adapter run timed out',
     );
@@ -182,20 +183,16 @@ export async function runAdapterConformanceSuiteV1(
         ])
       : fail('event-stream', eventErrors.join('; ')),
   );
+  const authoritySurfaceErrors = kernelAuthorityPortSurfaceErrors(hostPorts);
   checks.push(
-    reservedAuthorityFields(adapter, discovery, result, events).length === 0
+    authoritySurfaceErrors.length === 0
       ? pass(
           'kernel-authority-boundary',
-          'Adapter output contains evidence and Runtime outcome only; no Kernel transition fields.',
+          'The SDK host exposes evidence append and optional tool-gate decisions only; Adapter payload remains non-authoritative evidence and has no Kernel mutation port.',
         )
       : fail(
           'kernel-authority-boundary',
-          `Adapter emitted reserved host-authority fields: ${reservedAuthorityFields(
-            adapter,
-            discovery,
-            result,
-            events,
-          ).join(', ')}`,
+          `The SDK host exposed unexpected authority surface: ${authoritySurfaceErrors.join(', ')}`,
         ),
   );
 
@@ -402,26 +399,20 @@ function capabilityNotRun(
   return checks;
 }
 
-function reservedAuthorityFields(
-  adapter: MissionBraidAdapterV1,
-  discovery: AdapterDiscoveryV1,
-  result: AdapterRunResultV1,
-  events: readonly AdapterNativeEventV1[],
-): string[] {
-  const roots: readonly [string, unknown][] = [
-    ['manifest', adapter.manifest],
-    ['discovery', discovery],
-    ['result', result],
-    ...events.map((event, index): [string, unknown] => [`events[${index}]`, event]),
-  ];
-  const found: string[] = [];
-  for (const [path, value] of roots) {
-    if (value === null || typeof value !== 'object') continue;
-    for (const key of Object.keys(value)) {
-      if (reservedKernelFields.has(key)) found.push(`${path}.${key}`);
-    }
+function kernelAuthorityPortSurfaceErrors(ports: AdapterHostPortsV1): string[] {
+  const errors: string[] = [];
+  const allowedHostPorts = new Set(['evidence', 'toolGate']);
+  for (const key of Object.keys(ports)) {
+    if (!allowedHostPorts.has(key)) errors.push(`ports.${key}`);
   }
-  return found.sort();
+  for (const key of Object.keys(ports.evidence)) {
+    if (key !== 'append') errors.push(`ports.evidence.${key}`);
+  }
+  if (typeof ports.evidence.append !== 'function') errors.push('ports.evidence.append');
+  if (ports.toolGate !== undefined && typeof ports.toolGate.gate !== 'function') {
+    errors.push('ports.toolGate.gate');
+  }
+  return errors.sort();
 }
 
 function report(
@@ -575,16 +566,6 @@ const eventKeys = new Set([
   'payload',
   'sanitized',
   'evidenceRefs',
-]);
-const reservedKernelFields = new Set([
-  'missionStatus',
-  'branchStatus',
-  'effectStatus',
-  'failureConclusion',
-  'receipt',
-  'receiptOutcome',
-  'verified',
-  'accepted',
 ]);
 const baselineCapabilities = [
   'discover',

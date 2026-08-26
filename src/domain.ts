@@ -52,6 +52,7 @@ export interface ProfileV1 {
   readonly capabilities: readonly string[];
   /** Digest of non-secret runtime configuration visible to the planner. */
   readonly configurationDigest: Sha256;
+  readonly adapter?: RuntimeAdapterIdentityV1;
   /** Reusable intent that produced this immutable Attempt-time snapshot. */
   readonly definition?: RuntimeProfileDefinitionV1;
   /** Runtime inventory fact used while resolving this snapshot. */
@@ -91,6 +92,14 @@ export interface RuntimeProfileDefinitionV1 {
   readonly requestedReasoningEffort?: string;
   readonly permissionCeiling?: string;
   readonly injectionBudgetTokens?: number;
+  readonly adapter?: RuntimeAdapterIdentityV1;
+}
+
+export interface RuntimeAdapterIdentityV1 {
+  readonly adapterId: string;
+  readonly adapterVersion: string;
+  readonly transport: string;
+  readonly nativeProtocol: string;
 }
 
 export interface RuntimeProfileEffectiveV1 {
@@ -112,6 +121,8 @@ export type RuntimeCapabilityFidelityV1 =
   | 'native'
   | 'cooperative'
   | 'process-only'
+  | 'controller'
+  | 'observe-only'
   | 'unsupported'
   | 'unknown';
 
@@ -175,9 +186,26 @@ export interface AttemptBindingV1 {
   readonly profileId: string;
   readonly workspaceKey: string;
   readonly planNodeId: string;
+  readonly planRevisionId?: string;
+  readonly contractRevisionId?: string;
+  readonly nodeVersion?: string;
+  readonly agentId?: string;
+  readonly authorityRefs?: readonly string[];
+  readonly fenceGeneration?: number;
   readonly authority: 'workspace';
   readonly injectionBudgetTokens: number;
   readonly boundAt: IsoTimestamp;
+  readonly runtimeBinding?: RuntimeBindingV1;
+}
+
+export interface RuntimeBindingV1 {
+  readonly attemptId: string;
+  readonly profileId: string;
+  readonly harness: string;
+  readonly adapterId?: string;
+  readonly adapterVersion?: string;
+  readonly transport?: string;
+  readonly nativeProtocol?: string;
 }
 
 export type EffectStatusV1 =
@@ -228,6 +256,8 @@ export interface ReceiptV1 {
   readonly receiptId: string;
   readonly missionId: string;
   readonly contractId: string;
+  readonly contractRevisionId?: string;
+  readonly planRevisionId?: string;
   /**
    * Branch whose outcome this Receipt evaluates. Required for new records;
    * optional in the TypeScript shape only so persisted rootBranchId-era data
@@ -242,6 +272,8 @@ export interface ReceiptV1 {
   readonly verifiedHeadHash: Sha256;
   readonly verifiedThroughSeq: number;
   readonly attemptIds?: readonly string[];
+  readonly runtimeBindings?: readonly RuntimeBindingV1[];
+  readonly runtimeBindingsDigest?: Sha256;
   readonly handoffIds?: readonly string[];
   readonly effectIds?: readonly string[];
   readonly effects?: readonly ReceiptEffectResultV1[];

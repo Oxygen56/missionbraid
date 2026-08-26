@@ -1,0 +1,150 @@
+schemaVersion: missionbraid.dev/mission/v1
+title: Revise and consolidate the Policy Triage Agent
+objective: >-
+  Complete a Policy Triage Agent through two independent Agent workspaces, accept
+  a prompt-only requirement revision while work is running, preserve the
+  unaffected tool result, and consolidate only verifier-backed outputs.
+workspace: '${WORKSPACE}'
+constraints:
+  - Qoder's tool node may change only src/tools/policy-lookup.mjs.
+  - Claude's prompt node may change only prompts/triage.md and skills/triage/SKILL.md.
+  - Source node workspaces remain immutable inputs to the consolidation Attempt.
+  - Use only Node.js built-ins and do not access the network.
+acceptanceCriteria:
+  - id: tool-behavior
+    description: >-
+      The policy lookup tool deterministically returns the matching policy
+      decision, rationale, and evidenceRefs, uses the declared fallback, and
+      rejects malformed input.
+    verifier:
+      kind: command
+      executable: node
+      args:
+        - verify-tool-node.mjs
+      cwd: '${WORKSPACE}'
+      timeoutMs: 30000
+  - id: prompt-schema
+    description: >-
+      Both the prompt and Skill require exactly two output fields:
+      classification copied from tool.decision and rationale copied from
+      tool.rationale.
+    verifier:
+      kind: command
+      executable: node
+      args:
+        - verify-prompt-node.mjs
+      cwd: '${WORKSPACE}'
+      timeoutMs: 30000
+  - id: final-outcome
+    description: >-
+      The consolidation workspace contains the verified policy tool and the
+      revised three-field prompt/Skill contract, and a real triage call returns
+      evidenceSource exactly from tool.evidenceRefs.
+    verifier:
+      kind: command
+      executable: node
+      args:
+        - verify-final.mjs
+      cwd: '${WORKSPACE}'
+      timeoutMs: 30000
+plan:
+  nodes:
+    - nodeId: tool-implementation
+      kind: task
+      title: Implement deterministic policy lookup
+      requirementIds:
+        - acceptance-tool-behavior
+      stageId: qoder-tool
+      acceptanceCriterionIds:
+        - tool-behavior
+      declaredOutputKeys:
+        - src/tools/policy-lookup.mjs
+      requiredAuthorityScopes:
+        - workspace
+    - nodeId: prompt-skill
+      kind: task
+      title: Define the triage prompt and Skill output schema
+      requirementIds:
+        - acceptance-prompt-schema
+      stageId: claude-prompt
+      acceptanceCriterionIds:
+        - prompt-schema
+      declaredOutputKeys:
+        - prompts/triage.md
+        - skills/triage/SKILL.md
+      requiredAuthorityScopes:
+        - workspace
+    - nodeId: integrate
+      kind: join
+      title: Consolidate verified tool and prompt artifacts
+      requirementIds:
+        - acceptance-final-outcome
+      stageId: qoder-integrate
+      acceptanceCriterionIds:
+        - final-outcome
+      declaredOutputKeys:
+        - integration/summary.json
+      requiredAuthorityScopes:
+        - workspace:integrate
+  edges:
+    - fromNodeId: tool-implementation
+      toNodeId: integrate
+      relation: join-input
+      evidenceRefs:
+        - plan:tool-to-integrate
+    - fromNodeId: prompt-skill
+      toNodeId: integrate
+      relation: join-input
+      evidenceRefs:
+        - plan:prompt-to-integrate
+attemptPlan:
+  - stageId: qoder-tool
+    profile:
+      harness: qoder
+      model: Qwen3.8-Max
+      reasoningEffort: medium
+      injectionBudgetTokens: 1800
+      permissionMode: bypass_permissions
+    onFailure: stop
+    instruction: >-
+      Read AGENTS.md, README.md, policy.json, and verify-tool-node.mjs. Implement
+      the exported lookupPolicy function. Change only
+      src/tools/policy-lookup.mjs, run
+      `MISSIONBRAID_TARGET_WORKSPACE="$PWD" node verify-tool-node.mjs`, and stop
+      when it passes. Do not change prompts, Skills, verifiers, policy data, or
+      the Agent assembly.
+  - stageId: claude-prompt
+    profile:
+      harness: claude
+      model: deepseek-v4-pro
+      reasoningEffort: medium
+      injectionBudgetTokens: 1800
+      permissionMode: bypassPermissions
+    onFailure: stop
+    instruction: >-
+      Read AGENTS.md, README.md, prompts/triage.md,
+      skills/triage/SKILL.md, verify-prompt-node.mjs, and the controller-owned
+      `.missionbraid/contract-revision.json`. Implement the active Contract in
+      only prompts/triage.md and skills/triage/SKILL.md. Run
+      `MISSIONBRAID_TARGET_WORKSPACE="$PWD" node verify-prompt-node.mjs`. If the
+      active revisionNumber is 1, then run `node hold-open.mjs initial` so the
+      controller can accept a live requirement revision. If it is 2, stop after
+      the verifier passes and do not hold open. Do not edit source code, policy
+      data, verifiers, or the controller-owned Contract record.
+  - stageId: qoder-integrate
+    profile:
+      harness: qoder
+      model: Qwen3.8-Max
+      reasoningEffort: medium
+      injectionBudgetTokens: 1800
+      permissionMode: bypass_permissions
+    onFailure: stop
+    instruction: >-
+      Work only in the new consolidation workspace. Keep the source Branches
+      immutable. Consolidate the verifier-backed
+      src/tools/policy-lookup.mjs from the tool node and the verifier-backed
+      revised prompts/triage.md plus skills/triage/SKILL.md from the prompt
+      node. Resolve only integration conflicts, do not redesign either source.
+      Create only integration/summary.json using the exact schema documented in
+      README.md, then run `MISSIONBRAID_TARGET_WORKSPACE="$PWD" node
+      verify-final.mjs`.

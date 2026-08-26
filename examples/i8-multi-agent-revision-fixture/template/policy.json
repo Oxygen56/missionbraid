@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "missionbraid.dev/policy-triage-fixture/v1",
+  "rules": [
+    {
+      "ruleId": "payments-high-risk",
+      "match": {
+        "product": "payments",
+        "severity": "high"
+      },
+      "decision": "manual-review",
+      "rationale": "High-severity payment incidents require manual review.",
+      "evidenceRefs": ["policy:payments-high-risk"]
+    },
+    {
+      "ruleId": "delivery-low-risk",
+      "match": {
+        "product": "delivery",
+        "severity": "low"
+      },
+      "decision": "auto-resolve",
+      "rationale": "Low-severity delivery incidents may be resolved automatically.",
+      "evidenceRefs": ["policy:delivery-low-risk"]
+    }
+  ],
+  "fallback": {
+    "decision": "needs-context",
+    "rationale": "No deterministic policy rule matched the incident.",
+    "evidenceRefs": ["policy:fallback"]
+  }
+}
