@@ -126,6 +126,19 @@ try {
 
   browser = await launchHeadlessWorkbench(app.url, join(proofRoot, 'chrome-gateway'));
   await selectMissionInWorkbench(browser, missionId);
+  const fallbackOverride = await requestJson(
+    `${app.url}/api/v1/missions/${encodeURIComponent(missionId)}/execution-planner/override`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        stageId: 'claude-prompt',
+        reason:
+          'Use the declared native Tool Gateway Profile for the controlled fallback; keep the upgraded Profile reserved for the later Outcome Studio regression.',
+      }),
+    },
+    201,
+  );
   await requestJson(
     `${app.url}/api/v1/missions/${encodeURIComponent(missionId)}/resume`,
     { method: 'POST' },
@@ -160,12 +173,15 @@ try {
   const acknowledged = requireTimeline(initial, 'handoff.acknowledged');
   if (
     planner.data?.decision?.binding?.selectedHarness !== 'claude' ||
+    planner.data?.decision?.manualOverride?.status !== 'applied' ||
+    planner.data?.manualOverrideRequest?.overrideId !== fallbackOverride.override.overrideId ||
     planner.data?.trigger?.code !== 'DECLARED_HANDOFF_FAILURE' ||
+    claudeAttempt.stageId !== 'claude-prompt' ||
     acknowledged.attemptId !== claudeAttempt.attemptId ||
     acknowledged.data?.handoffOrderingEstablished !== true ||
     !(prepared.seq < acknowledged.seq)
   ) {
-    throw new Error('The automatic Handoff or acknowledgement-before-tool ordering is incomplete.');
+    throw new Error('The planned Handoff or acknowledgement-before-tool ordering is incomplete.');
   }
   if (
     gateway.modified === undefined ||
@@ -197,6 +213,16 @@ try {
   }
   progress(
     'Real Qoder Handoff, Claude native gate, stale Context, and deterministic rejection completed',
+  );
+  await requestJson(
+    `${app.url}/api/v1/missions/${encodeURIComponent(missionId)}/execution-planner/override`,
+    {
+      method: 'DELETE',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        reason: 'The controlled fallback is complete; return later routing to automatic planning.',
+      }),
+    },
   );
 
   await browser.close();
@@ -691,6 +717,8 @@ try {
       qoderAttemptId: qoderAttempt.attemptId,
       claudeAttemptId: claudeAttempt.attemptId,
       plannerDecisionHash: planner.data.decisionHash,
+      plannerOverrideId: fallbackOverride.override.overrideId,
+      plannerOverrideStageId: fallbackOverride.override.stageId,
       capsuleId: prepared.data.capsuleId,
       acknowledgementBeforeTool: acknowledged.data.handoffOrderingEstablished,
       modifiedGate: gateway.modified,
