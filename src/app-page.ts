@@ -4069,7 +4069,6 @@ function renderRuntimeIntelligence(mission, timeline) {
       records: observations,
       identityKeys: ['observationId', 'harness'],
       facts: function (record) {
-        const runtimeBinding = recordValue(record.runtimeBinding) || {};
         return [
           ['intelligence.field.harness', displayValue(record.harness)],
           ['intelligence.field.availability', displayValue(record.availability)],
@@ -4086,6 +4085,7 @@ function renderRuntimeIntelligence(mission, timeline) {
       records: bindings,
       identityKeys: ['bindingId', 'attemptId'],
       facts: function (record) {
+        const runtimeBinding = recordValue(record.runtimeBinding) || {};
         return [
           ['intelligence.field.attempt', displayValue(record.attemptId)],
           ['intelligence.field.branch', displayValue(record.branchId)],

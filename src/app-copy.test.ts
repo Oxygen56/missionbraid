@@ -82,6 +82,13 @@ describe('Workbench copy', () => {
     expect(APP_JAVASCRIPT).toContain("'intelligence.field.instructions'");
     expect(APP_COPY.en['intelligence.field.modelOverride']).toBe('Model override');
     expect(APP_COPY['zh-CN']['intelligence.field.modelOverride']).toBe('模型是否被改写');
+    const attemptBindingCard = APP_JAVASCRIPT.slice(
+      APP_JAVASCRIPT.indexOf("titleKey: 'intelligence.attemptBindings'"),
+      APP_JAVASCRIPT.indexOf("titleKey: 'intelligence.effectiveProfileReports'"),
+    );
+    expect(attemptBindingCard).toContain(
+      'const runtimeBinding = recordValue(record.runtimeBinding) || {};',
+    );
   });
 
   it('exposes the guided two-worker Mission Plan through the ordinary composer', () => {
