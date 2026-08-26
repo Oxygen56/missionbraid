@@ -385,7 +385,7 @@ try {
     throw new Error(`Diagnostic Fork changed unexpected paths: ${stableJson(forkChangedPaths)}`);
   }
   if (
-    !fork.externalEffectDecisions?.some(
+    !fork.lineage?.externalEffectDecisions?.some(
       (decision) => decision.effectId === effectId && decision.action === 'inherit-no-repeat',
     )
   ) {
