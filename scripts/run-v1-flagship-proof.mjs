@@ -1469,12 +1469,22 @@ async function requestJson(url, options = {}, expectedStatus = 200) {
   if (target.protocol !== 'http:') {
     throw new Error(`Local flagship client only supports HTTP URLs: ${url}`);
   }
+  const requestBody =
+    options.body === undefined
+      ? undefined
+      : Buffer.isBuffer(options.body)
+        ? options.body
+        : Buffer.from(options.body);
+  const headers = {
+    ...(options.headers ?? {}),
+    ...(requestBody === undefined ? {} : { 'content-length': String(requestBody.byteLength) }),
+  };
   const response = await new Promise((resolveResponse, rejectResponse) => {
     const request = httpRequest(
       target,
       {
         method: options.method ?? 'GET',
-        headers: options.headers,
+        headers,
         signal: options.signal,
       },
       (incoming) => {
@@ -1492,17 +1502,17 @@ async function requestJson(url, options = {}, expectedStatus = 200) {
       },
     );
     request.on('error', rejectResponse);
-    request.end(options.body);
+    request.end(requestBody);
   });
   const text = response.text;
+  if (response.status !== expectedStatus) {
+    throw new Error(`${url} returned ${response.status}: ${text.slice(0, 1_000)}`);
+  }
   let body;
   try {
     body = JSON.parse(text);
   } catch {
     throw new Error(`${url} returned non-JSON response: ${text.slice(0, 500)}`);
-  }
-  if (response.status !== expectedStatus) {
-    throw new Error(`${url} returned ${response.status}: ${text.slice(0, 1_000)}`);
   }
   return body;
 }
