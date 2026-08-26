@@ -721,6 +721,7 @@ function explicitPlanDraftPayload(sourceFile, workspacePath) {
       injectionBudgetTokens: stage.profile.injectionBudgetTokens,
       instruction: stage.instruction,
       ...(stage.breakpoint === undefined ? {} : { breakpoint: stage.breakpoint }),
+      ...(stage.onFailure === undefined ? {} : { onFailure: stage.onFailure }),
     })),
     plan: document.plan,
   };

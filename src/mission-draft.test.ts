@@ -294,13 +294,48 @@ describe('createMissionDraft', () => {
       stages: [
         stage('one', 'codex'),
         stage('two', 'qoder'),
-        stage('three', 'claude'),
+        { ...stage('three', 'claude'), onFailure: 'stop' },
         stage('regression-target', 'claude'),
       ],
     });
 
     expect(draft.document.attemptPlan).toHaveLength(4);
+    expect(draft.document.attemptPlan.map((candidate) => candidate.onFailure)).toEqual([
+      'handoff',
+      'handoff',
+      'stop',
+      'stop',
+    ]);
     expect(draft.document.attemptPlan[3]?.stageId).toBe('regression-target');
+
+    const source = join(root, 'mission-four-profiles.yaml');
+    writeFileSync(source, draft.yaml, 'utf8');
+    expect(loadMissionSpec(source).attemptPlan.map((candidate) => candidate.onFailure)).toEqual([
+      'handoff',
+      'handoff',
+      'stop',
+      'stop',
+    ]);
+  });
+
+  it('rejects an invalid disposition and a final Profile that requests a handoff', () => {
+    const root = mkdtempSync(join(tmpdir(), 'missionbraid-draft-disposition-'));
+    roots.push(root);
+    const workspace = join(root, 'workspace');
+    mkdirSync(workspace);
+
+    expect(() =>
+      createMissionDraft({
+        ...validInput(workspace),
+        stages: [{ ...stage('one', 'codex'), onFailure: 'retry' }],
+      }),
+    ).toThrow(/must be stop or handoff/);
+    expect(() =>
+      createMissionDraft({
+        ...validInput(workspace),
+        stages: [{ ...stage('one', 'codex'), onFailure: 'handoff' }],
+      }),
+    ).toThrow(/final Runtime Profile cannot hand off/);
   });
 
   it.each([

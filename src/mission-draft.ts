@@ -53,6 +53,7 @@ const STAGE_FIELDS = new Set([
   'injectionBudgetTokens',
   'instruction',
   'breakpoint',
+  'onFailure',
 ]);
 const SHELL_EXECUTABLES = new Set([
   'sh',
@@ -117,6 +118,12 @@ export interface MissionDraftStageInput {
    */
   readonly instruction?: string;
   readonly breakpoint?: 'mutable-tools';
+  /**
+   * Override the default ordered fallback route. This lets a Profile remain
+   * declared for an explicit Fork or regression run without making it the
+   * automatic successor of the preceding Profile.
+   */
+  readonly onFailure?: 'stop' | 'handoff';
 }
 
 export interface MissionDraftContextInput {
@@ -198,6 +205,9 @@ export function createMissionDraft(input: unknown): MissionDraftOutput {
   }
   const parsedStages = stageRecords.map((stage, index) => parseStage(stage, index));
   assertUniqueStageIds(parsedStages);
+  if (parsedStages.at(-1)?.onFailure === 'handoff') {
+    throw new MissionDraftError('The final Runtime Profile cannot hand off on failure');
+  }
   const plan =
     root.plan === undefined
       ? undefined
@@ -210,10 +220,10 @@ export function createMissionDraft(input: unknown): MissionDraftOutput {
       instruction,
       ...(stage.breakpoint === undefined ? {} : { breakpoint: stage.breakpoint }),
       // `attemptPlan` remains the ordered fallback route when an explicit DAG
-      // is also present. Plan-node execution has its own failure semantics and
-      // does not consume this field, while `/resume` must still be able to move
-      // from a failed non-terminal Runtime to the next declared candidate.
-      onFailure: index !== parsedStages.length - 1 ? 'handoff' : 'stop',
+      // is also present. By default a failed non-terminal Runtime can move to
+      // the next candidate; an explicit `stop` keeps later Profiles reserved
+      // for Plan, Fork, or regression execution instead.
+      onFailure: stage.onFailure ?? (index !== parsedStages.length - 1 ? 'handoff' : 'stop'),
     };
   });
 
@@ -240,6 +250,7 @@ interface ParsedStage {
   readonly profile: AttemptProfileSpecV1;
   readonly instruction?: string;
   readonly breakpoint?: 'mutable-tools';
+  readonly onFailure?: 'stop' | 'handoff';
 }
 
 function parseVerifier(
@@ -469,6 +480,10 @@ function parseStage(value: unknown, index: number): ParsedStage {
     stage.breakpoint === undefined
       ? undefined
       : requireBreakpoint(stage.breakpoint, harness, `${path}.breakpoint`);
+  const onFailure =
+    stage.onFailure === undefined
+      ? undefined
+      : requireFailureDisposition(stage.onFailure, `${path}.onFailure`);
   if (adapterId !== undefined && breakpoint !== undefined) {
     throw new MissionDraftError(
       `${path}.breakpoint is not available through the generic Adapter v1 host`,
@@ -497,6 +512,7 @@ function parseStage(value: unknown, index: number): ParsedStage {
     },
     ...(instruction === undefined ? {} : { instruction }),
     ...(breakpoint === undefined ? {} : { breakpoint }),
+    ...(onFailure === undefined ? {} : { onFailure }),
   };
 }
 
@@ -506,6 +522,13 @@ function requireBreakpoint(value: unknown, harness: HarnessIdV1, path: string): 
   }
   if (harness !== 'claude') {
     throw new MissionDraftError(`${path} currently requires Claude Code`);
+  }
+  return value;
+}
+
+function requireFailureDisposition(value: unknown, path: string): 'stop' | 'handoff' {
+  if (value !== 'stop' && value !== 'handoff') {
+    throw new MissionDraftError(`${path} must be stop or handoff`);
   }
   return value;
 }
