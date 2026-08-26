@@ -560,20 +560,44 @@ try {
   const retainedCiFile = join(proofRoot, 'retained-ci-result.json');
   writeFileSync(retainedCiFile, `${JSON.stringify(rerun.ciResult, null, 2)}\n`, 'utf8');
   const retainedCi = spawnCommand(process.execPath, [ciRunner, retainedCiFile], proofRoot);
-  const returnedCiResult = studio.createOutcomeCiResult({
+  const rerunBranchView = await requestJson(
+    `${app.url}/api/v1/missions/${encodeURIComponent(missionId)}/outcome-studio?branchId=${encodeURIComponent(rerun.targetBranchId)}`,
+  );
+  if (rerunBranchView.branch === null) {
+    throw new Error('The Profile-Rebound Branch is unavailable for the fail-closed CI check.');
+  }
+  const blockedReceipt = studio.issueStudioOutcomeReceipt({
+    branch: { ...rerunBranchView.branch, evaluation: rerun.evaluation },
+    effects: [
+      {
+        effectId: 'effect-flagship-ci-unresolved',
+        required: true,
+        status: 'ambiguous',
+        resolution: 'blocking',
+        evidenceRefs: ['fixture:flagship-ci-unresolved-effect'],
+      },
+    ],
+    runtimeProfileBinding: rerun.receipt.runtimeProfileBinding,
+    outcomePolicyVersion: scenario.executionPlan.evaluationSuite.outcomePolicyVersion,
+    issuedAt: new Date().toISOString(),
+  });
+  const blockedCiResult = studio.createOutcomeCiResult({
     scenario,
-    receipt: rootView.studioReceipt,
+    receipt: blockedReceipt,
     generatedAt: new Date().toISOString(),
   });
-  const returnedCiFile = join(proofRoot, 'returned-ci-result.json');
-  writeFileSync(returnedCiFile, `${JSON.stringify(returnedCiResult, null, 2)}\n`, 'utf8');
-  const returnedCi = spawnCommand(process.execPath, [ciRunner, returnedCiFile], proofRoot);
-  if (retainedCi.status !== 0 || returnedCi.status !== 1) {
-    throw new Error('Standalone Outcome CI did not distinguish retained from returned behavior.');
+  const blockedCiFile = join(proofRoot, 'blocked-ci-result.json');
+  writeFileSync(blockedCiFile, `${JSON.stringify(blockedCiResult, null, 2)}\n`, 'utf8');
+  const blockedCi = spawnCommand(process.execPath, [ciRunner, blockedCiFile], proofRoot);
+  if (
+    retainedCi.status !== 0 ||
+    blockedCiResult.regression !== 'retained' ||
+    blockedCiResult.status !== 'failed' ||
+    blockedCi.status !== 1
+  ) {
+    throw new Error('Standalone Outcome CI did not fail closed on an unresolved required Effect.');
   }
-  progress(
-    'Saved incident reran as three new real Runtime trials and standalone CI enforced the result',
-  );
+  progress('Saved incident reran as three new real Runtime trials and standalone CI failed closed');
 
   const planBefore = await requestJson(
     `${app.url}/api/v1/missions/${encodeURIComponent(missionId)}/plan`,
@@ -686,9 +710,17 @@ try {
   const finalBeforeRestart = await requestJson(
     `${app.url}/api/v1/missions/${encodeURIComponent(missionId)}`,
   );
+  const scenariosBeforeRestart = await requestJson(
+    `${app.url}/api/v1/missions/${encodeURIComponent(missionId)}/outcome-studio/scenarios`,
+  );
   const finalHeadHash = finalBeforeRestart.mission.headHash;
   const finalReceiptId = finalBeforeRestart.mission.receipt.receiptId;
-  const stableBefore = durableIdentities(finalBeforeRestart, scenarios, rerun, selection);
+  const stableBefore = durableIdentities(
+    finalBeforeRestart,
+    scenariosBeforeRestart,
+    rerun,
+    selection,
+  );
   await app.close();
   app = undefined;
   const targetCallsBeforeRestart = targetFixture.calls().length;
