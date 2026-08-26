@@ -19,34 +19,25 @@ The normal path keeps using the same Harness. Branching, Handoff, adaptive
 routing, and CI export are supporting capabilities used when the task actually
 needs them.
 
-> **Status:** pre-alpha, local-first, and run from source. Iterations 1–5 have
-> same-host local evidence records; Iteration 6 has a controlled-interruption
-> adaptive Handoff record; Iteration 7 has a same-host controlled-fixture record
-> in which real Qoder with Qwen3.8-Max fails with stale Context, then a fresh
-> Attempt under the same Runtime Profile succeeds with refreshed Context. The
-> current Workbench runs real Codex, Qoder, and
-> Claude Code Attempts; streams a live Context Graph; controls one real Claude
-> Code pre-tool boundary; reconciles one queryable external Effect after a
-> controller crash; creates a Git-backed Composite Checkpoint and isolated
-> child Branch; supports playback, cached replay, and model-only
-> counterfactual resampling with their distinct evidence semantics; and can
-> select a replacement Runtime through a deterministic planner. Iteration 8 now
-> has a same-host controlled-Git-fixture record: the Workbench HTTP API creates,
-> starts, revises, observes, and completes one Mission Plan using real local
-> Qoder/Qwen3.8-Max and Claude Code/deepseek-v4-pro processes, selective
-> invalidation and reuse, a new consolidation Attempt, a latest-revision
-> Receipt, and restart reconstruction. All ten planned product iterations are
-> now present at the 1.0 source-candidate implementation layer. Iteration 9 has
-> retained same-host evidence for three real Qoder/Qwen3.8-Max trials using the
-> accepted refreshed-Context intervention on one Planner-selected upgraded
-> Profile, all passing the predeclared threshold, plus
-> a fail-closed checker copied into a process outside the repository. Iteration
-> 10 has an internal clean-install record covering an external Adapter identity
-> chain, installed CLI and Workbench Missions, a same-Adapter isolated Execution
-> Fork, store migration from v1 to v2, and a lockfile-bearing source bundle whose
-> frozen install, typecheck, build, and full tests pass. Package-registry
-> publication, an independent external reproduction, cross-host evidence, and
-> production adoption remain open.
+> **Status:** pre-alpha, local-first, and run from source. All ten planned
+> product iterations are present at the 1.0 source-candidate implementation
+> layer. The current flagship record now connects the main Agent-development
+> capabilities in one Mission and one controlled run: real Qoder/Qwen3.8-Max
+> hands off to real Claude
+> Code/deepseek-v4-pro; the developer controls a native pre-tool boundary;
+> deterministic verification exposes stale Context; a queryable external Effect
+> survives a controller crash without a second POST; a Composite Checkpoint and
+> Context-only Execution Fork confirm the mechanism; the accepted incident runs
+> three verified trials on a Planner-selected upgraded Claude Profile and a
+> standalone checker accepts the retained result with exit 0 but blocks an
+> unresolved required Effect with exit 1; then a live Mission Plan revises only
+> affected Claude work, reuses verified Qoder work, consolidates, issues the
+> latest-revision Receipt, and reconstructs the same identities after restart.
+> The record is bound to a clean worktree at revision `5aac506`. Separate
+> per-iteration records and the internal clean-install/package record remain
+> available. Package-registry publication, independent third-party
+> reproduction, cross-host evidence, production adoption, and general
+> reliability evidence remain open.
 
 ![MissionBraid local Workbench overview](docs/assets/missionbraid-workbench-overview.png)
 
@@ -54,13 +45,13 @@ needs them.
 
 ## The product in one view
 
-|                   | MissionBraid                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| User problem      | Changing a model, Prompt, Skill, tool, memory policy, permission, or Runtime can change Agent behavior, but source diffs and fragmented logs do not explain the effective Agent that actually ran.                                                                                                                                                                                                                                                                    |
-| Product           | One Workbench to bind the effective Agent Revision, run a durable Mission, inspect context and tools live, revise supported inputs, re-run from a useful boundary, compare behavior, and verify the outcome.                                                                                                                                                                                                                                                          |
-| Core abstraction  | A **Mission** owns intent, execution branches, evidence, effects, and completion. A Harness is a replaceable Runtime.                                                                                                                                                                                                                                                                                                                                                 |
-| Implemented today | The 1.0 source candidate contains implementation surfaces for all ten planned iterations: the bilingual Workbench, Mission Kernel, direct and public external Adapters, Runtime Profiles, live Event IR/Context Graph, tool and Effect controls, Checkpoint/Replay/Fork, adaptive Handoff, stale-Context diagnosis, Mission Plan coordination, Outcome Studio, verifier, Receipts, and clean-install package/migration path.                                          |
-| Evidence boundary | I8 has a bounded real local Qoder/Claude workflow; I9 has a real Qoder 3/3 rerun with the accepted Context intervention on a distinct Planner-selected high-reasoning Profile plus an outside-repository fail-closed checker; I10 has an internal installed-product workflow and a lockfile-bearing source bundle whose frozen install and checks pass. npm publication, independent external reproduction, cross-host evidence, and production adoption remain open. |
+|                   | MissionBraid                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| User problem      | Changing a model, Prompt, Skill, tool, memory policy, permission, or Runtime can change Agent behavior, but source diffs and fragmented logs do not explain the effective Agent that actually ran.                                                                                                                                                                                                                                                                                                                                            |
+| Product           | One Workbench to bind the effective Agent Revision, run a durable Mission, inspect context and tools live, revise supported inputs, re-run from a useful boundary, compare behavior, and verify the outcome.                                                                                                                                                                                                                                                                                                                                  |
+| Core abstraction  | A **Mission** owns intent, execution branches, evidence, effects, and completion. A Harness is a replaceable Runtime.                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Implemented today | The 1.0 source candidate contains implementation surfaces for all ten planned iterations: the bilingual Workbench, Mission Kernel, direct and public external Adapters, Runtime Profiles, live Event IR/Context Graph, tool and Effect controls, Checkpoint/Replay/Fork, adaptive Handoff, stale-Context diagnosis, Mission Plan coordination, Outcome Studio, verifier, Receipts, and clean-install package/migration path.                                                                                                                  |
+| Evidence boundary | One clean-revision, same-host controlled-fixture run now connects real Qoder/Qwen3.8-Max and Claude Code/deepseek-v4-pro, native tool control, crash-reconciled external Effect, diagnostic Fork, three real regression trials, fail-closed standalone CI, live Plan revision/reuse, consolidation, Receipt, and restart under one Mission identity. Per-iteration and package records remain separate. npm publication, independent third-party reproduction, cross-host evidence, production adoption, and general reliability remain open. |
 
 ## Why this exists
 
@@ -111,24 +102,49 @@ reasoning, runs the verifier bound to the selected Branch's immutable Contract
 revision, issues an Outcome Receipt, and can save the case as a regression
 scenario for later local or CI execution.
 
-### Current flagship workflow: stale Context
+### Current flagship workflow: one Mission from failure to retained outcome
 
-The first real vertical proof focuses on a routine Agent-development problem:
-the workspace changes while an Agent receives an old cached Context. In the
-controlled fixture, an initial real Qoder/Qwen3.8-Max Attempt follows that
-stale Context and the bound deterministic Verifier rejects its result. The
-developer then sees the Context/workspace freshness evidence and creates an
-isolated child Branch whose Intervention declares Context refresh as the product
-variable while retaining the Contract, Runtime Profile, and authority. A fresh
-Qoder process and Attempt run under the same Runtime Profile, receive the
-refreshed Context, and pass the Verifier; the case is then saved as a regression
-scenario. This is an Execution Fork, not continuation of the original Qoder
-Session. The refresh applies only to that diagnostic Attempt and is not a
-portable, persistent Context cache. The [same-host proof is recorded in the
-evidence index](evidence/iteration-7-stale-context-2026-08-26.json); it proves
-this one stale-Context mechanism, not provider-internal Context capture,
-multi-layer attribution accuracy or recall, cross-host continuity, or
-production recovery.
+The [unified flagship record](evidence/v1-flagship-local-2026-08-26.json)
+captures one controlled run under Mission
+`mission-0afa570c-a716-416f-8916-d5e48bdcf0f1`. A real
+Qoder/Qwen3.8-Max Attempt reaches a declared Handoff failure; the deterministic
+Planner applies a recorded manual target override and binds real Claude
+Code/deepseek-v4-pro, and the Handoff Capsule is acknowledged before the
+target's first tool boundary. The native Claude Hook
+lets the developer modify a Write before dispatch. The Attempt completes its
+other criteria, but the bound deterministic Verifier rejects the Receipt
+because the Context is stale.
+
+MissionBraid then coordinates one queryable external Effect. The target receives
+exactly one POST; after the controller is killed, recovery queries the target by
+idempotency key and records the confirmed Effect without dispatching a second
+POST. The developer seals a Git-backed Composite Checkpoint, creates a
+Context-only Execution Fork, and obtains a verified child Receipt. Failure
+Intelligence promotes the stale-Context candidate from inferred to confirmed;
+removing the diagnostic outcome lowers it back to inferred, while evidence that
+cannot identify a layer remains unknown.
+
+After the controlled fixture records a revised-Branch selection with declared
+human authority, Outcome Studio saves the incident and the Planner rebinds it
+from the source Claude Profile to a separately declared higher-reasoning Claude
+Profile with the same native tool control. Three fresh Runtime trials each
+produce a verified Receipt. A standalone CI checker exits 0 for the retained
+result and exits 1 when a required Effect is unresolved. The same Mission then
+runs a Plan with real Qoder and
+Claude work in parallel. A live Contract revision fences only stale Claude
+prompt work, reuses the verified Qoder Artifact without rerunning that node,
+starts fresh Claude work, independently consolidates the immutable sources, and
+issues a Receipt bound to the latest Contract and Plan revisions. Restart
+reconstructs the same Mission head and durable identities and adds no Effect
+call.
+
+This is one same-host local run against a controlled fixture and a clean source
+worktree at revision `5aac506`. The provider termination and failing tool probe
+are deliberate observation boundaries. The selection authority is a
+fixture-declared field; it does not establish live human interaction or identity
+verification. The record does not establish provider-internal Context capture,
+a natural-failure reliability rate, independent third-party or cross-host
+reproduction, production use, npm publication, or general reliability.
 
 ## Product architecture
 
@@ -300,6 +316,14 @@ The implemented foundation already provides:
 
 Current public evidence is classified by the capability it exercises:
 
+- **Unified flagship — one durable product story:** one same-host controlled
+  Mission runs real Qoder/Qwen3.8-Max and Claude Code/deepseek-v4-pro through
+  Handoff, native tool control, deterministic rejection, crash-reconciled
+  Effect, Composite Checkpoint, Context-only diagnostic Fork, explicit Branch
+  selection, three real upgraded-Claude regression trials, fail-closed
+  standalone CI, live Plan revision, selective Artifact reuse, independent
+  consolidation, latest-revision Receipt, and restart reconstruction. The clean
+  source revision is `5aac506`.
 - **I8 — living multi-Agent Mission:** the Workbench HTTP API runs real local
   Qoder/Qwen3.8-Max and Claude Code/deepseek-v4-pro on separate Plan nodes,
   accepts a prompt-only Contract revision, interrupts only stale prompt work,
@@ -325,23 +349,25 @@ Current public evidence is classified by the capability it exercises:
   filtering/ranking selects and binds a replacement Runtime for a controlled
   Codex→Claude Handoff.
 
-These records do not prove native session fork/resume, portable refreshed
-Context state, natural Runtime failure recovery, provider-internal state,
-general multi-layer diagnosis accuracy, cross-host or distributed execution,
-production isolation, or third-party adoption.
+The unified record is one same-host local controlled run, while each iteration
+record keeps its own boundary. Together they do not prove native session
+fork/resume, portable refreshed Context state, natural Runtime failure recovery,
+provider-internal state, general multi-layer diagnosis accuracy, cross-host or
+distributed execution, production isolation, independent third-party
+reproduction, npm publication, or general reliability.
 
 ## Runtime support today
 
-| Runtime or provider | Discovery support           | Executes Attempts | Current evidence                                 |
-| ------------------- | --------------------------- | ----------------: | ------------------------------------------------ |
-| Codex               | Probe/catalog implemented   |               Yes | Same-host three-Harness Mission                  |
-| Qoder               | Probe/catalog implemented   |               Yes | Three-Harness Mission + I7/I8 controlled records |
-| Claude Code         | Probe/catalog implemented   |               Yes | Three-Harness Mission + I8 controlled record     |
-| OpenCode            | Probe/catalog implemented   |                No | Discovery support only                           |
-| Hermes              | Probe/catalog implemented   |                No | Discovery support only                           |
-| DeepSeek Harness    | Bootstrap/catalog signal    |                No | Discovery support only                           |
-| Kandev v0.91.0      | Separate compatibility path |                No | Public task/worktree/process interfaces only     |
-| Public Adapter      | Startup-loaded manifest     |               Yes | Internal clean-install CLI, Workbench, and Fork  |
+| Runtime or provider | Discovery support           | Executes Attempts | Current evidence                                |
+| ------------------- | --------------------------- | ----------------: | ----------------------------------------------- |
+| Codex               | Probe/catalog implemented   |               Yes | Same-host three-Harness Mission                 |
+| Qoder               | Probe/catalog implemented   |               Yes | Three-Harness, I7/I8, and unified flagship      |
+| Claude Code         | Probe/catalog implemented   |               Yes | Three-Harness, I8, and unified flagship         |
+| OpenCode            | Probe/catalog implemented   |                No | Discovery support only                          |
+| Hermes              | Probe/catalog implemented   |                No | Discovery support only                          |
+| DeepSeek Harness    | Bootstrap/catalog signal    |                No | Discovery support only                          |
+| Kandev v0.91.0      | Separate compatibility path |                No | Public task/worktree/process interfaces only    |
+| Public Adapter      | Startup-loaded manifest     |               Yes | Internal clean-install CLI, Workbench, and Fork |
 
 ## Ten product iterations
 
@@ -359,11 +385,14 @@ production isolation, or third-party adoption.
 |        10 | External developers install, extend, and reproduce the complete Runtime Workbench             | Internal clean-install and source bundle validated    |
 
 The 1.0 source candidate contains implementation surfaces for all ten planned
-iterations, while their evidence levels remain deliberately different. I8 has a bounded same-host
-real-Runtime workflow; I9 has a same-host real-Qoder regression and an
-outside-repository checker; I10 has an internal clean-install Workbench,
-migration, and lockfile-bearing source-bundle reproduction record. See the [detailed
-roadmap](docs/roadmap.md) and [evidence boundaries](evidence/README.md).
+iterations. One clean-revision, same-host controlled flagship now connects the
+major product surfaces under a single Mission identity, while the iteration
+records deliberately retain their own evidence levels. I8 has a bounded
+same-host real-Runtime workflow; I9 has a separate same-host real-Qoder
+regression and an outside-repository checker; I10 has an internal clean-install
+Workbench, migration, and lockfile-bearing source-bundle reproduction record.
+See the [detailed roadmap](docs/roadmap.md) and
+[evidence boundaries](evidence/README.md).
 
 ## Run the current Workbench
 
@@ -416,6 +445,37 @@ Submit once. The full interruption and lower-level reproduction procedures are
 in [Reproducing Evidence](docs/reproducing-evidence.md).
 
 ## Evidence
+
+The [unified flagship record](evidence/v1-flagship-local-2026-08-26.json)
+binds one Mission, one clean source worktree at revision `5aac506`, and one
+same-host controlled-fixture run to:
+
+- a failed real Qoder/Qwen3.8-Max source Attempt, a recorded manual target
+  override applied by the deterministic Planner to bind real Claude
+  Code/deepseek-v4-pro, and Handoff acknowledgement before the target tool
+  boundary;
+- a native Claude pre-tool Write modification followed by deterministic
+  rejection on the isolated stale-Context criterion;
+- exactly one POST to a queryable external Effect target, controller
+  termination, and lookup-based recovery without a second POST;
+- a Git-backed Composite Checkpoint, Context-only Execution Fork, verified child
+  Receipt, confirmed stale-Context mechanism, evidence ablation back to
+  inferred, and an honest unknown candidate;
+- a revised-Branch selection recorded with declared human authority in the
+  controlled fixture, three verified real Runtime trials on a distinct
+  Planner-selected higher-reasoning Claude Profile, and a standalone checker
+  that exits 0 for the retained result and 1 for a blocked unresolved required
+  Effect;
+- a live Plan with parallel Qoder and Claude work, a Contract revision that
+  fences only affected Claude work, verified Qoder Artifact reuse without a
+  rerun, fresh Claude work, independent consolidation, a latest-revision
+  Receipt, and restart-stable identities with no added Effect call.
+
+This is one local same-host proof against a controlled fixture. The induced
+provider termination and failing tool probe establish observable boundaries,
+not a natural-failure reliability rate. The record is not independent
+third-party or cross-host reproduction, production adoption, npm publication,
+provider-internal Context capture, or evidence of general reliability.
 
 The [Iteration 8 multi-Agent revision record](evidence/iteration-8-multi-agent-revision-local-2026-08-26.json)
 binds one controlled Git fixture and same-host Workbench flow to:
@@ -542,9 +602,9 @@ distinct before/after workspace digests; it is not used to claim an enforced
 pre-mutation gate.
 
 All current records are local and same-host unless explicitly labelled
-otherwise. The [evidence index](evidence/README.md) keeps implementation,
-real-runtime validation, clean-install validation, and target claims separate.
-The package smoke record proves a local tarball install, not registry
+otherwise. The [evidence index](evidence/README.md) keeps the unified flagship,
+per-iteration validation, clean-install validation, and stronger target claims
+separate. The package smoke record proves a local tarball install, not registry
 publication or independent external reproduction.
 
 ## Documentation

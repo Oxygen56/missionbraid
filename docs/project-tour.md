@@ -192,87 +192,80 @@ details.
 
 ## What works in this repository today
 
-Iteration 1 implements and has retained real evidence for the continuity
-foundation:
+The 1.0 source candidate now has one retained flagship workflow, not merely a
+set of independent feature demonstrations. The
+[unified flagship record](../evidence/v1-flagship-local-2026-08-26.json) binds
+the following sequence to Mission
+`mission-0afa570c-a716-416f-8916-d5e48bdcf0f1`:
 
-1. Open the local Workbench and inspect the discovered Runtime catalog.
-2. Create a Mission with an objective, Git workspace, and verifier.
-3. Select Codex, Qoder, or an ordered Codex-to-Qoder route.
-4. Run real native Runtime processes against a disposable workspace.
-5. Persist Attempt, workspace baseline/checkpoint evidence, Effect, Capsule,
-   verification, and Receipt events. The original continuity record used a Git
-   digest/delta boundary; the later Iteration 5 path adds a Git-backed
-   restorable Composite Checkpoint for Execution Fork and Replay.
-6. Restart the Workbench and restore the same Mission result.
-
-The current implemented control loop is:
+1. A real Qoder source Attempt is deliberately terminated. The planner records
+   the trigger and a manual target override, then hands the same Mission frontier
+   to the declared Claude Tool-Gateway Profile through a hash-bound Capsule.
+2. Claude acknowledges the Capsule before its first observed tool request. Its
+   native pre-tool Hook changes a proposed Write before dispatch; the original
+   path remains absent and the approved path is written.
+3. Deterministic verification rejects the result because only the current
+   Context criterion fails. Passing tool, prompt, and final-output criteria do
+   not hide that failure.
+4. A queryable external Effect is dispatched once, the controller is killed
+   before recording the result, and restart reconciles the target by lookup
+   without a second dispatch.
+5. A Composite Checkpoint captures that frontier. A Context-only Intervention
+   creates an isolated Execution Fork; only `agent-config.json` changes, the
+   child Receipt is verified, and the inherited external Effect is not repeated.
+6. Failure Intelligence confirms the stale-Context mechanism, retains a
+   separate tool-layer observation and an honest unknown, and downgrades the
+   conclusion when decisive diagnostic evidence is removed.
+7. The controlled fixture records a verified-Branch selection with declared
+   human authority and saves it as an executable incident. That field does not
+   establish live human interaction or identity verification. A distinct
+   Planner-selected higher-reasoning Claude Profile runs three new real trials;
+   all three verify. A standalone checker accepts the retained result and fails
+   closed when a required Effect is ambiguous.
+8. Real Qoder and Claude Plan nodes then run concurrently. A live Contract
+   revision fences the Claude Attempt for Contract revision 1, reuses the
+   verified Qoder Artifact, runs the Claude Attempt for revision 2, and creates
+   an independent consolidation Attempt with a Receipt bound to the latest
+   Contract and Plan.
+9. After restart, the Mission head, Receipt, Checkpoint, Fork, Plan, scenario,
+   rerun identities, and external Effect call count remain unchanged.
 
 ```mermaid
-sequenceDiagram
-  actor User
-  participant UI as Local Workbench
-  participant K as Mission Kernel
-  participant S as SQLite Event Store
-  participant A as Codex
-  participant W as Git Workspace
-  participant B as Qoder
-  participant V as Verifier
-
-  User->>UI: Submit objective, verifier, profiles
-  UI->>K: Create Mission
-  K->>S: Persist Contract and Mission events
-  K->>A: Start source Attempt
-  A->>W: Make workspace changes
-  K->>W: Freeze Checkpoint evidence
-  K->>S: Persist Checkpoint and Effect state
-  K->>B: Inject hash-bound Capsule
-  B->>K: Acknowledge Capsule identifiers
-  B->>W: Continue in the same workspace
-  K->>V: Run verifier bound to this Mission snapshot
-  V->>K: Return criterion evidence
-  K->>S: Issue Outcome Receipt
-  S-->>UI: Rebuild timeline and result
+flowchart LR
+  Q[Qoder Attempt] --> H[Handoff Capsule]
+  H --> C[Claude native tool gate]
+  C --> R[Deterministic rejection]
+  R --> E[Crash-reconciled Effect]
+  E --> P[Composite Checkpoint]
+  P --> F[Context-only Fork]
+  F --> D[Confirmed / unknown / ablation]
+  D --> O[3 real regression trials + fail-closed CI]
+  O --> M[Parallel Qoder + Claude Plan]
+  M --> V[Selective revision + reuse]
+  V --> J[Independent consolidation]
+  J --> Z[Latest Receipt + stable restart]
 ```
 
-The Iteration 1 flow above proves the Mission can outlive a process and cross
-one real Runtime boundary. The later slices add live observation, executable
-branches, Replay semantics, adaptive Handoff, failure intelligence, executable
-Mission Plan coordination, and Outcome Studio; their evidence levels are
-stated below rather than inferred from the original continuity run.
+This is one project-operated, same-host controlled-fixture run using real
+installed Qoder/Qwen3.8-Max and Claude Code/deepseek-v4-pro processes. The
+provider termination and tool-error probe are deliberately induced. It does
+not establish natural-failure recovery, provider-internal Context capture,
+Profile-only causality, cross-host execution, independent third-party
+reproduction, general reliability, or production use.
 
-Iteration 2 is now implemented in source:
+The source also includes direct Codex, Qoder, and Claude Code execution
+Adapters; a bilingual Workbench; durable commands and event state;
+source-scoped Event IR and sanitized native artifacts; explicit Runtime Profile
+Definitions, Catalog Observations, immutable Snapshots, and Attempt Bindings;
+and a Claude Adapter that preserves non-telemetry semantics while compacting
+only per-token `thinking_tokens` telemetry. OpenCode, Hermes, and DeepSeek
+Harness remain catalog-only.
 
-- Codex, Qoder, and Claude Code are execution Adapters with explicit capability
-  declarations;
-- Claude Code has one request-scoped native pre-tool gate. Its direct Adapter
-  preserves non-telemetry event semantics and order while compacting per-token
-  `thinking_tokens` telemetry; process-finish accounting records total
-  raw/retained/dropped line counts and a SHA-256 of the full raw stream, while
-  dropped per-token payloads are not retained;
-- every new Mission receives a default root Branch;
-- Runtime Profile Definition, Catalog Observation, immutable effective
-  Snapshot, and Attempt Binding are distinct persisted objects;
-- Runtime events retain per-source sequence and causal links while Mission
-  ingest order remains controller-specific;
-- every normalized Runtime event links to a sanitized, content-addressed native
-  artifact;
-- accepted execution intent uses a durable command/outbox path and can be
-  recovered by the Workbench supervisor after restart;
-- the Workbench can switch between English and Chinese and remembers the local
-  browser choice.
+## Historical capability records by iteration
 
-The [retained Iteration 2 record](../evidence/iteration-2-three-harness-local-2026-08-25.json)
-validates this slice at the same-host local level. Codex, Qoder, and Claude Code
-all completed successful real Attempts; 1,066 source-linked Runtime events and
-sanitized native artifacts were retained; the Receipt was verified; and the
-Mission head, Receipt, source sequences, and causal links remained stable after
-restart. The two Handoff acknowledgements precede their target's first observed
-tool-request event in the native source stream. This is cooperative ordering
-evidence, not an enforced live tool gate.
-
-## Current implementation and evidence by iteration
-
-The repository now contains the following later product slices:
+The unified flagship above is the primary product proof. The earlier iteration
+records remain valuable because they isolate one capability and its boundary in
+more detail; they do not replace or fragment the flagship story:
 
 - **Iteration 3 — live flight recorder.** The Workbench projects live Runtime
   events and a Context Graph with source-linked native evidence, redaction,
@@ -295,7 +288,7 @@ The repository now contains the following later product slices:
   Profile, binds a Handoff Capsule, requires acknowledgement before the target's
   first tool request, and closes with a verifier and Receipt. The record is not
   a natural-failure, native-session-migration, cross-host, or production proof.
-- **Iteration 7 — failure intelligence.** The implementation and API project
+- **Iteration 7 — failure intelligence.** The historical focused record covers
   observable runtime, context, tool, workspace, verification, checkpoint, and
   diagnostic-candidate evidence. In one controlled fixture, a real Qoder
   Attempt uses stale Context, an isolated new Attempt/process keeps the same
@@ -303,8 +296,9 @@ The repository now contains the following later product slices:
   the out-of-process verifier changes from rejected to verified. This is not
   original-Session continuation; broader layer attribution, diagnosis accuracy,
   and provider-internal Context capture remain open.
-- **Iteration 8 — executable Mission Plan coordination.** The Workbench/API can
-  start independent ready nodes concurrently in isolated worktrees and accept a
+- **Iteration 8 — executable Mission Plan coordination.** The historical
+  focused record shows that the Workbench/API can start independent ready nodes
+  concurrently in isolated worktrees and accept a
   Contract revision while they run. Attempts are revision-bound; affected work
   is fenced, an unaffected verifier-backed Artifact can be adopted into the new
   Plan, and a separate consolidation Attempt verifies the integrated workspace
@@ -314,17 +308,18 @@ The repository now contains the following later product slices:
   uses real local Qoder/Qwen3.8-Max and Claude Code/deepseek-v4-pro through
   Workbench HTTP and also verifies restart consistency. No planner-quality
   benchmark is claimed.
-- **Iteration 9 — Outcome Studio.** Agent Revision dimensions, evaluation and
-  incident projections, CI result views, and regression scenario save/export
-  APIs are implemented. The retained same-host record reruns one saved incident
+- **Iteration 9 — Outcome Studio.** The historical focused record covers Agent
+  Revision dimensions, evaluation and incident projections, CI result views,
+  and regression scenario save/export APIs. The retained same-host record reruns one saved incident
   with the accepted Context intervention on a distinct Planner-selected
   high-reasoning Qoder/Qwen3.8-Max Profile; three new Kernel-persisted trials
   pass the predeclared 3/3 threshold. A checker copied outside the repository
   accepts the retained result and fails closed for returned or unknown results.
   This is not a hosted CI pipeline, cross-host, or third-party evidence, and it
   does not isolate the Profile as the cause of success.
-- **Iteration 10 — package contract.** One retained internal clean-install smoke
-  covers public exports; an external Adapter identity chain through installed
+- **Iteration 10 — package contract.** This remains a separate delivery proof:
+  one retained internal clean-install smoke covers public exports; an external
+  Adapter identity chain through installed
   CLI and Workbench Missions; a same-Adapter isolated Fork; schema-v1-to-v2
   store migration; and a separate lockfile-bearing source bundle whose frozen
   install, typecheck, build, and full tests pass without repository fallback.
@@ -385,38 +380,27 @@ Direct local adapters remain supported.
 
 ## Verified foundation and boundaries
 
-Three records cover different product paths: [Iteration 7 daily stale-Context
-debugging](../evidence/iteration-7-stale-context-2026-08-26.json), [Iteration 5
-Execution Fork](../evidence/iteration-5-execution-fork-local-2026-08-26.json),
-and [Iteration 6 conditional Handoff](../evidence/iteration-6-adaptive-handoff-local-2026-08-26.json).
-Together with the retained Iterations 2–4 records they show, on one host, that:
+The [unified flagship](../evidence/v1-flagship-local-2026-08-26.json) is the
+primary evidence that MissionBraid is one Workbench rather than a collection of
+pages. It connects real multi-Runtime execution, a native tool decision,
+deterministic rejection, crash-safe Effect reconciliation, executable state,
+evidence-bounded diagnosis, repeated regression, a living multi-Agent Mission,
+verification, and restart under one Mission identity.
 
-- real Codex, Qoder, and Claude Code Attempts can be observed through the local
-  Workbench with source-linked native artifacts and a verified Receipt;
-- a Git-backed Composite Checkpoint can seed an isolated Execution Fork, while
-  the three non-executing Replay modes preserve their distinct no-write or
-  no-tool semantics;
-- a controlled Codex interruption can trigger deterministic Profile selection,
-  Capsule acknowledgement before the target's first tool request, no-repeat
-  Effect inheritance, verification, and restart reconstruction.
-- one controlled stale-Context mechanism can be identified by freshness
-  evidence, probed in an isolated new Qoder Attempt/process with the same
-  Harness/Profile, Contract, and authority plus a declared Context refresh,
-  verified out of process, and saved as a regression.
+The Iteration 1–10 records in the [evidence index](../evidence/README.md) are
+historical capability and delivery records. They make narrower claims easier to
+inspect: for example, all four Replay semantics, the original adaptive-Handoff
+slice, the earlier stale-Context diagnostic, the focused multi-Agent revision,
+the Qoder 3/3 regression, and the internal clean-install package contract.
 
-These are bounded same-host records. They do not prove native session
-migration/resume, natural Harness failure recovery, cross-host or independent
-external reproduction, production isolation, or adoption. The Iteration 7
-record is a controlled fixture, not an original-Session resume or evidence that
-every hidden or unobserved input was equal. Its Context refresh applies only to
-that diagnostic Attempt; multi-layer attribution and diagnosis accuracy remain
-open. Iteration 8 now has an executable local path and a retained same-host
-controlled-Git-fixture real-Runtime record. Iteration 9 has a retained
-same-host real-Qoder 3/3 rerun with the accepted Context intervention on a
-distinct Planner-selected high-reasoning Profile and an outside-repository
-fail-closed checker. Iteration 10 has one internal clean-install, migration, and
-lockfile-bearing source-bundle record rather than a registry, cross-host, or
-independent external result.
+All current runtime evidence is bounded same-host or internal clean-install
+evidence. The unified flagship is a single controlled-fixture run, not an
+independent replication or reliability measurement. It does not prove native
+session migration/resume, natural Harness failure recovery, provider-internal
+state, Profile-only causality, cross-host execution, independent external
+operation, production isolation, or adoption. The package is not published to
+npm.
+
 See the [evidence index](../evidence/README.md) for each claim boundary.
 
 ## Code map for the current foundation
@@ -444,14 +428,12 @@ See the [evidence index](../evidence/README.md) for each claim boundary.
 ## How to read the roadmap
 
 MissionBraid's 1.0 source candidate contains implementation surfaces for all
-**ten major product iterations**, but “implemented” and “proven with a real
-Runtime” are deliberately separate labels. Iterations 1–5
-have same-host local evidence, Iteration 6 has a controlled-interruption
-adaptive-Handoff record, Iteration 7 has one same-host stale-Context record,
-Iteration 8 has an executable local path and a retained same-host real-Runtime
-controlled-fixture record. Iteration 9 has a same-host real-Qoder regression and
-outside-repository checker, and Iteration 10 has an internal clean-install and
-source-bundle package smoke.
+**ten major product iterations**. One unified same-host Mission now exercises
+the main connected Iteration 1–9 runtime journey; historical iteration records
+retain the focused capability boundaries, and the Iteration 10 smoke retains
+the internal package boundary. “Implemented”, “locally exercised”,
+“independently reproduced”, and “production adopted” remain deliberately
+separate labels.
 
 The remaining evidence upgrades are natural-failure handling, native-session or
 cross-host continuity where adapters can honestly support it, independent

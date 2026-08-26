@@ -1,22 +1,15 @@
 # Key Product Decisions and Technical Questions
 
-> **Status:** these answers define the accepted target architecture. “Today”
-> includes the same-host real-Runtime evidence for Iterations 1–8: the live
-> Flight Recorder, native Tool Gateway, Composite Checkpoint/Execution Fork,
-> four Replay semantics, controlled adaptive Handoff, and one stale-Context
-> daily-debugging case. Iteration 8 has a retained same-host controlled-fixture
-> record using real local Qoder/Qwen3.8-Max and Claude Code/deepseek-v4-pro
-> through Workbench HTTP. The 1.0 source candidate contains implementation
-> surfaces for all ten planned iterations. Iteration 9 has a retained same-host
-> real-Qoder 3/3 rerun with the accepted Context intervention on a distinct
-> Planner-selected high-reasoning Profile plus an outside-repository fail-closed
-> checker; Iteration 10 has one internal clean-install, store
-> migration, and lockfile-bearing source-bundle record. npm publication,
-> independent external reproduction, cross-host proof, and production evidence
+> **Status:** these answers define the accepted target architecture. The 1.0
+> source candidate contains implementation surfaces for all ten planned
+> iterations. One retained
+> [unified flagship](../evidence/v1-flagship-local-2026-08-26.json) now connects
+> the main Iteration 1–9 runtime path under one Mission identity; Iteration
+> 5–9 records remain historical capability slices, and Iteration 10 remains a
+> separate internal package-delivery record. Current evidence is project-operated
+> and same-host or internal clean-install. npm publication, independent external
+> reproduction, cross-host proof, general reliability, and production evidence
 > remain open.
-> Iteration 7's
-> stale-Context diagnostic loop is now recorded as same-host local evidence;
-> its provider-internal and generalization boundaries remain explicit.
 
 ## 1. Why build a Workbench instead of another Agent launcher?
 
@@ -166,12 +159,16 @@ Where useful, MissionBraid creates a diagnostic branch that changes one
 declared dimension. If evidence remains insufficient, the correct result is
 `unknown`.
 
-The Iteration 7 record confirms one stale-Context mechanism in a controlled
-fixture: an isolated new Qoder Attempt/process keeps the same Harness/Profile,
-Contract, and authority while applying a declared Context refresh. It is not
-the original native Session continuing, does not prove every hidden or
-unobserved input stayed equal, and does not establish multi-layer attribution
-or general diagnosis accuracy.
+The unified flagship confirms one stale-Context mechanism in a controlled
+fixture. Deterministic verification first rejects the real Claude result because
+only the current Context criterion fails. A Context-only Execution Fork then
+changes only `agent-config.json` and reaches a verified Receipt. The decisive
+diagnostic evidence upgrades the Context candidate to `confirmed`; removing it
+downgrades the candidate to `inferred`; a verifier-only view remains honestly
+`unknown`. This does not prove every hidden or unobserved input stayed equal,
+provider-internal Context capture, calibrated multi-layer attribution, or
+general diagnosis accuracy. The Iteration 7 Qoder record remains a focused
+historical slice of the same evidence rule.
 
 ## 10. How does the planner choose a Runtime Profile?
 
@@ -208,11 +205,14 @@ artifacts, and workspace integration is a new Effect.
 The current implementation executes independent ready nodes concurrently in
 isolated Git worktrees. It advances a node only with Artifact evidence bound to
 the current Plan, Contract, and node version plus a passing deterministic
-verifier. A live revision fences the affected Attempt, explicitly adopts an
-unaffected verified Artifact into the new revision, reruns the invalidated
-frontier, and consolidates selected source commits in a new Attempt. This chain
-has controlled process-boundary integration coverage and a retained
-[same-host real-Runtime record](../evidence/iteration-8-multi-agent-revision-local-2026-08-26.json).
+verifier. In the unified flagship, real Qoder and Claude nodes reach a parallel
+frontier; a live revision fences only the Claude Attempt for Contract revision
+1, explicitly adopts the unaffected verified Qoder Artifact into the new
+revision, runs the Claude Attempt for revision 2, and consolidates selected
+source commits in a new independent Attempt. The Receipt binds the latest
+Contract and Plan revisions. The earlier
+[Iteration 8 record](../evidence/iteration-8-multi-agent-revision-local-2026-08-26.json)
+remains a focused historical proof of the same controlled path.
 
 ## 12. Who decides that the Mission is complete?
 
@@ -241,7 +241,7 @@ task/worktree/process behavior. It does not prove a Kandev-backed Mission.
 
 ## 14. What is implemented and what is still a design?
 
-Implemented and evidenced today (same-host, local pre-alpha):
+Implemented in the 1.0 source candidate:
 
 - bilingual local Workbench and Mission Kernel;
 - Codex, Qoder, and Claude Code execution Adapters;
@@ -263,18 +263,18 @@ Implemented and evidenced today (same-host, local pre-alpha):
   semantics;
 - deterministic Profile filtering/ranking and a controlled adaptive Handoff
   Capsule path;
-- one same-host controlled stale-Context diagnostic Branch: a new Qoder
-  Attempt/process keeps the recorded Harness/Profile, Contract, and authority,
-  applies a declared Context refresh, passes an out-of-process deterministic
-  Verifier, and saves a restart-stable regression scenario;
+- controlled stale-Context diagnostic Branches that preserve the recorded
+  Contract and authority, apply a declared Context refresh, pass an
+  out-of-process deterministic Verifier, and save a restart-stable regression
+  scenario;
 - executable Mission Plan coordination through the Workbench/API: parallel
   isolated node Attempts, live revision fencing, verified Artifact reuse, a new
   consolidation Attempt, and a Receipt bound to the latest Contract and Plan;
-- Outcome Studio execution of a saved incident with the accepted Context
-  intervention on one distinct Planner-selected high-reasoning
-  Qoder/Qwen3.8-Max Profile: three new Kernel-persisted trials meet the
-  predeclared 3/3 threshold, restart restores the result, and a checker copied
-  outside the repository fails closed for returned or unknown outcomes;
+- Outcome Studio execution of a saved incident with an accepted Context
+  intervention on a distinct Planner-selected Profile: three new
+  Kernel-persisted trials meet the predeclared 3/3 threshold, restart restores
+  the result, and a checker copied outside the repository fails closed for a
+  returned, unknown, or otherwise blocked outcome;
 - controller-run out-of-process verifier, Branch-bound Outcome Receipts, and
   the public Adapter SDK/package contract;
 - an internal clean-install external Adapter identity chain through installed
@@ -282,38 +282,42 @@ Implemented and evidenced today (same-host, local pre-alpha):
   v1→v2 migration, and a lockfile-bearing source bundle that passes frozen
   install, typecheck, build, and the full test suite without repository fallback.
 
-The [evidence index](../evidence/README.md) records the exact retained Runtime
-and package boundaries for Iterations 1–10. They are local same-host or internal
-clean-install results, not native
-session migration, natural failure recovery, cross-host reproduction,
-production readiness, or third-party adoption. The Iteration 8 record covers
-Workbench HTTP creation, start, live revision, query, and completion with real
-local Qoder/Qwen3.8-Max and Claude Code/deepseek-v4-pro; selective interruption
-and reuse, independent consolidation, the latest-revision Receipt, and restart
-consistency are retained.
+The primary product evidence is the
+[unified flagship](../evidence/v1-flagship-local-2026-08-26.json). Under one
+Mission identity it retains this chain:
 
-Still open beyond that bounded Iteration 7 record:
+```text
+real Qoder failure → Handoff to Claude → native Write modification
+→ deterministic stale-Context rejection → crash-safe one-Effect reconciliation
+→ Composite Checkpoint → Context-only Fork
+→ confirmed / unknown / ablated diagnosis
+→ fixture selection record → 3 real upgraded-Claude-Profile trials
+→ fail-closed standalone CI → parallel Qoder + Claude Plan
+→ live Contract revision → selective fence + Artifact reuse
+→ independent consolidation → latest Receipt → stable restart
+```
 
-- broader Failure Intelligence coverage, automatic diagnosis accuracy, and
-  multi-layer evidence beyond the recorded stale-Context mechanism;
+This answers the product-level question that separate iteration records could
+not: the Mission Kernel, Runtime adapters, debugger, Branch manager, Failure
+Intelligence, Outcome Studio, and Mission Plan are connected control surfaces,
+not unrelated demonstrations. The Iteration 5–9 records remain historical
+capability slices; Iteration 10 remains the internal installation and extension
+record.
+
+The exact boundary is equally important. The flagship is one project-operated,
+same-host controlled-fixture run with deliberately induced provider termination
+and tool-error observations. It does not establish natural-failure recovery,
+provider-internal Context, native-session migration, Profile-only causality,
+calibrated multi-layer diagnosis, general reliability, cross-host execution,
+independent third-party operation, or production adoption.
 
 Still open at stronger evidence or delivery levels:
 
-- hosted or independently operated CI execution, broader regression
-  calibration, and proof that isolates a Runtime Profile change as causal;
+- broader Failure Intelligence calibration across real failure layers;
+- hosted or independently operated CI execution and broader regression
+  calibration;
 - npm publication, independent clean installation, cross-host validation, and
   production adoption.
-
-The [Iteration 7 stale-Context record](../evidence/iteration-7-stale-context-2026-08-26.json)
-now proves one same-host local case: an old cached Context led to a rejected
-Mission; a new isolated Attempt/process on the same Qoder Profile, Contract,
-and authority applied the declared Context refresh and passed the deterministic
-Verifier; and the diagnosis, Receipt, and saved scenario survived restart. The
-fixture controls the visible Snapshot and instruction boundary; this is not the
-original native Session continuing, and the refreshed cache is used only for
-that diagnostic Attempt. It does not establish equality of every hidden or
-unobserved input, provider-internal Context capture, multi-layer attribution,
-diagnosis accuracy across incidents, or production recovery.
 
 The [product requirements](product-requirements.md), [final
 architecture](architecture.md), and [ten-iteration roadmap](roadmap.md) keep
@@ -358,10 +362,10 @@ The Revision is a content-addressed view composed from existing Profile,
 Attempt, policy, Adapter, and environment evidence. It is not another state
 machine beside the Mission.
 
-Evaluation suites, verifiers, baselines, thresholds, and qualification policies are
-separate control artifacts. Changing the candidate or its judge requires a new
-qualification for that exact pair. An Agent may propose a Revision or explain
-results, but it cannot approve its own change.
+Evaluation suites, verifiers, baselines, thresholds, and qualification policies
+are separate control artifacts. Changing the candidate or its judge requires a
+new qualification for that exact pair. An Agent may propose a Revision or
+explain results, but it cannot approve its own change.
 
 ## 17. How is an Agent Revision validated when model behavior is stochastic?
 
@@ -377,16 +381,22 @@ The release decision is layered rather than delegated to another Agent:
 - deterministic policy applies the recorded evidence to issue the final
   qualification and Outcome Receipt.
 
-The [retained Iteration 9 record](../evidence/iteration-9-outcome-regression-local-2026-08-26.json)
-exercises that layering once. The original Agent-reported false success is
-rejected by the deterministic Suite; a revised verified Branch is selected by
-separate human authority; and the saved incident is then rerun with the accepted
-Context intervention on a distinct Planner-selected high-reasoning
-Qoder/Qwen3.8-Max Profile. Three new Runtime trials pass the predeclared 3/3
-threshold. A process copied outside the repository accepts the retained result
-but exits nonzero for returned or unknown outcomes. This does not prove the
-Profile alone caused the improvement, nor does it establish hosted CI,
-third-party operation, cross-host execution, or production reliability.
+The unified flagship exercises that layering inside the full product journey.
+The original real Claude Branch is deterministically rejected even though its
+other criteria pass. The controlled fixture records a selection of the verified
+Context-only Fork with declared human authority and saves it as an executable
+incident. That authority field does not establish live human interaction or
+identity verification. The Planner binds a distinct higher-reasoning Claude
+Profile, three new real Runtime trials pass the predeclared 3/3 threshold, and a
+standalone process accepts the retained result but exits nonzero when a required
+Effect is ambiguous. This proves the recorded qualification path, not that the
+Profile alone caused improvement.
+
+The earlier [Iteration 9 record](../evidence/iteration-9-outcome-regression-local-2026-08-26.json)
+remains a historical focused variant using a distinct Planner-selected
+high-reasoning Qoder/Qwen3.8-Max Profile. Neither record establishes hosted CI,
+third-party operation, cross-host execution, general reliability, or production
+use.
 
 Public systems already expose parts of this pattern. Volcengine states that
 its Skills pass internal CI and end-to-end tests before synchronization, while

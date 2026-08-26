@@ -1,0 +1,392 @@
+{
+  "schemaVersion": "missionbraid.dev/evidence/v1-flagship/v1",
+  "evidenceLevel": "same-host-local-real-multi-runtime-controlled-fixture",
+  "generatedAt": "2026-08-26T14:07:23.875Z",
+  "missionId": "mission-0afa570c-a716-416f-8916-d5e48bdcf0f1",
+  "implementation": {
+    "gitRevision": "5aac506a609bc32b301d47b753597c8ed5344224",
+    "committedTree": "8eb65fd3e5bf2dd37b99e6ba97e75ecd3efe443c",
+    "worktreeState": "clean",
+    "sourceTreeDigest": "sha256:8de103daf6381d95423827917d72c7557007ae15783f0e4c264a555ac29a1a01",
+    "sourceFileCount": 265,
+    "sourceTreeDigestScope": "git-visible-tracked-and-untracked-nonignored",
+    "sourceTreeDigestExclusions": ["evidence/v1-flagship-local-2026-08-26.json"],
+    "freshBuildUsed": true,
+    "sourceInputsStableAfterBuild": true,
+    "distributionDigest": "sha256:215b548e86d37dd93a2d1bb4e0628d887e707e342f19e5f6dc00530ffed053db"
+  },
+  "environment": {
+    "nodeVersion": "v26.4.0",
+    "qoderVersion": "1.1.6",
+    "claudeVersion": "2.1.246"
+  },
+  "fallback": {
+    "qoderAttemptId": "attempt-ff43def8-5309-4307-8e80-ab9f13aba0a5",
+    "claudeAttemptId": "attempt-f07d9787-b6fd-4a2d-8fb8-4928772bec21",
+    "plannerDecisionHash": "c58b9dd5cd9599c740a025dd9ec27971513a279062cfbc7768d911c98496b6b9",
+    "plannerOverrideId": "planner-override-01ed0db2-22e9-44b5-bbc9-37c32e90a7ab",
+    "plannerOverrideStageId": "claude-prompt",
+    "capsuleId": "capsule-6e52c1b983304f7e335f2cdec0a91873dcd6813c5d1dbfe22165e3014abdab57",
+    "acknowledgementBeforeTool": true,
+    "modifiedGate": {
+      "attemptId": "attempt-f07d9787-b6fd-4a2d-8fb8-4928772bec21",
+      "gateId": "gate-911023374d71628c5aeb61cb9933f81b",
+      "effectId": "effect-5daf89ca4da7980e85a2756b57c2efe1",
+      "requestSha256": "a82904f8efbdab68712fa86dd9ec2015b90cf7db019be6e0b4bbd5e5bc5ba371",
+      "originalInput": {
+        "content": "ORIGINAL\n",
+        "file_path": "/private/var/folders/s6/97lfn3_942g3b1w0cw82sgz00000gn/T/missionbraid-v1-flagship-WF55Zp/workspace/original.txt"
+      },
+      "updatedInput": {
+        "content": "APPROVED\n",
+        "file_path": "/var/folders/s6/97lfn3_942g3b1w0cw82sgz00000gn/T/missionbraid-v1-flagship-WF55Zp/workspace/approved.txt"
+      },
+      "decision": "modify"
+    },
+    "receiptId": "receipt-c6f76166-5bcb-4c96-902f-91886855651a",
+    "receiptOutcome": "rejected"
+  },
+  "externalEffect": {
+    "effectId": "effect-flagship-crash-reconcile",
+    "idempotencyKey": "flagship-create-once-mission-0afa570c-a716-416f-8916-d5e48bdcf0f1",
+    "postCount": 1,
+    "calls": [
+      "POST:flagship-create-once-mission-0afa570c-a716-416f-8916-d5e48bdcf0f1",
+      "GET:flagship-create-once-mission-0afa570c-a716-416f-8916-d5e48bdcf0f1"
+    ],
+    "reconciledSource": "lookup"
+  },
+  "diagnostic": {
+    "checkpointId": "checkpoint-6c82f681623fe924dc05a89f86db899d2cf098651946f3be19606ca166e74a58",
+    "forkId": "execution-fork-b2d87e58fc753c7bb6cc516d81429eb155faa5e5a5b7329dabff30d091a6d79f",
+    "childBranchId": "branch-fork-35afb94a-8ad4-4137-b3d1-18c21a938738",
+    "changedPaths": ["agent-config.json"],
+    "staleCandidateId": "failure-candidate-d809bed1ef17cb0158ba2ae195e9187c",
+    "toolCandidateId": "failure-candidate-6c12485e5d87aa8aeb82d28d915d36ab",
+    "unknownCandidateId": "failure-candidate-dba8bc3420f8301ec256a72ef44d1a81",
+    "preexistingUnknownCandidateId": null,
+    "fullStatus": "confirmed",
+    "ablatedStatus": "inferred",
+    "toolGateDecisions": [
+      {
+        "attemptId": "fork-attempt-execution-fork-b2d87e58fc753c7bb6cc516d81429eb155faa5e5a5b7329dabff30d091a6d79f",
+        "gateId": "gate-476118b16e9497cbad02b8dca6601e8e",
+        "effectId": "effect-1b95428d880882381880a0230e551224",
+        "requestSha256": "291687bccf268786501bfba9ad4b2568ce61aec31c03a94b71ee18226dcd00d4",
+        "toolName": "Bash",
+        "decision": "approve",
+        "originalWrite": false,
+        "transport": "public-tool-gate-list-and-decision-api"
+      },
+      {
+        "attemptId": "fork-attempt-execution-fork-b2d87e58fc753c7bb6cc516d81429eb155faa5e5a5b7329dabff30d091a6d79f",
+        "gateId": "gate-d7c237f3b4c72dd9baca014ae47bcf51",
+        "effectId": "effect-f690f4c06d01fc8d06a4c5c179707368",
+        "requestSha256": "4717ab791225c9ce9163bd5eb43c751112e099b10190b2f6ee0d8009e08428b5",
+        "toolName": "Bash",
+        "decision": "approve",
+        "originalWrite": false,
+        "transport": "public-tool-gate-list-and-decision-api"
+      },
+      {
+        "attemptId": "fork-attempt-execution-fork-b2d87e58fc753c7bb6cc516d81429eb155faa5e5a5b7329dabff30d091a6d79f",
+        "gateId": "gate-111e962fbd01949268d4957abc5de630",
+        "effectId": "effect-d87cdc4167e00726d64b9f9f9ca87e85",
+        "requestSha256": "bb73ca63354549df8619073cf74004ff09a75e7612bb6718b4be58aabaf22ceb",
+        "toolName": "Bash",
+        "decision": "approve",
+        "originalWrite": false,
+        "transport": "public-tool-gate-list-and-decision-api"
+      },
+      {
+        "attemptId": "fork-attempt-execution-fork-b2d87e58fc753c7bb6cc516d81429eb155faa5e5a5b7329dabff30d091a6d79f",
+        "gateId": "gate-a58b945c0fc1aa7d47a01bfa34a3a900",
+        "effectId": "effect-85d10295f8ba66b0d3a7fbacb096f03f",
+        "requestSha256": "0624c50e9f6c8eb1c4668456e69e6761a6661e85c4b1aa0bb081c8c303fd9c21",
+        "toolName": "Bash",
+        "decision": "approve",
+        "originalWrite": false,
+        "transport": "public-tool-gate-list-and-decision-api"
+      },
+      {
+        "attemptId": "fork-attempt-execution-fork-b2d87e58fc753c7bb6cc516d81429eb155faa5e5a5b7329dabff30d091a6d79f",
+        "gateId": "gate-75811e71ad031d1693feca2fd3c3b9f3",
+        "effectId": "effect-7bccf8251f102736999286c2ca7e7f23",
+        "requestSha256": "afe996952928b0d35d4d52103fa559d7ce9222f27c2a72069f7a71029963b6b7",
+        "toolName": "Write",
+        "decision": "approve",
+        "originalWrite": false,
+        "transport": "public-tool-gate-list-and-decision-api"
+      },
+      {
+        "attemptId": "fork-attempt-execution-fork-b2d87e58fc753c7bb6cc516d81429eb155faa5e5a5b7329dabff30d091a6d79f",
+        "gateId": "gate-8e0680422dd71f137c3f92e1e0b1d73a",
+        "effectId": "effect-5d485ab4afec53cda06cdb76133b0abf",
+        "requestSha256": "0d188def67f91abff77b83c2f1fe8b7b63dc50aa827b3bf491ebf2b593bda7a8",
+        "toolName": "Bash",
+        "decision": "approve",
+        "originalWrite": false,
+        "transport": "public-tool-gate-list-and-decision-api"
+      },
+      {
+        "attemptId": "fork-attempt-execution-fork-b2d87e58fc753c7bb6cc516d81429eb155faa5e5a5b7329dabff30d091a6d79f",
+        "gateId": "gate-157e2ce4f02686f0920900e476270cd7",
+        "effectId": "effect-00dc9ae6a0ac0c91a8a9a8cdd3c79bde",
+        "requestSha256": "157f7c6dbbebcae93f380ac14cb82f1ab4d233aff3030e031fbf41a0f73c88c7",
+        "toolName": "Bash",
+        "decision": "approve",
+        "originalWrite": false,
+        "transport": "public-tool-gate-list-and-decision-api"
+      }
+    ],
+    "receiptId": "receipt-c2cb628f-02ba-4f69-8b2a-cf86ebdc59c8"
+  },
+  "outcomeRegression": {
+    "contractId": "contract-2e1bb79d55fc98bc6ecb204b9c56",
+    "suiteId": "suite-343e111986e80dbdb17ccae4e59d8005c46b4b1b6fe0d7e27e43b996bce54927",
+    "rootBranchId": "branch-root-f4046eaa-f989-45a8-9a2b-232eb0b650d7",
+    "revisedBranchId": "branch-fork-35afb94a-8ad4-4137-b3d1-18c21a938738",
+    "selectionId": "outcome-selection-71da0e43e3db1c65a4caa5a05fe583fb1359b763f0e0e2f53f2bb048b6e0e971",
+    "scenarioId": "scenario-ca358b8c030b8e5a9ed92578018d1802449218b1d2f05ea02d11150e397df554",
+    "rerunId": "outcome-kernel-rerun-47c9e5a8e04ade1c2e1bba2016aa54fe",
+    "sourceProfileId": "profile-snapshot-e62d6d6c47e6aa20c88b6d4ce077",
+    "targetProfileId": "profile-snapshot-3a912ba7f34d5098bbc38c0928d2",
+    "targetStageId": "claude-regression-upgraded",
+    "targetProfileDefinitionId": "profile-definition-d437e2d26c09a5512d13d92ccdc8",
+    "profileSelectionId": "profile-rebound-selection-0f73414f14b7ad6863bea7a0b358f173",
+    "trialIds": [
+      {
+        "branchId": "branch-outcome-trial-bb34cadb245e7d4a2e72-1",
+        "attemptId": "fork-attempt-execution-fork-159e7bcf0efad4c3a0afc7f4175486cb8ef8fd28c51f20be126463ae1c629ed7",
+        "bindingId": "fork-binding-execution-fork-159e7bcf0efad4c3a0afc7f4175486cb8ef8fd28c51f20be126463ae1c629ed7",
+        "runtimeRunId": "runtime-run-32d41239a6f6a4bc7c17683b161745d7"
+      },
+      {
+        "branchId": "branch-outcome-trial-bb34cadb245e7d4a2e72-2",
+        "attemptId": "fork-attempt-execution-fork-241a6093edf4be9877881f56b2549388e27a1ec2aea722b990989b5f939d6e4b",
+        "bindingId": "fork-binding-execution-fork-241a6093edf4be9877881f56b2549388e27a1ec2aea722b990989b5f939d6e4b",
+        "runtimeRunId": "runtime-run-70b45a335df9ba8544dec02e86eaefa0"
+      },
+      {
+        "branchId": "branch-outcome-trial-bb34cadb245e7d4a2e72-3",
+        "attemptId": "fork-attempt-execution-fork-d78504d523c9b6886c7cd7c6d44e644a415489156ce24ed5c600da9cb596c743",
+        "bindingId": "fork-binding-execution-fork-d78504d523c9b6886c7cd7c6d44e644a415489156ce24ed5c600da9cb596c743",
+        "runtimeRunId": "runtime-run-3ae04b9e1728405c2ac59f92a66dcc59"
+      }
+    ],
+    "toolGateDecisions": [
+      {
+        "attemptId": "fork-attempt-execution-fork-159e7bcf0efad4c3a0afc7f4175486cb8ef8fd28c51f20be126463ae1c629ed7",
+        "gateId": "gate-a9b918797f8fe06bb20ba73c00e81dc8",
+        "effectId": "effect-d94010efc0f5ad07debbae80904a30c6",
+        "requestSha256": "a0062f4b4935f40470b7a9dc5ea4ba040c1790e805a857026a5d2969f6c379d8",
+        "toolName": "Bash",
+        "decision": "approve",
+        "originalWrite": false,
+        "transport": "public-tool-gate-list-and-decision-api"
+      },
+      {
+        "attemptId": "fork-attempt-execution-fork-159e7bcf0efad4c3a0afc7f4175486cb8ef8fd28c51f20be126463ae1c629ed7",
+        "gateId": "gate-44447d5edf7220b3d233820fd589bb9b",
+        "effectId": "effect-175622b5a95850beaa2f32957df1ae88",
+        "requestSha256": "4e1b820b7b93c32642f30c4a2695fa4b868268600eff5002f0205bbc5ea1dcae",
+        "toolName": "Bash",
+        "decision": "approve",
+        "originalWrite": false,
+        "transport": "public-tool-gate-list-and-decision-api"
+      },
+      {
+        "attemptId": "fork-attempt-execution-fork-159e7bcf0efad4c3a0afc7f4175486cb8ef8fd28c51f20be126463ae1c629ed7",
+        "gateId": "gate-164c9a109ed943c60c8a6b381da9a7cc",
+        "effectId": "effect-7c8d86bccca499ce07d0801b20658353",
+        "requestSha256": "d6beed7d48b0b81f2f2b9dcd41fdd10322e5b14bc5ad3cb5b913a2156dbdeb29",
+        "toolName": "Bash",
+        "decision": "approve",
+        "originalWrite": false,
+        "transport": "public-tool-gate-list-and-decision-api"
+      },
+      {
+        "attemptId": "fork-attempt-execution-fork-159e7bcf0efad4c3a0afc7f4175486cb8ef8fd28c51f20be126463ae1c629ed7",
+        "gateId": "gate-418d8895672ebdaf9ffc4e1744cb2d75",
+        "effectId": "effect-97fe26105c030fc4f8b7a045c1126d54",
+        "requestSha256": "f3fdb8d6ee03ccdc2992fdbcbf75d1492636a7311b9976aa6587b2baca9ba048",
+        "toolName": "Bash",
+        "decision": "approve",
+        "originalWrite": false,
+        "transport": "public-tool-gate-list-and-decision-api"
+      },
+      {
+        "attemptId": "fork-attempt-execution-fork-159e7bcf0efad4c3a0afc7f4175486cb8ef8fd28c51f20be126463ae1c629ed7",
+        "gateId": "gate-3e8932104986b976644ee0678bca679e",
+        "effectId": "effect-4e45e7019d473908c56ec890a1633e63",
+        "requestSha256": "eacf4226007726ccbc69f20e4f1f4ab87e9fa16637dad6756092384ec6b6b832",
+        "toolName": "Write",
+        "decision": "approve",
+        "originalWrite": false,
+        "transport": "public-tool-gate-list-and-decision-api"
+      },
+      {
+        "attemptId": "fork-attempt-execution-fork-159e7bcf0efad4c3a0afc7f4175486cb8ef8fd28c51f20be126463ae1c629ed7",
+        "gateId": "gate-ed1922fd2f75ac58acb06991b801de88",
+        "effectId": "effect-db42a413aa60064179c6d19ca1132e21",
+        "requestSha256": "1a2536a7cb98e3fd25a572e027c6bf1619a9d54f9f250cebefb5b3928c113182",
+        "toolName": "Bash",
+        "decision": "approve",
+        "originalWrite": false,
+        "transport": "public-tool-gate-list-and-decision-api"
+      },
+      {
+        "attemptId": "fork-attempt-execution-fork-159e7bcf0efad4c3a0afc7f4175486cb8ef8fd28c51f20be126463ae1c629ed7",
+        "gateId": "gate-aa9f55e39bffca755537e650de5db639",
+        "effectId": "effect-906040022bca785a34744367da8f0d77",
+        "requestSha256": "09c350d6fd37e7cbd432e900a054195dddbc4061461402e94778fbaa63aaaf2e",
+        "toolName": "Bash",
+        "decision": "approve",
+        "originalWrite": false,
+        "transport": "public-tool-gate-list-and-decision-api"
+      },
+      {
+        "attemptId": "fork-attempt-execution-fork-241a6093edf4be9877881f56b2549388e27a1ec2aea722b990989b5f939d6e4b",
+        "gateId": "gate-8e18fac8f673be4ee194a7ee7c4b707f",
+        "effectId": "effect-75d746ea241c54f214260d88250e063e",
+        "requestSha256": "4e13b165b1a56cb12e231b796450cde1030fcf1cd8a7df23c01a8bab6e3ee77e",
+        "toolName": "Bash",
+        "decision": "approve",
+        "originalWrite": false,
+        "transport": "public-tool-gate-list-and-decision-api"
+      },
+      {
+        "attemptId": "fork-attempt-execution-fork-241a6093edf4be9877881f56b2549388e27a1ec2aea722b990989b5f939d6e4b",
+        "gateId": "gate-58142e4150108e808815d390f5483a1d",
+        "effectId": "effect-02707e673599e62a5f8ff1a0b5b96d85",
+        "requestSha256": "574fd802df55dd64b74a42a9842902572c8e6d561a491fad9c3232835a62ab01",
+        "toolName": "Bash",
+        "decision": "approve",
+        "originalWrite": false,
+        "transport": "public-tool-gate-list-and-decision-api"
+      },
+      {
+        "attemptId": "fork-attempt-execution-fork-241a6093edf4be9877881f56b2549388e27a1ec2aea722b990989b5f939d6e4b",
+        "gateId": "gate-dda3292121ef2cf6f09b03fda9835a87",
+        "effectId": "effect-67b28e7f837e8f32677720fbaeb87257",
+        "requestSha256": "a861348b55212aac6f8c79691564246de3a6e0521047dcbd52f9678dbb79d072",
+        "toolName": "Write",
+        "decision": "approve",
+        "originalWrite": false,
+        "transport": "public-tool-gate-list-and-decision-api"
+      },
+      {
+        "attemptId": "fork-attempt-execution-fork-241a6093edf4be9877881f56b2549388e27a1ec2aea722b990989b5f939d6e4b",
+        "gateId": "gate-638891909e525ff11c2ac9ce7e6b115c",
+        "effectId": "effect-516a275b14eb73d172ab25a75fa16577",
+        "requestSha256": "f3ead80eef0be077b4948b9634ae8d7828d925cf39f3bfcf3d6c3159d3c60e03",
+        "toolName": "Bash",
+        "decision": "approve",
+        "originalWrite": false,
+        "transport": "public-tool-gate-list-and-decision-api"
+      },
+      {
+        "attemptId": "fork-attempt-execution-fork-241a6093edf4be9877881f56b2549388e27a1ec2aea722b990989b5f939d6e4b",
+        "gateId": "gate-0c35583040c845f1127975d3bd2fc809",
+        "effectId": "effect-0089f1d11236d66f3188a4b2b092439f",
+        "requestSha256": "da12c6f9c4407c28b698d7fc59c70b4a12b16e469d56c09b724a30f80eb27f2b",
+        "toolName": "Bash",
+        "decision": "approve",
+        "originalWrite": false,
+        "transport": "public-tool-gate-list-and-decision-api"
+      },
+      {
+        "attemptId": "fork-attempt-execution-fork-241a6093edf4be9877881f56b2549388e27a1ec2aea722b990989b5f939d6e4b",
+        "gateId": "gate-f0d5794f4794e9a48e5d4ebb38ca4c63",
+        "effectId": "effect-aded62aa7bf1c77ef1bc7adf6757e054",
+        "requestSha256": "ebb4b6b11cacea0a942a81f19e8a5bfc61a3289b224bb3374a29962799d5306b",
+        "toolName": "Bash",
+        "decision": "approve",
+        "originalWrite": false,
+        "transport": "public-tool-gate-list-and-decision-api"
+      },
+      {
+        "attemptId": "fork-attempt-execution-fork-d78504d523c9b6886c7cd7c6d44e644a415489156ce24ed5c600da9cb596c743",
+        "gateId": "gate-b65a21da222c2e60e478632cb4247cf9",
+        "effectId": "effect-9656e1cdbef277b2c56901875e28cd8b",
+        "requestSha256": "ea6f3c4430dec1e3c98b4cab3ead2294fd2e72bd04ad0a8bcc27ef3a5d8608ed",
+        "toolName": "Bash",
+        "decision": "approve",
+        "originalWrite": false,
+        "transport": "public-tool-gate-list-and-decision-api"
+      },
+      {
+        "attemptId": "fork-attempt-execution-fork-d78504d523c9b6886c7cd7c6d44e644a415489156ce24ed5c600da9cb596c743",
+        "gateId": "gate-374dddb947fe5b7499324b70de75e44a",
+        "effectId": "effect-81ac8bd757d1570c843819556dbfda70",
+        "requestSha256": "e76cd3217d6cf2a32ca1c6a14bd3e76f3175d6f884d12debb180ba17c06cde09",
+        "toolName": "Bash",
+        "decision": "approve",
+        "originalWrite": false,
+        "transport": "public-tool-gate-list-and-decision-api"
+      },
+      {
+        "attemptId": "fork-attempt-execution-fork-d78504d523c9b6886c7cd7c6d44e644a415489156ce24ed5c600da9cb596c743",
+        "gateId": "gate-859365b5d1132b0aecdcfbbdf759b2e5",
+        "effectId": "effect-56b3bc5eae426f72d3dceb49d0021b9a",
+        "requestSha256": "c373304f642229ffb872720261dad2f99aeb4e5039248eb13948cb9dfc4e1a08",
+        "toolName": "Bash",
+        "decision": "approve",
+        "originalWrite": false,
+        "transport": "public-tool-gate-list-and-decision-api"
+      },
+      {
+        "attemptId": "fork-attempt-execution-fork-d78504d523c9b6886c7cd7c6d44e644a415489156ce24ed5c600da9cb596c743",
+        "gateId": "gate-234a73190c549b7962d8b11b77e1da18",
+        "effectId": "effect-2369a0869c49c080755947d04e872cc3",
+        "requestSha256": "49ec7f3001e45a7ec5391450509cf454bc3d313809bb3ef3b7ff39258a8823ea",
+        "toolName": "Write",
+        "decision": "approve",
+        "originalWrite": false,
+        "transport": "public-tool-gate-list-and-decision-api"
+      },
+      {
+        "attemptId": "fork-attempt-execution-fork-d78504d523c9b6886c7cd7c6d44e644a415489156ce24ed5c600da9cb596c743",
+        "gateId": "gate-8df0826d945aaaa8633c1aabdf33147b",
+        "effectId": "effect-7f05957be7dd164dd8c9101af0a53c08",
+        "requestSha256": "e493c4265ce725c9620180c675161cfa5db92d0c8faf84503e8fa2c7d362e881",
+        "toolName": "Bash",
+        "decision": "approve",
+        "originalWrite": false,
+        "transport": "public-tool-gate-list-and-decision-api"
+      },
+      {
+        "attemptId": "fork-attempt-execution-fork-d78504d523c9b6886c7cd7c6d44e644a415489156ce24ed5c600da9cb596c743",
+        "gateId": "gate-6fa77a3e199fb18d13dc1a45902ee58a",
+        "effectId": "effect-6db5d4d8696f3a8654860cc6d3199060",
+        "requestSha256": "323597fd59bbb31c2bfe86924c87aa6c5df42ae87dbb998e2a9086dc7cbd464f",
+        "toolName": "Bash",
+        "decision": "approve",
+        "originalWrite": false,
+        "transport": "public-tool-gate-list-and-decision-api"
+      }
+    ],
+    "retainedCiExitCode": 0,
+    "blockedCiExitCode": 1
+  },
+  "plan": {
+    "initialContractRevisionId": "contract-revision-e707b5442e1ef5a898aba6d0",
+    "revisedContractRevisionId": "contract-revision-91f2652752f79ecffd099f2a",
+    "qoderToolAttemptId": "attempt-plan-b7b4a90b0633c039f509fc3c1332",
+    "qoderToolArtifactId": "plan-artifact-d3a8e2b5f63b01ccf677af834a4a",
+    "reusedToolArtifactId": "plan-artifact-reuse-a432b39e8ba1cd6b9142fed7fc28",
+    "claudeV1AttemptId": "attempt-plan-2a4b80655ac11ce859be1c89b3e0",
+    "claudeV1Status": "abandoned",
+    "claudeV2AttemptId": "attempt-plan-51ed957c6c4af314a04ab22c9d40",
+    "consolidationId": "consolidation-e8530973636dff9c8047b9a3",
+    "receiptId": "receipt-362fd879-2ac8-442d-aad5-e9822bead8fe"
+  },
+  "restart": {
+    "stableHeadHash": true,
+    "stableReceipt": true,
+    "stableCheckpointForkPlanScenarioAndRerunIdentities": true,
+    "externalEffectCallsAdded": 0
+  },
+  "proofRoot": "/var/folders/s6/97lfn3_942g3b1w0cw82sgz00000gn/T/missionbraid-v1-flagship-WF55Zp",
+  "claimBoundary": "This is same-host local evidence from one Mission identity, real installed Qoder/Qwen3.8-Max and Claude Code/deepseek-v4-pro processes, a controlled provider termination, a real native Claude pre-tool Hook, deterministic verifiers, a local queryable HTTP target with controller SIGKILL, Git worktrees, and standalone CI. It proves the listed workflow only in this controlled fixture. The provider termination and exit-17 tool probe are deliberately induced observation boundaries. Scenario reruns use a Planner-selected Profile-Rebound from the source Claude Profile to a separately declared higher-reasoning Claude Profile with the same native tool-control capability, while changing only the accepted Context intervention. It does not claim production adoption, cross-host execution, provider-internal Context capture, organizational approval, publication, or independent third-party reproduction."
+}

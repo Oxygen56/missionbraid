@@ -1,6 +1,6 @@
 # MissionBraid Architecture
 
-> **Status:** final target architecture with a working pre-alpha foundation.
+> **Status:** final target architecture with a working 1.0 source candidate.
 > The repository already implements the Mission Kernel, bilingual local
 > Workbench, append-only event state, direct Codex/Qoder/Claude Code execution,
 > the four-part Runtime Profile model, source-scoped Event IR with sanitized
@@ -10,17 +10,12 @@
 > Execution Fork worktrees, adaptive Profile planning, the four Replay
 > semantics, Failure Intelligence, executable Mission Plan coordination,
 > Outcome Studio scenario export, controller-run out-of-process verification,
-> and Outcome Receipts.
-> Iterations 1–6 have same-host local evidence records; Iteration 7 has one
-> same-host stale-Context diagnostic record. Iteration 8 has a retained
-> same-host controlled-Git-fixture record using real local Qoder/Qwen3.8-Max
-> and Claude Code/deepseek-v4-pro through the Workbench HTTP flow.
-> The 1.0 source candidate contains implementation surfaces for all ten planned
-> iterations. Iteration 9 has retained same-host evidence for a saved incident
-> rerun with an accepted Context intervention on a distinct Planner-selected
-> high-reasoning Qoder/Qwen3.8-Max Profile, passing a predeclared 3/3 threshold,
-> plus a fail-closed checker copied outside the repository. Iteration 10 has one
-> internal clean-install, migration, and lockfile-bearing source-bundle record.
+> and Outcome Receipts. A retained
+> [unified flagship](../evidence/v1-flagship-local-2026-08-26.json) now connects
+> the main Iteration 1–9 runtime path under one Mission identity; earlier
+> iteration records remain historical capability slices. Iteration 10 retains a
+> separate internal clean-install, migration, and lockfile-bearing source-bundle
+> record. This is project-operated, same-host or internal clean-install evidence.
 > npm publication, cross-host proof, independent external reproduction, and
 > production adoption remain open.
 
@@ -91,6 +86,36 @@ comparison, or explicit user choice.
    within the available evidence boundary, evaluates the immutable Contract
    revision, issues an Outcome Receipt, and can save the case as a regression
    scenario for later local or CI execution.
+
+### Retained flagship instantiation
+
+The abstract loop above is exercised by one retained Mission rather than only
+by isolated feature fixtures:
+
+```text
+controlled Qoder failure → planned/manual-override Handoff to Claude
+→ native pre-tool Write modification → deterministic stale-Context rejection
+→ one external Effect reconciled after controller crash
+→ Composite Checkpoint → Context-only Execution Fork
+→ confirmed mechanism + honest unknown + evidence ablation
+→ fixture-declared Branch selection → 3 real upgraded-Profile trials
+→ fail-closed standalone CI → parallel Qoder/Claude Mission Plan
+→ live Contract revision → selective fence + Artifact reuse
+→ independent consolidation → latest Receipt → stable restart
+```
+
+The [record](../evidence/v1-flagship-local-2026-08-26.json) binds the chain to
+Mission `mission-0afa570c-a716-416f-8916-d5e48bdcf0f1`, real installed
+Qoder/Qwen3.8-Max and Claude Code/deepseek-v4-pro processes, deterministic
+verifiers, Git worktrees, a native Claude pre-tool Hook, a queryable local HTTP
+target, and a standalone CI process. The provider termination and tool-error
+probe are deliberately induced, and the fallback target uses a recorded manual
+planner override. Its Branch-selection authority is a fixture-declared field,
+not evidence of live human interaction or identity verification. The run
+establishes only this same-host controlled fixture; it is not evidence of
+natural-failure recovery, provider-internal Context, Profile-only causality,
+cross-host execution, independent operation, general reliability, or production
+use.
 
 ```mermaid
 sequenceDiagram
@@ -375,9 +400,12 @@ node Artifact only after its deterministic verifier passes. A live Contract
 revision fences affected active work, adopts only unaffected verifier-backed
 Artifacts into the new Plan revision, and runs a new consolidation Attempt over
 the selected source commits. The final Receipt names the current Contract and
-Plan revisions. This behavior has controlled adapter-backed integration
-coverage; a retained real Qoder and Claude Code evidence record is still in
-progress.
+Plan revisions. The unified flagship retains this complete path with real Qoder
+and Claude Code Attempts: the Claude Attempt for Contract revision 1 is
+selectively fenced, Qoder's verified Artifact is adopted into the revised Plan,
+the Claude Attempt for revision 2 runs, and an independent consolidation Attempt
+reaches the latest-revision Receipt. The earlier Iteration 8 record remains a
+focused historical slice.
 
 ### Runtime inventory, Profile, and Attempt Binding
 
@@ -567,9 +595,13 @@ and conclusions. Conclusions are `observed`, `inferred`, `confirmed`, or
 `unknown`. An LLM may summarize evidence or propose a probe, but it cannot
 promote its own hypothesis to confirmed.
 
-The current Iteration 7 record confirms one stale-Context mechanism in a
-controlled fixture. It does not establish calibrated attribution across the
-other five layers or general diagnosis accuracy.
+The unified flagship confirms one stale-Context mechanism with a Context-only
+Execution Fork, preserves a distinct tool-layer observation and an honest
+unknown, and downgrades the conclusion from `confirmed` to `inferred` when the
+decisive diagnostic outcome is removed. This establishes the evidence semantics
+for one controlled fixture; it does not establish calibrated attribution across
+the other layers or general diagnosis accuracy. The Iteration 7 record remains
+a focused historical slice.
 
 ### Outcome Receipt
 
@@ -737,58 +769,52 @@ computes which plan nodes and artifacts are affected, stops work that is now
 stale, preserves unaffected results, and replans the invalidated frontier. The
 original revision and its branches remain inspectable.
 
-## Current implementation and target boundary
+## Current implementation and stronger boundaries
 
-| Capability                   | Current repository                                                                                                                                    | Final architecture                                                                       |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Mission and Outcome Contract | Implemented                                                                                                                                           | Versioned Mission Plan and live revisions                                                |
-| Local Workbench              | Implemented, including persisted English/Chinese switching                                                                                            | Full Runtime, trace, debug, branch and outcome views                                     |
-| Branch                       | Root and immutable child lineage; isolated Execution Fork and A/B view                                                                                | Broader executable lineage and comparison modes                                          |
-| Runtime Profiles             | Definition, Catalog Observation, immutable Snapshot, and Attempt Binding                                                                              | Effective environment and capability graph                                               |
-| Agent Revision               | Content-addressed effective Revision projection and dimension comparison                                                                              | Broader native config capture and revision history                                       |
-| Execution                    | Direct Codex/Qoder/Claude; real Qoder stale-Context diagnostic Attempt                                                                                | Direct, ACP, and provider-backed adapters                                                |
-| Commands                     | Durable accepted command/outbox dispatch with restart recovery                                                                                        | Durable path for every control operation                                                 |
-| Events                       | Live source-scoped Event IR plus sanitized native artifacts                                                                                           | Broader live Agent Event IR semantic coverage                                            |
-| Context                      | Live Context Graph, freshness evidence, and refreshed-context Branch                                                                                  | Richer query, revision, and comparison operations                                        |
-| Tools/Effects                | Supported Claude pre-tool gate and queryable external Effect recovery                                                                                 | Broader gateway, permissions, and Effect adapters                                        |
-| Checkpoint                   | Git-backed Composite Checkpoint with explicit component dispositions                                                                                  | Broader multi-layer restorable safe points                                               |
-| Replay/Fork                  | Playback, cached replay, model-only resample, and isolated Execution Fork                                                                             | Broader native session/workspace restoration                                             |
-| Handoff                      | Deterministic adaptive Profile planner and Codex-to-Claude/Qoder Capsule                                                                              | Debug-aware cross-Harness continuation                                                   |
-| Failure attribution          | Evidence graph plus one real stale-Context diagnostic Branch                                                                                          | More real-layer probes and calibrated conclusions                                        |
-| Planner                      | Deterministic filter/rank/bind projection with inspectable decisions                                                                                  | Broader quota/outcome learning and policy history                                        |
-| Mission Plan runtime         | Parallel isolated node execution, live selective invalidation/reuse, new consolidation Attempt, latest-revision Receipt, and Workbench/API projection | Broader node roles, shared-resource coordination, and provider-backed execution policies |
-| Verification                 | Out-of-process verifier, Receipt, Outcome Studio, saved-incident rerun, real Qoder 3/3 threshold, and outside-repository fail-closed checker          | Hosted CI/operator reproduction and broader regression calibration                       |
-| Packaging and extension      | Public Adapter SDK; internal clean-install CLI/Workbench/Fork identity chain; v1→v2 migration; lockfile-bearing source-bundle reproduction            | npm publication, independent Adapter/operator reproduction, and cross-host validation    |
+| Capability                   | Current 1.0 source candidate                                                                                                            | Stronger boundary still open                                                   |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Mission and Outcome Contract | Versioned Contract and Plan revisions, selective impact analysis, latest-revision Receipt                                               | Broader plan roles and distributed policy                                      |
+| Local Workbench              | English/Chinese Mission, Runtime, trace, tool-gate, Checkpoint/Fork, failure, Plan, and Outcome surfaces                                | Broader interaction and independently operated validation                      |
+| Branch                       | Root and immutable child lineage, isolated Execution Fork, comparison and saved incidents                                               | Native-session Fork where a Harness can prove it                               |
+| Runtime Profiles             | Definition, Catalog Observation, immutable Snapshot, Attempt Binding, deterministic planning and Profile-Rebound                        | Broader official quota/cost inputs and calibrated outcome learning             |
+| Agent Revision               | Content-addressed effective Revision projection and dimension comparison                                                                | Broader native configuration capture                                           |
+| Execution                    | Direct Codex/Qoder/Claude plus public direct, ACP, and provider-backed Adapter contracts                                                | More real execution Adapters and cross-host providers                          |
+| Commands and events          | Durable command/outbox recovery; live source-scoped Event IR and sanitized native artifacts                                             | Wider native semantic and control coverage                                     |
+| Context and debugging        | Live Context Graph, native Claude pre-tool gate, freshness evidence, Context-only diagnostic Fork                                       | More provider-native gates and multi-layer probes                              |
+| Effects                      | Scoped Effect identities, no-repeat inheritance, and query-before-retry reconciliation after controller crash                           | More external-system adapters; no universal exactly-once claim                 |
+| Checkpoint/Replay/Fork       | Git-backed Composite Checkpoint; Playback, Cached Replay, model-only Resample, isolated Execution Fork                                  | Broader restorable environment and native session state                        |
+| Handoff                      | Deterministic planner, compatibility projection, Capsule and acknowledgement across real Qoder/Claude                                   | Natural-failure and cross-host continuity                                      |
+| Failure attribution          | Evidence graph with confirmed, observed, inferred, unknown, and ablation behavior for one real stale-Context case                       | Calibrated coverage across more failure layers                                 |
+| Mission Plan runtime         | Parallel isolated real-Agent nodes, live selective fencing, verified Artifact reuse, independent consolidation, latest-revision Receipt | Distributed coordination and richer shared-resource policy                     |
+| Verification                 | Out-of-process verifier, Outcome Studio, executable incident, three real Profile-Rebound trials, fail-closed standalone checker         | Hosted/independent CI and broader regression calibration                       |
+| Packaging and extension      | Public Adapter SDK; internal clean-install CLI/Workbench/Fork chain; v1→v2 migration; lockfile-bearing source bundle                    | npm publication, independent Adapter/operator reproduction, cross-host install |
 
-The current records answer four different product questions:
+### Evidence organization
 
-- **daily Agent debugging — [Iteration 7 stale Context](../evidence/iteration-7-stale-context-2026-08-26.json):**
-  a controlled fixture binds old Context to a real Qoder/Qwen3.8-Max Attempt,
-  records the freshness mismatch, and launches an isolated new Attempt/process
-  on the same Harness/Profile, Contract, and authority with a declared Context
-  refresh intervention. The out-of-process verifier changes from rejected to
-  verified, and the regression identity survives restart. This is not the
-  original Qoder Session continuing, does not prove every other hidden or
-  unobserved input stayed equal, and confirms only this stale-Context
-  mechanism. The refreshed cache applies only to that diagnostic Attempt and
-  is not persisted as a portable input for later Attempts;
-- **execution-state branching — [Iteration 5 Execution Fork](../evidence/iteration-5-execution-fork-local-2026-08-26.json):**
-  a Git-backed Composite Checkpoint starts a fresh Codex process in an isolated
-  child worktree and retains both Receipts plus external-Effect inheritance;
-- **conditional Runtime change — [Iteration 6 Handoff](../evidence/iteration-6-adaptive-handoff-local-2026-08-26.json):**
-  a controlled interruption exercises deterministic Profile selection and a
-  cross-Harness Capsule acknowledgement path;
-- **live Mission revision — [Iteration 8 multi-Agent revision](../evidence/iteration-8-multi-agent-revision-local-2026-08-26.json):**
-  Workbench HTTP creates, starts, revises, queries, and completes one Mission
-  using real local Qoder/Qwen3.8-Max and Claude Code/deepseek-v4-pro in a
-  controlled Git fixture. The revision selectively interrupts affected work,
-  reuses an unaffected verifier-backed Artifact, creates an independent
-  consolidation Attempt, issues a latest-revision Receipt, and remains
-  consistent after restart.
+The [unified flagship record](../evidence/v1-flagship-local-2026-08-26.json) is
+the primary product evidence. It shows that the architecture's control and data
+planes cooperate through one Mission: planner and Handoff, native tool gate,
+Kernel rejection, external Effect recovery, Checkpoint and Fork, Failure
+Intelligence, Outcome Studio, Mission Plan revision and consolidation, Receipt,
+and restart.
 
-All four are same-host records. They do not establish native session
-migration, natural-failure recovery, provider-internal state, cross-host or
-distributed execution, independent external reproduction, or production
+The Iteration 5–10 records remain historical capability slices rather than the
+main product story:
+
+- Iteration 5 isolates all four Replay semantics and the Execution Fork state
+  boundary;
+- Iteration 6 isolates adaptive filtering, ranking, Handoff, and acknowledgement;
+- Iteration 7 isolates the earlier Qoder stale-Context mechanism;
+- Iteration 8 isolates real Qoder/Claude selective revision and consolidation;
+- Iteration 9 isolates a Qoder 3/3 incident regression and fail-closed checker;
+- Iteration 10 isolates internal clean installation, migration, Adapter
+  extension, and source-bundle reproduction.
+
+The flagship is one same-host controlled-fixture run. The historical records
+are likewise local or internal clean-install evidence. None establishes native
+session migration, natural-failure recovery, provider-internal state,
+Profile-only causality, cross-host or distributed execution, independent
+external reproduction, npm publication, general reliability, or production
 readiness.
 
 ## Integration and claim boundaries
