@@ -976,9 +976,11 @@ async function approveExecutionForkGates({ baseUrl, missionId, signal, timeoutMs
     if (Date.now() >= deadline) {
       throw new Error(`Execution Fork Tool Gate approval timed out for Mission ${missionId}.`);
     }
-    const detail = await requestJson(`${baseUrl}/api/v1/missions/${encodeURIComponent(missionId)}`);
+    const gateList = await requestJson(
+      `${baseUrl}/api/v1/missions/${encodeURIComponent(missionId)}/tool-gates`,
+    );
     if (signal.aborted) break;
-    for (const gate of detail.toolGates ?? []) {
+    for (const gate of gateList.toolGates ?? []) {
       if (handled.has(gate.gateId)) continue;
       if (!gate.attemptId.startsWith('fork-attempt-')) {
         throw new Error(`Unexpected non-Fork pending Tool Gate ${gate.gateId}.`);
@@ -997,7 +999,7 @@ async function approveExecutionForkGates({ baseUrl, missionId, signal, timeoutMs
         toolName: gate.toolName,
         decision: 'approve',
         originalWrite,
-        transport: 'public-mission-detail-and-decision-api',
+        transport: 'public-tool-gate-list-and-decision-api',
       });
     }
     await wait(150);

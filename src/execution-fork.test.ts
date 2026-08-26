@@ -37,6 +37,52 @@ afterEach(() => {
 });
 
 describe('executable execution Fork', () => {
+  it('keeps an append tail without accepting an externally changed journal', async () => {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'missionbraid-fork-tail-')));
+    disposableRoots.push(root);
+    const state = join(root, 'state');
+    const forkId = 'execution-fork-tail-cache';
+    const journal = new FileExecutionForkEvidenceJournal(state);
+    await journal.append({
+      forkId,
+      type: 'runtime.evidence',
+      occurredAt: '2026-08-26T00:00:00.000Z',
+      payload: {
+        evidence: {
+          evidenceId: 'evidence-tail-first',
+          kind: 'runtime',
+          observedAt: '2026-08-26T00:00:00.000Z',
+          contentDigest: 'sha256:tail-first',
+          evidenceRefs: ['runtime:tail-first'],
+          summary: 'First cached append boundary.',
+        },
+      },
+    });
+    const path = join(state, `${forkId}.jsonl`);
+    writeFileSync(path, `${readFileSync(path, 'utf8')} `);
+
+    await expect(
+      journal.append({
+        forkId,
+        type: 'runtime.evidence',
+        occurredAt: '2026-08-26T00:00:01.000Z',
+        payload: {
+          evidence: {
+            evidenceId: 'evidence-tail-second',
+            kind: 'runtime',
+            observedAt: '2026-08-26T00:00:01.000Z',
+            contentDigest: 'sha256:tail-second',
+            evidenceRefs: ['runtime:tail-second'],
+            summary: 'Second cached append boundary.',
+          },
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'FORK_EVIDENCE_CORRUPT' });
+    await expect(new FileExecutionForkEvidenceJournal(state).load(forkId)).rejects.toMatchObject({
+      code: 'FORK_EVIDENCE_CORRUPT',
+    });
+  });
+
   it('continues with real tools in B while A stays immutable, then rebuilds and cleans after restart', async () => {
     const fixture = createGitFixture();
     const journalDirectory = join(fixture.repositoryRoot, '.missionbraid', 'execution-forks');

@@ -2523,6 +2523,7 @@ export class MissionEngine {
       let forkToolGatewayError: unknown;
       let forkToolGatewayWatcher: Promise<void> | undefined;
       const forkToolGatewayController = new AbortController();
+      const executionForkMissionHistory = [...this.#store.listEvents(missionId)];
       const mirroredJournal: ExecutionForkEvidenceJournalV1 = {
         append: async (draft: ExecutionForkEventDraftV1): Promise<ExecutionForkEventV1> => {
           const sourceEvent = await fileJournal.append(draft);
@@ -2546,7 +2547,7 @@ export class MissionEngine {
             ...executionForkEventToMissionEvents(
               sourceEvent,
               { missionId, childAttemptId, binding, occurredAt: sourceEvent.occurredAt },
-              this.#store.listEvents(missionId),
+              executionForkMissionHistory,
             ),
           ];
           if (sourceEvent.type === 'fork.planned') {
@@ -2572,7 +2573,8 @@ export class MissionEngine {
               },
             });
           }
-          this.#store.appendEvents(kernelEvents, fence);
+          const appended = this.#store.appendEvents(kernelEvents, fence);
+          executionForkMissionHistory.push(...appended.map((result) => result.event));
           if (sourceEvent.type === 'fork.planned' && stage.breakpoint === 'mutable-tools') {
             try {
               if (forkToolGateway !== undefined || forkToolGateBinding !== undefined) {

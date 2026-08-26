@@ -34,6 +34,7 @@ import type {
   MissionExternalEffectRequestV1,
   MissionStatusView,
   MissionTimelineEntry,
+  MissionToolGateView,
 } from './engine.js';
 import type { RuntimeCatalogEntry } from './runtime-catalog.js';
 import type { MissionFailureIntelligenceProjectionV1 } from './mission-failure-intelligence.js';
@@ -398,6 +399,57 @@ describe('MissionBraid local app', () => {
       expect(event).not.toContain('id: 1');
     } finally {
       controller.abort();
+      await app.close();
+    }
+  });
+
+  it('reads pending Tool Gates without loading the full Mission detail view', async () => {
+    const fixture = await createWorkspace();
+    const state = new FakeEngineState();
+    const missionId = 'mission-tool-gates';
+    state.missions.set(missionId, projection(missionId, 'running'));
+    state.toolGates.set(missionId, [toolGateFixture(missionId)]);
+    const app = await startMissionBraidApp({
+      stateDir: fixture.stateDir,
+      port: 0,
+      engineFactory: () => new FakeEngine(state),
+      discoverRuntimes: async () => readyCatalog(),
+    });
+    try {
+      const response = await fetch(`${app.url}/api/v1/missions/${missionId}/tool-gates`);
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({
+        toolGates: [toolGateFixture(missionId)],
+      });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('reports when lightweight Tool Gate inspection is unavailable', async () => {
+    const fixture = await createWorkspace();
+    const state = new FakeEngineState();
+    const missionId = 'mission-tool-gates-unavailable';
+    state.missions.set(missionId, projection(missionId, 'running'));
+    const app = await startMissionBraidApp({
+      stateDir: fixture.stateDir,
+      port: 0,
+      engineFactory: () => {
+        const engine = new FakeEngine(state);
+        Object.defineProperty(engine, 'pendingToolGates', { value: undefined });
+        return engine;
+      },
+      discoverRuntimes: async () => readyCatalog(),
+    });
+    try {
+      const response = await fetch(`${app.url}/api/v1/missions/${missionId}/tool-gates`);
+      expect(response.status).toBe(501);
+      expect(await response.json()).toEqual({
+        error: 'RequestError',
+        code: 'TOOL_GATE_UNAVAILABLE',
+        message: 'Tool Gate inspection is unavailable.',
+      });
+    } finally {
       await app.close();
     }
   });
@@ -894,6 +946,7 @@ class FakeEngineState {
   }> = [];
   readonly plannerCandidates = new Map<string, MissionExecutionPlannerCandidateV1[]>();
   readonly plannerOverrides = new Map<string, MissionExecutionPlannerOverrideV1>();
+  readonly toolGates = new Map<string, MissionToolGateView[]>();
 }
 
 class FakeEngine implements AppEngine {
@@ -1034,6 +1087,11 @@ class FakeEngine implements AppEngine {
   async checkpointReplays(missionId: string): Promise<readonly CheckpointReplayRecordV1[]> {
     this.#require(missionId);
     return this.#state.checkpointReplayRecords.get(missionId) ?? [];
+  }
+
+  async pendingToolGates(missionId: string): Promise<readonly MissionToolGateView[]> {
+    this.#require(missionId);
+    return this.#state.toolGates.get(missionId) ?? [];
   }
 
   async coordinateExternalEffect(
@@ -1235,6 +1293,26 @@ function plannerCandidate(
       requestedModel,
       injectionBudgetTokens: 2_000,
     },
+  };
+}
+
+function toolGateFixture(missionId: string): MissionToolGateView {
+  return {
+    schemaVersion: 1,
+    missionId,
+    attemptId: 'attempt-tool-gate',
+    gateId: `gate-${'a'.repeat(32)}`,
+    effectId: 'effect-tool-gate',
+    toolUseIdSha256: 'b'.repeat(64),
+    sessionIdSha256: 'c'.repeat(64),
+    originalInputSha256: 'd'.repeat(64),
+    requestSha256: 'e'.repeat(64),
+    hookEventName: 'PreToolUse',
+    toolName: 'Bash',
+    toolInput: { command: 'pnpm test' },
+    requestedAt: '2026-08-24T03:00:00.000Z',
+    controlLevel: 'enforced',
+    scope: 'shared_resource',
   };
 }
 

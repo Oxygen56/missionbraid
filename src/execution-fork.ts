@@ -297,6 +297,19 @@ export interface ExecutionForkEvidenceJournalV1 {
   load(forkId: string): Promise<readonly ExecutionForkEventV1[]>;
 }
 
+interface ExecutionForkJournalFileState {
+  readonly device: number;
+  readonly inode: number;
+  readonly size: number;
+  readonly modifiedAtMs: number;
+}
+
+interface ExecutionForkJournalTail {
+  readonly sequence: number;
+  readonly eventHash: string | null;
+  readonly fileState: ExecutionForkJournalFileState | null;
+}
+
 /**
  * A small append-only, hash-chained evidence journal. It supports restart
  * reconstruction, but deliberately does not own Mission/Branch status.
@@ -304,6 +317,7 @@ export interface ExecutionForkEvidenceJournalV1 {
 export class FileExecutionForkEvidenceJournal implements ExecutionForkEvidenceJournalV1 {
   readonly #directory: string;
   readonly #queues = new Map<string, Promise<void>>();
+  readonly #tails = new Map<string, ExecutionForkJournalTail>();
 
   constructor(directory: string) {
     if (!isAbsolute(directory)) {
@@ -363,16 +377,15 @@ export class FileExecutionForkEvidenceJournal implements ExecutionForkEvidenceJo
     if (!eventTypes.has(draft.type)) {
       throw new ExecutionForkError('FORK_EVIDENCE_CORRUPT', `Unknown event type ${draft.type}`);
     }
-    const existing = await this.load(draft.forkId);
-    const previous = existing.at(-1);
+    const tail = await this.#tailForAppend(draft.forkId);
     const core = {
       schemaVersion: EXECUTION_FORK_SCHEMA_VERSION,
       forkId: draft.forkId,
       type: draft.type,
       occurredAt: draft.occurredAt,
       payload: draft.payload,
-      sequence: existing.length + 1,
-      previousHash: previous?.eventHash ?? null,
+      sequence: tail.sequence + 1,
+      previousHash: tail.eventHash,
     } as const;
     const eventHash = digest(core);
     const event: ExecutionForkEventV1 = {
@@ -388,12 +401,81 @@ export class FileExecutionForkEvidenceJournal implements ExecutionForkEvidenceJo
     } finally {
       await handle.close();
     }
+    const fileState = await this.#fileState(draft.forkId);
+    if (fileState === null) {
+      throw new ExecutionForkError(
+        'FORK_EVIDENCE_CORRUPT',
+        `Execution Fork journal ${draft.forkId} disappeared after append`,
+      );
+    }
+    this.#tails.set(draft.forkId, {
+      sequence: event.sequence,
+      eventHash: event.eventHash,
+      fileState,
+    });
     return event;
+  }
+
+  async #tailForAppend(forkId: string): Promise<ExecutionForkJournalTail> {
+    const cached = this.#tails.get(forkId);
+    if (cached !== undefined) {
+      const current = await this.#fileState(forkId);
+      if (!sameFileState(current, cached.fileState)) {
+        this.#tails.delete(forkId);
+        throw new ExecutionForkError(
+          'FORK_EVIDENCE_CORRUPT',
+          `Execution Fork journal ${forkId} changed outside its append writer`,
+        );
+      }
+      return cached;
+    }
+    const existing = await this.load(forkId);
+    const tail: ExecutionForkJournalTail = {
+      sequence: existing.length,
+      eventHash: existing.at(-1)?.eventHash ?? null,
+      fileState: await this.#fileState(forkId),
+    };
+    this.#tails.set(forkId, tail);
+    return tail;
+  }
+
+  async #fileState(forkId: string): Promise<ExecutionForkJournalFileState | null> {
+    try {
+      const state = await lstat(this.#pathFor(forkId));
+      if (!state.isFile()) {
+        throw new ExecutionForkError(
+          'FORK_EVIDENCE_CORRUPT',
+          `Execution Fork journal ${forkId} is not a regular file`,
+        );
+      }
+      return {
+        device: state.dev,
+        inode: state.ino,
+        size: state.size,
+        modifiedAtMs: state.mtimeMs,
+      };
+    } catch (error) {
+      if (isNodeError(error) && error.code === 'ENOENT') return null;
+      throw error;
+    }
   }
 
   #pathFor(forkId: string): string {
     return join(this.#directory, `${forkId}.jsonl`);
   }
+}
+
+function sameFileState(
+  left: ExecutionForkJournalFileState | null,
+  right: ExecutionForkJournalFileState | null,
+): boolean {
+  if (left === null || right === null) return left === right;
+  return (
+    left.device === right.device &&
+    left.inode === right.inode &&
+    left.size === right.size &&
+    left.modifiedAtMs === right.modifiedAtMs
+  );
 }
 
 export type ExecutionForkPhaseV1 =

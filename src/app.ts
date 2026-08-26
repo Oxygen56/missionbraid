@@ -689,6 +689,25 @@ export async function startMissionBraidApp(
       });
       return;
     }
+    const toolGateMissionId = matchToolGateCollection(url.pathname);
+    if (toolGateMissionId !== undefined && request.method === 'GET') {
+      const engine = engineFactory(stateDir);
+      try {
+        if (engine.pendingToolGates === undefined) {
+          throw new AppHttpError(
+            501,
+            'TOOL_GATE_UNAVAILABLE',
+            'Tool Gate inspection is unavailable.',
+          );
+        }
+        sendJson(response, 200, {
+          toolGates: await engine.pendingToolGates(toolGateMissionId),
+        });
+      } finally {
+        engine.close();
+      }
+      return;
+    }
     const toolGateDecision = matchToolGateDecision(url.pathname);
     if (toolGateDecision !== undefined && request.method === 'POST') {
       const engine = engineFactory(stateDir);
@@ -1547,6 +1566,11 @@ function matchToolGateDecision(
     attemptId: decodeURIComponent(match[2]),
     gateId: match[3],
   };
+}
+
+function matchToolGateCollection(pathname: string): string | undefined {
+  const match = pathname.match(/^\/api\/v1\/missions\/([^/]+)\/tool-gates$/);
+  return match?.[1] === undefined ? undefined : decodeURIComponent(match[1]);
 }
 
 function matchExternalEffectAction(
