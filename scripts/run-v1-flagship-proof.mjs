@@ -307,7 +307,7 @@ try {
   if (
     checkpoint?.workspace?.state !== 'restorable-artifact' ||
     checkpoint.workspace.workspaceDigest !== sealed.workspaceDigest ||
-    !checkpoint.effects?.some(
+    !checkpoint.externalEffectFrontier?.some(
       (effect) => effect.effectId === effectId && effect.status === 'confirmed',
     )
   ) {
