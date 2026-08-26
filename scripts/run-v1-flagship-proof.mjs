@@ -2,7 +2,7 @@
 
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
-import { createServer } from 'node:http';
+import { createServer, request as httpRequest } from 'node:http';
 import {
   chmodSync,
   copyFileSync,
@@ -350,6 +350,7 @@ try {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ checkpointId: checkpoint.checkpointId, intervention }),
+      signal: AbortSignal.timeout(40 * 60_000),
     },
     201,
   );
@@ -1463,9 +1464,37 @@ function run(command, args, cwd = repositoryRoot) {
   return result;
 }
 
-async function requestJson(url, options, expectedStatus = 200) {
-  const response = await fetch(url, options);
-  const text = await response.text();
+async function requestJson(url, options = {}, expectedStatus = 200) {
+  const target = new URL(url);
+  if (target.protocol !== 'http:') {
+    throw new Error(`Local flagship client only supports HTTP URLs: ${url}`);
+  }
+  const response = await new Promise((resolveResponse, rejectResponse) => {
+    const request = httpRequest(
+      target,
+      {
+        method: options.method ?? 'GET',
+        headers: options.headers,
+        signal: options.signal,
+      },
+      (incoming) => {
+        const chunks = [];
+        incoming.on('data', (chunk) => {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        });
+        incoming.on('error', rejectResponse);
+        incoming.on('end', () => {
+          resolveResponse({
+            status: incoming.statusCode ?? 0,
+            text: Buffer.concat(chunks).toString('utf8'),
+          });
+        });
+      },
+    );
+    request.on('error', rejectResponse);
+    request.end(options.body);
+  });
+  const text = response.text;
   let body;
   try {
     body = JSON.parse(text);
