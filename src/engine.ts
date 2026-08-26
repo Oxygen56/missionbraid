@@ -125,7 +125,10 @@ import {
   type ExecutionForkRecordV1,
   type RuntimeContinuationPortV1,
 } from './execution-fork.js';
-import { executionForkEventToMissionEvents } from './mission-execution-fork.js';
+import {
+  advanceMissionExecutionForkBridge,
+  type MissionExecutionForkBridgeStateV1,
+} from './mission-execution-fork.js';
 import {
   NativeAdapterRuntimeContinuationPort,
   executionForkProfileAuthorityChange,
@@ -2523,7 +2526,7 @@ export class MissionEngine {
       let forkToolGatewayError: unknown;
       let forkToolGatewayWatcher: Promise<void> | undefined;
       const forkToolGatewayController = new AbortController();
-      const executionForkMissionHistory = [...this.#store.listEvents(missionId)];
+      let executionForkBridgeState: MissionExecutionForkBridgeStateV1 | undefined;
       const mirroredJournal: ExecutionForkEvidenceJournalV1 = {
         append: async (draft: ExecutionForkEventDraftV1): Promise<ExecutionForkEventV1> => {
           const sourceEvent = await fileJournal.append(draft);
@@ -2543,13 +2546,13 @@ export class MissionEngine {
             boundAt: bindingBoundAt,
             runtimeBinding: runtimeBinding(childAttemptId, targetProfile),
           };
-          const kernelEvents = [
-            ...executionForkEventToMissionEvents(
-              sourceEvent,
-              { missionId, childAttemptId, binding, occurredAt: sourceEvent.occurredAt },
-              executionForkMissionHistory,
-            ),
-          ];
+          const bridged = advanceMissionExecutionForkBridge(executionForkBridgeState, sourceEvent, {
+            missionId,
+            childAttemptId,
+            binding,
+            occurredAt: sourceEvent.occurredAt,
+          });
+          const kernelEvents = [...bridged.events];
           if (sourceEvent.type === 'fork.planned') {
             kernelEvents.push({
               schemaVersion: DOMAIN_SCHEMA_VERSION,
@@ -2573,8 +2576,8 @@ export class MissionEngine {
               },
             });
           }
-          const appended = this.#store.appendEvents(kernelEvents, fence);
-          executionForkMissionHistory.push(...appended.map((result) => result.event));
+          this.#store.appendEvents(kernelEvents, fence);
+          executionForkBridgeState = bridged.state;
           if (sourceEvent.type === 'fork.planned' && stage.breakpoint === 'mutable-tools') {
             try {
               if (forkToolGateway !== undefined || forkToolGateBinding !== undefined) {

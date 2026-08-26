@@ -28,8 +28,10 @@ import {
 } from './execution-fork.js';
 import {
   MissionExecutionForkBridgeError,
+  advanceMissionExecutionForkBridge,
   executionForkEventToMissionEvents,
   rebuildExecutionForkBridgeStateFromMissionEvents,
+  type MissionExecutionForkBridgeStateV1,
   type MissionExecutionForkContextV1,
 } from './mission-execution-fork.js';
 import { MissionStore } from './store.js';
@@ -52,6 +54,57 @@ afterEach(() => {
 });
 
 describe('Mission Execution Fork bridge', () => {
+  it('keeps live incremental projection exactly equivalent to full-history rebuild across the lifecycle', async () => {
+    const source = await sourceLifecycle();
+    const fullHistory: EventV1[] = [];
+    let incrementalState: MissionExecutionForkBridgeStateV1 | undefined;
+
+    for (const sourceEvent of source) {
+      const context = contextFor(sourceEvent);
+      const fullHistoryBatch = executionForkEventToMissionEvents(sourceEvent, context, fullHistory);
+      const incremental = advanceMissionExecutionForkBridge(incrementalState, sourceEvent, context);
+
+      expect(incremental.events).toEqual(fullHistoryBatch);
+      fullHistory.push(...fullHistoryBatch);
+      incrementalState = incremental.state;
+      expect(incrementalState).toEqual(
+        rebuildExecutionForkBridgeStateFromMissionEvents(fullHistory, FORK_ID),
+      );
+    }
+
+    expect(
+      rebuildExecutionForkBridgeStateFromMissionEvents([...fullHistory].reverse(), FORK_ID),
+    ).toEqual(incrementalState);
+  });
+
+  it('rejects a validly hashed but illegal next live transition without advancing state', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'missionbraid-fork-illegal-next-journal-'));
+    disposableDirectories.push(directory);
+    const journal = new FileExecutionForkEvidenceJournal(directory);
+    const planned = await journal.append({
+      forkId: FORK_ID,
+      type: 'fork.planned',
+      occurredAt: timestamp(1),
+      payload: { lineage: lineage(), plan: plan() },
+    });
+    const illegalNext = await journal.append({
+      forkId: FORK_ID,
+      type: 'runtime.started',
+      occurredAt: timestamp(2),
+      payload: { runtimeRunRef: `runtime-pending:${FORK_ID}` },
+    });
+    const initial = advanceMissionExecutionForkBridge(undefined, planned, contextFor(planned));
+
+    expect(() =>
+      advanceMissionExecutionForkBridge(initial.state, illegalNext, contextFor(illegalNext)),
+    ).toThrow(/fork\.planned -> runtime\.started is invalid/);
+    expect(initial.state).toMatchObject({
+      lastSequence: 1,
+      lastTransition: 'fork.planned',
+      lastEventHash: planned.eventHash,
+    });
+  });
+
   it('atomically projects a complete Fork into Branch, Attempt, Effect, and sanitized evidence without signing a Receipt', async () => {
     const source = await sourceLifecycle();
     const fixture = createStoreFixture();
@@ -216,6 +269,18 @@ describe('Mission Execution Fork bridge', () => {
       expect(effectStatuses.at(-1)).toBe(variant === 'failed-runtime' ? 'failed' : 'executed');
       expect(fixture.store.getMission(MISSION_ID)?.receipt).toBeUndefined();
       fixture.store.close();
+
+      let incrementalState: MissionExecutionForkBridgeStateV1 | undefined;
+      for (const sourceEvent of source.slice(0, -1)) {
+        incrementalState = advanceMissionExecutionForkBridge(
+          incrementalState,
+          sourceEvent,
+          contextFor(sourceEvent),
+        ).state;
+      }
+      expect(() =>
+        advanceMissionExecutionForkBridge(incrementalState, finalEvent, contextFor(finalEvent)),
+      ).toThrow(MissionExecutionForkBridgeError);
     }
   });
 

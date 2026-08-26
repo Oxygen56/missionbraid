@@ -109,6 +109,13 @@ export interface MissionExecutionForkBridgeStateV1 {
   readonly receiptInput?: ReceiptInputIdentityV1;
 }
 
+export interface MissionExecutionForkBridgeAdvanceV1 {
+  /** Exact batch that must be appended atomically to the Mission Kernel. */
+  readonly events: readonly EventV1[];
+  /** Cache only after the batch above has been durably appended. */
+  readonly state: MissionExecutionForkBridgeStateV1;
+}
+
 export class MissionExecutionForkBridgeError extends Error {
   constructor(message: string) {
     super(message);
@@ -162,6 +169,44 @@ export function executionForkEventToMissionEvents(
     validateNextTransition(sourceEvent, priorState, bindingDigest);
   }
 
+  return projectExecutionForkEvent(sourceEvent, context, priorState, bindingDigest).events;
+}
+
+/**
+ * Incrementally bridge one newly persisted ExecutionFork event during a live
+ * append. Startup and restart must first obtain `priorState` from
+ * `rebuildExecutionForkBridgeStateFromMissionEvents`; callers then advance the
+ * returned state only after atomically appending the returned Kernel events.
+ */
+export function advanceMissionExecutionForkBridge(
+  priorState: MissionExecutionForkBridgeStateV1 | undefined,
+  sourceEvent: ExecutionForkEventV1,
+  context: MissionExecutionForkContextV1,
+): MissionExecutionForkBridgeAdvanceV1 {
+  validateContext(context);
+  validateSourceEvent(sourceEvent);
+  if (context.occurredAt !== sourceEvent.occurredAt) {
+    throw new MissionExecutionForkBridgeError(
+      'Bridge occurredAt must equal the durable ExecutionFork event time',
+    );
+  }
+
+  const bindingDigest = digest({
+    missionId: context.missionId,
+    childAttemptId: context.childAttemptId,
+    binding: context.binding,
+  });
+  if (priorState !== undefined) validateIncrementalState(priorState, context);
+  validateNextTransition(sourceEvent, priorState, bindingDigest);
+  return projectExecutionForkEvent(sourceEvent, context, priorState, bindingDigest);
+}
+
+function projectExecutionForkEvent(
+  sourceEvent: ExecutionForkEventV1,
+  context: MissionExecutionForkContextV1,
+  priorState: MissionExecutionForkBridgeStateV1 | undefined,
+  bindingDigest: string,
+): MissionExecutionForkBridgeAdvanceV1 {
   const lineage =
     sourceEvent.type === 'fork.planned'
       ? validatePlanned(sourceEvent, context)
@@ -207,9 +252,10 @@ export function executionForkEventToMissionEvents(
   };
   const observationEvidence = `event:${observationEventId}`;
 
+  let events: readonly EventV1[];
   switch (sourceEvent.type) {
     case 'fork.planned':
-      return [
+      events = [
         {
           schemaVersion: DOMAIN_SCHEMA_VERSION,
           eventId: kernelEventId(sourceEvent, bindingDigest, 'branch-created'),
@@ -253,8 +299,9 @@ export function executionForkEventToMissionEvents(
           },
         },
       ];
+      break;
     case 'worktree.create-started':
-      return [
+      events = [
         observation,
         effectStatusEvent(
           sourceEvent,
@@ -266,8 +313,9 @@ export function executionForkEventToMissionEvents(
           [observationEvidence],
         ),
       ];
+      break;
     case 'runtime.started':
-      return [
+      events = [
         observation,
         {
           schemaVersion: DOMAIN_SCHEMA_VERSION,
@@ -300,11 +348,12 @@ export function executionForkEventToMissionEvents(
           },
         },
       ];
+      break;
     case 'runtime.finished': {
       const result = normalized.runtimeResult!;
       const completed = result.status === 'completed';
       const evidenceRefs = normalizeEvidenceRefs([observationEvidence, ...normalized.evidenceRefs]);
-      return [
+      events = [
         observation,
         {
           schemaVersion: DOMAIN_SCHEMA_VERSION,
@@ -332,10 +381,11 @@ export function executionForkEventToMissionEvents(
           evidenceRefs,
         ),
       ];
+      break;
     }
     case 'receipt-input.ready':
       validateReceiptInputReady(sourceEvent, normalized.receiptInputPayload!, lineage, priorState!);
-      return [
+      events = [
         observation,
         effectStatusEvent(
           sourceEvent,
@@ -347,12 +397,38 @@ export function executionForkEventToMissionEvents(
           normalizeEvidenceRefs([observationEvidence, ...normalized.evidenceRefs]),
         ),
       ];
+      break;
     case 'worktree.created':
     case 'runtime.evidence':
     case 'fork.failed':
     case 'worktree.cleaned':
-      return [observation];
+      events = [observation];
+      break;
   }
+
+  return {
+    events,
+    state: {
+      forkId: sourceEvent.forkId,
+      lastSequence: sourceEvent.sequence,
+      lastEventHash: sourceEvent.eventHash,
+      lastTransition: sourceEvent.type,
+      bindingDigest,
+      childAttemptId: context.childAttemptId,
+      effectId,
+      lineage,
+      ...(normalized.runtimeResult === undefined
+        ? priorState?.runtimeResult === undefined
+          ? {}
+          : { runtimeResult: priorState.runtimeResult }
+        : { runtimeResult: normalized.runtimeResult }),
+      ...(normalized.receiptInput === undefined
+        ? priorState?.receiptInput === undefined
+          ? {}
+          : { receiptInput: priorState.receiptInput }
+        : { receiptInput: normalized.receiptInput }),
+    },
+  };
 }
 
 /** Rebuild bridge state only when every required Kernel companion is present. */
@@ -361,16 +437,34 @@ export function rebuildExecutionForkBridgeStateFromMissionEvents(
   forkId: string,
 ): MissionExecutionForkBridgeStateV1 | undefined {
   requireIdentifier('forkId', forkId);
-  const observations = bridgeObservations(events)
-    .filter((observation) => observation.forkId === forkId)
-    .sort((left, right) => left.sourceSequence - right.sourceSequence);
-  if (observations.length === 0) return undefined;
+  const eventsById = new Map<string, EventV1>();
+  for (const event of events) {
+    // Preserve the former Array.find semantics if malformed input repeats an id.
+    if (!eventsById.has(event.eventId)) eventsById.set(event.eventId, event);
+  }
+  const observationsBySequence = new Map<number, ExecutionForkBridgeObservationV1>();
+  for (const observation of bridgeObservations(events)) {
+    if (observation.forkId !== forkId) continue;
+    if (observationsBySequence.has(observation.sourceSequence)) {
+      throw new MissionExecutionForkBridgeError(
+        `Execution Fork ${forkId} Kernel bridge sequence or identity conflicts`,
+      );
+    }
+    observationsBySequence.set(observation.sourceSequence, observation);
+  }
+  if (observationsBySequence.size === 0) return undefined;
 
   let prior: ExecutionForkBridgeObservationV1 | undefined;
   let lineage: ForkLineageIdentityV1 | undefined;
   let runtimeResult: RuntimeResultIdentityV1 | undefined;
   let receiptInput: ReceiptInputIdentityV1 | undefined;
-  for (const observation of observations) {
+  for (let sourceSequence = 1; sourceSequence <= observationsBySequence.size; sourceSequence += 1) {
+    const observation = observationsBySequence.get(sourceSequence);
+    if (observation === undefined) {
+      throw new MissionExecutionForkBridgeError(
+        `Execution Fork ${forkId} Kernel bridge sequence or identity conflicts`,
+      );
+    }
     if (prior === undefined) {
       if (
         observation.sourceSequence !== 1 ||
@@ -410,7 +504,7 @@ export function rebuildExecutionForkBridgeStateFromMissionEvents(
       }
       assertAllowedTransition(observation.transition, prior.transition);
     }
-    assertKernelCompanions(events, observation, lineage!);
+    assertKernelCompanions(eventsById, observation, lineage!);
     if (observation.runtimeResult !== undefined) runtimeResult = observation.runtimeResult;
     if (observation.receiptInput !== undefined) {
       if (observation.receiptInput.workspaceEffectId !== observation.effectId) {
@@ -685,15 +779,36 @@ function validateNextTransition(
     return;
   }
   if (
+    event.forkId !== prior.forkId ||
     event.sequence !== prior.lastSequence + 1 ||
     event.previousHash !== prior.lastEventHash ||
-    bindingDigest !== prior.bindingDigest
+    bindingDigest !== prior.bindingDigest ||
+    prior.effectId !== executionForkWorkspaceEffectId(prior.forkId, prior.lineage.childWorkspaceKey)
   ) {
     throw new MissionExecutionForkBridgeError(
       `Execution Fork ${event.forkId} source chain or binding changed`,
     );
   }
   assertAllowedTransition(event.type, prior.lastTransition);
+}
+
+function validateIncrementalState(
+  state: MissionExecutionForkBridgeStateV1,
+  context: MissionExecutionForkContextV1,
+): void {
+  validateContextAgainstLineage(context, state.lineage);
+  if (
+    state.childAttemptId !== context.childAttemptId ||
+    state.forkId.trim().length === 0 ||
+    !Number.isSafeInteger(state.lastSequence) ||
+    state.lastSequence <= 0 ||
+    !isTransition(state.lastTransition) ||
+    state.effectId !==
+      executionForkWorkspaceEffectId(state.forkId, state.lineage.childWorkspaceKey) ||
+    (state.receiptInput !== undefined && state.receiptInput.workspaceEffectId !== state.effectId)
+  ) {
+    throw new MissionExecutionForkBridgeError('Incremental Execution Fork bridge state is invalid');
+  }
 }
 
 function assertAllowedTransition(
@@ -726,15 +841,13 @@ function assertAllowedTransition(
 }
 
 function assertKernelCompanions(
-  events: readonly EventV1[],
+  eventsById: ReadonlyMap<string, EventV1>,
   observation: ExecutionForkBridgeObservationV1,
   lineage: ForkLineageIdentityV1,
 ): void {
   const source = sourceIdentityFromObservation(observation);
   const find = (role: KernelRole): EventV1 | undefined =>
-    events.find(
-      (event) => event.eventId === kernelEventId(source, observation.bindingDigest, role),
-    );
+    eventsById.get(kernelEventId(source, observation.bindingDigest, role));
   const requireType = <Type extends EventV1['type']>(role: KernelRole, type: Type): EventV1 => {
     const event = find(role);
     if (event?.type !== type) {
