@@ -19,7 +19,7 @@ import { planExecution, type ExecutionPlannerInputV1 } from './execution-planner
 import type { QueryableEffectTarget } from './external-effect.js';
 import { createMissionSpecSnapshot, loadMissionSpec } from './spec.js';
 import { hashPayload, MissionStore } from './store.js';
-import { snapshotGitWorkspace } from './workspace.js';
+import { createStageWorkspaceDelta, snapshotGitWorkspace } from './workspace.js';
 
 const roots: string[] = [];
 
@@ -808,6 +808,211 @@ process.stdin.on('end', () => {
       });
     } finally {
       reopened.close();
+    }
+  });
+
+  it('binds a live Fork Runtime and deterministic verifier to the accepted Plan Contract revision without tracking controller state', async () => {
+    const fixture = await createFixture('claude');
+    const revisedObjective =
+      'Preserve a checkpoint and prove the accepted Plan Contract revision inside the Fork.';
+    await writeFile(
+      join(fixture.workspace, 'verify.mjs'),
+      `import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+const workspace = process.env.MISSIONBRAID_TARGET_WORKSPACE;
+if (!workspace) process.exit(2);
+const read = path => readFileSync(join(workspace, path), 'utf8');
+if (read('claude.txt') !== 'claude-complete\\n') process.exit(3);
+const controlPath = join(workspace, '.missionbraid', 'contract-revision.json');
+if (!existsSync(controlPath)) process.exit(0);
+const control = JSON.parse(readFileSync(controlPath, 'utf8'));
+if (control.revisionNumber !== 2) process.exit(4);
+if (control.requirements.find(item => item.requirementId === 'objective')?.statement !== ${JSON.stringify(revisedObjective)}) process.exit(5);
+const declaration = JSON.parse(read('fork-result.txt'));
+if (JSON.stringify(declaration) !== JSON.stringify(control)) process.exit(6);
+`,
+      'utf8',
+    );
+    const missionSource = await readFile(fixture.missionFile, 'utf8');
+    const workspaceMissionSource = missionSource.replace(
+      /cwd:.*MISSION_FILE_DIR.*$/m,
+      "cwd: '${WORKSPACE}'",
+    );
+    await writeFile(
+      fixture.missionFile,
+      `${workspaceMissionSource}
+  - stageId: claude-review
+    profile:
+      harness: claude
+      model: deepseek-v4-pro
+      reasoningEffort: medium
+      permissionMode: dontAsk
+      injectionBudgetTokens: 4000
+    instruction: Review the declared Fork output.
+    onFailure: stop
+  - stageId: claude-join
+    profile:
+      harness: claude
+      model: deepseek-v4-pro
+      reasoningEffort: medium
+      permissionMode: dontAsk
+      injectionBudgetTokens: 4000
+    instruction: Consolidate the declared Fork output.
+    onFailure: stop
+plan:
+  nodes:
+    - nodeId: fork-implementation
+      kind: task
+      title: Produce the Fork declaration
+      requirementIds: [objective, constraint-1, acceptance-fixture]
+      stageId: claude-primary
+      acceptanceCriterionIds: [fixture]
+      declaredOutputKeys: [fork-result.txt]
+      requiredAuthorityScopes: [workspace]
+    - nodeId: fork-review
+      kind: task
+      title: Review the Fork declaration
+      requirementIds: [objective, constraint-1, acceptance-fixture]
+      stageId: claude-review
+      acceptanceCriterionIds: [fixture]
+      declaredOutputKeys: [fork-review.txt]
+      requiredAuthorityScopes: [workspace]
+    - nodeId: fork-join
+      kind: join
+      title: Verify the Fork declaration
+      requirementIds: [objective, constraint-1, acceptance-fixture]
+      stageId: claude-join
+      acceptanceCriterionIds: [fixture]
+      declaredOutputKeys: [fork-result.txt]
+      requiredAuthorityScopes: [workspace]
+  edges:
+    - fromNodeId: fork-implementation
+      toNodeId: fork-join
+      relation: join-input
+      evidenceRefs: [test:fork-contract-revision]
+    - fromNodeId: fork-review
+      toNodeId: fork-join
+      relation: join-input
+      evidenceRefs: [test:fork-contract-revision]
+`,
+      'utf8',
+    );
+    execFileSync('git', ['add', 'verify.mjs'], { cwd: fixture.workspace });
+    execFileSync(
+      'git',
+      [
+        '-c',
+        'user.name=MissionBraid',
+        '-c',
+        'user.email=fixture@example.invalid',
+        'commit',
+        '-qm',
+        'add contract-aware fork verifier',
+      ],
+      { cwd: fixture.workspace },
+    );
+
+    const engine = new MissionEngine({
+      stateDir: fixture.stateDir,
+      claudeAdapter: new ClaudeAdapter({ command: fixture.claude }),
+    });
+    try {
+      const created = await engine.create(fixture.missionFile, { workspace: fixture.workspace });
+      const initial = engine.missionPlan(created.missionId);
+      const revised = await engine.reviseMissionContract(created.missionId, {
+        contract: { ...initial.contractRevision.contract, objective: revisedObjective },
+        requirements: initial.contractRevision.requirements.map((requirement) =>
+          requirement.requirementId === 'objective'
+            ? { ...requirement, statement: revisedObjective }
+            : requirement,
+        ),
+        reason: 'Accept the Contract revision exercised by the live Fork.',
+        evidenceRefs: ['test:accepted-fork-contract-revision'],
+      });
+      expect(revised.contractRevision).toMatchObject({ revisionNumber: 2 });
+
+      const parent = await engine.resume(created.missionId);
+      expect(parent).toMatchObject({ status: 'succeeded', receipt: { outcome: 'verified' } });
+      execFileSync('git', ['add', 'claude.txt'], { cwd: fixture.workspace });
+      execFileSync(
+        'git',
+        [
+          '-c',
+          'user.name=MissionBraid',
+          '-c',
+          'user.email=fixture@example.invalid',
+          'commit',
+          '-qm',
+          'contract revision fork boundary',
+        ],
+        { cwd: fixture.workspace },
+      );
+      const parentAttemptId = parent.receipt?.attemptIds?.[0];
+      expect(parentAttemptId).toBeDefined();
+      const checkpoint = await engine.createCompositeCheckpoint(parent.missionId, parentAttemptId!);
+      const expectedControl = {
+        contractRevisionId: revised.contractRevision.contractRevisionId,
+        revisionNumber: revised.contractRevision.revisionNumber,
+        requirements: revised.contractRevision.requirements,
+      };
+
+      await executable(
+        fixture.claude,
+        `#!/usr/bin/env node
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+if (process.argv[2] === '--version') { console.log('2.1.245 (Claude Code)'); process.exit(0); }
+process.stdin.resume();
+process.stdin.on('end', () => {
+  const control = JSON.parse(readFileSync(join(process.cwd(), '.missionbraid', 'contract-revision.json'), 'utf8'));
+  writeFileSync(join(process.cwd(), 'fork-result.txt'), JSON.stringify(control) + '\\n');
+  console.log(JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'fork-contract-tool', name: 'write_file', input: { path: 'fork-result.txt' } }] } }));
+  console.log(JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'fork-contract-tool', content: 'write completed', is_error: false }] } }));
+  console.log(JSON.stringify({ type: 'result', subtype: 'success', session_id: 'fork-contract-session' }));
+});
+`,
+      );
+      const forked = await engine.executeFork(parent.missionId, {
+        checkpointId: checkpoint.checkpointId,
+        childBranchId: 'branch-contract-revision',
+        intervention: {
+          interventionId: 'intervention-contract-revision',
+          kind: 'guidance',
+          targetRef: 'stage:claude-primary',
+          beforeDigest: 'sha256:parent-contract-guidance',
+          afterDigest: 'sha256:fork-contract-guidance',
+          description: 'Read the accepted Contract revision and emit its declared output.',
+          authorityChange: 'unchanged',
+        },
+      });
+
+      expect(forked).toMatchObject({
+        record: { runtimeResult: { status: 'completed' } },
+        receipt: { outcome: 'verified', unresolvedItems: [] },
+      });
+      const childWorkspace = forked.record.lineage.isolatedWorktreePath;
+      expect(
+        JSON.parse(
+          await readFile(join(childWorkspace, '.missionbraid', 'contract-revision.json'), 'utf8'),
+        ),
+      ).toEqual(expectedControl);
+      expect(JSON.parse(await readFile(join(childWorkspace, 'fork-result.txt'), 'utf8'))).toEqual(
+        expectedControl,
+      );
+      expect(
+        createStageWorkspaceDelta(
+          forked.record.baselineSnapshot!,
+          forked.record.futureSnapshot!,
+        ).changedPaths.map((change) => change.path),
+      ).toEqual(['fork-result.txt']);
+      expect(
+        forked.record.futureSnapshot?.paths.some((path) => path.path.startsWith('.missionbraid/')),
+      ).toBe(false);
+      await expect(
+        readFile(join(fixture.workspace, 'fork-result.txt'), 'utf8'),
+      ).rejects.toMatchObject({ code: 'ENOENT' });
+    } finally {
+      engine.close();
     }
   });
 

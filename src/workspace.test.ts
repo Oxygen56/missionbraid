@@ -61,6 +61,32 @@ describe('Git workspace evidence', () => {
     expect(JSON.stringify({ before, after, delta })).not.toContain(secretText);
   });
 
+  it('excludes untracked MissionBraid runtime state without hiding tracked workspace files', () => {
+    const workspace = createRepository();
+    mkdirSync(join(workspace, '.missionbraid'), { recursive: true });
+    writeFileSync(join(workspace, '.missionbraid', 'runtime.json'), '{}\n');
+
+    const runtimeOnly = snapshotGitWorkspace(workspace);
+    expect(runtimeOnly.status.map((entry) => entry.path)).not.toContain(
+      '.missionbraid/runtime.json',
+    );
+    expect(runtimeOnly.paths.map((entry) => entry.path)).not.toContain(
+      '.missionbraid/runtime.json',
+    );
+
+    execFileSync('git', ['add', '-f', '.missionbraid/runtime.json'], { cwd: workspace });
+    execFileSync('git', ['commit', '-qm', 'track explicit workspace file'], { cwd: workspace });
+    writeFileSync(join(workspace, '.missionbraid', 'runtime.json'), '{"changed":true}\n');
+
+    const tracked = snapshotGitWorkspace(workspace);
+    expect(tracked.status).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: ' M', path: '.missionbraid/runtime.json' }),
+      ]),
+    );
+    expect(tracked.paths.map((entry) => entry.path)).toContain('.missionbraid/runtime.json');
+  });
+
   it('requires the explicit Git worktree root rather than an enclosing worktree subdirectory', () => {
     const workspace = createRepository();
     expect(() => snapshotGitWorkspace(join(workspace, 'src'))).toThrow(WorkspaceSnapshotError);

@@ -2419,6 +2419,8 @@ export class MissionEngine {
         'Execution Fork Checkpoint is bound to another Mission state',
       );
     }
+    const forkContractRevision =
+      spec.plan === undefined ? undefined : this.missionPlan(missionId).contractRevision;
 
     const created = events.find(
       (event): event is Extract<StoredEventV1, { type: 'mission.created' }> =>
@@ -2637,6 +2639,23 @@ export class MissionEngine {
       const service = new ExecutionForkService({ journal: mirroredJournal, now: this.#now });
       const runtime: RuntimeContinuationPortV1 = {
         continueFromCheckpoint: async (input) => {
+          if (forkContractRevision !== undefined) {
+            const controlDirectory = join(input.workspacePath, '.missionbraid');
+            await mkdir(controlDirectory, { recursive: true });
+            await writeFile(
+              join(controlDirectory, 'contract-revision.json'),
+              `${JSON.stringify(
+                {
+                  contractRevisionId: forkContractRevision.contractRevisionId,
+                  revisionNumber: forkContractRevision.revisionNumber,
+                  requirements: forkContractRevision.requirements,
+                },
+                null,
+                2,
+              )}\n`,
+              { encoding: 'utf8', mode: 0o600 },
+            );
+          }
           if (forkToolGatewayError !== undefined) {
             throw new MissionExecutionError(
               'Execution Fork native Tool Gateway could not be armed',

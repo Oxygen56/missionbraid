@@ -70,10 +70,15 @@ export function snapshotGitWorkspace(
   const head = headResult.ok ? headResult.stdout.toString('utf8').trim() : null;
   const status = parsePorcelainStatus(
     runGit(root, ['status', '--porcelain=v1', '-z', '--untracked-files=all']).stdout,
-  ).sort(compareStatusEntries);
+  )
+    .filter((entry) => entry.code !== '??' || !isMissionBraidRuntimePath(entry.path))
+    .sort(compareStatusEntries);
+  const trackedPaths = new Set(
+    parseNullTerminatedPaths(runGit(root, ['ls-files', '-z', '--cached']).stdout),
+  );
   const listedPaths = parseNullTerminatedPaths(
     runGit(root, ['ls-files', '-z', '--cached', '--others', '--exclude-standard']).stdout,
-  );
+  ).filter((path) => trackedPaths.has(path) || !isMissionBraidRuntimePath(path));
   const paths = [...new Set(listedPaths)]
     .sort((left, right) => left.localeCompare(right, 'en'))
     .map((path) => digestWorkspacePath(root, path));
@@ -238,6 +243,11 @@ function parseNullTerminatedPaths(output: Buffer): string[] {
   const tokens = output.toString('utf8').split('\0');
   if (tokens.at(-1) === '') tokens.pop();
   return tokens.map(assertRelativeWorkspacePath);
+}
+
+function isMissionBraidRuntimePath(path: string): boolean {
+  const normalized = normalize(path);
+  return normalized === '.missionbraid' || normalized.startsWith(`.missionbraid${sep}`);
 }
 
 function statusCodesByPath(entries: readonly GitStatusEntryV1[]): Map<string, string[]> {
