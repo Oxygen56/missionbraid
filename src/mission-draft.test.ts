@@ -283,6 +283,26 @@ describe('createMissionDraft', () => {
     ).toThrow(/unknown Contract requirement constraint-99/);
   });
 
+  it('accepts a fourth declared Profile for a later regression or handoff target', () => {
+    const root = mkdtempSync(join(tmpdir(), 'missionbraid-draft-four-profiles-'));
+    roots.push(root);
+    const workspace = join(root, 'workspace');
+    mkdirSync(workspace);
+
+    const draft = createMissionDraft({
+      ...validInput(workspace),
+      stages: [
+        stage('one', 'codex'),
+        stage('two', 'qoder'),
+        stage('three', 'claude'),
+        stage('regression-target', 'claude'),
+      ],
+    });
+
+    expect(draft.document.attemptPlan).toHaveLength(4);
+    expect(draft.document.attemptPlan[3]?.stageId).toBe('regression-target');
+  });
+
   it.each([
     ['relative workspace', { workspace: 'relative/workspace' }],
     ['blank objective', { objective: '   ' }],
@@ -290,12 +310,9 @@ describe('createMissionDraft', () => {
     [
       'too many stages',
       {
-        stages: [
-          stage('one', 'codex'),
-          stage('two', 'qoder'),
-          stage('three', 'claude'),
-          stage('four', 'codex'),
-        ],
+        stages: Array.from({ length: 17 }, (_, index) =>
+          stage(`stage-${String(index + 1)}`, index % 2 === 0 ? 'codex' : 'qoder'),
+        ),
       },
     ],
     ['duplicate stage ids', { stages: [stage('duplicate', 'codex'), stage('duplicate', 'qoder')] }],

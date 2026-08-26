@@ -88,6 +88,7 @@ const CLAUDE_PERMISSION_MODES = new Set([
   'dontAsk',
   'plan',
 ]);
+const MAX_RUNTIME_PROFILES = 16;
 
 export interface MissionDraftVerifierInput {
   readonly executable: string;
@@ -190,9 +191,9 @@ export function createMissionDraft(input: unknown): MissionDraftOutput {
   const context = root.context === undefined ? undefined : parseContext(root.context, workspace);
   const acceptanceCriteria = parseAcceptanceCriteria(root, workspace);
   const stageRecords = requireArray(root.stages, 'input.stages');
-  if (stageRecords.length < 1 || stageRecords.length > 3) {
+  if (stageRecords.length < 1 || stageRecords.length > MAX_RUNTIME_PROFILES) {
     throw new MissionDraftError(
-      'input.stages must contain between one and three ordered Runtime Profiles',
+      `input.stages must contain between one and ${String(MAX_RUNTIME_PROFILES)} ordered Runtime Profiles`,
     );
   }
   const parsedStages = stageRecords.map((stage, index) => parseStage(stage, index));
