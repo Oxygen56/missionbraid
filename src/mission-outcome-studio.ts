@@ -256,12 +256,7 @@ export function createMissionOutcomeStudioView(
             effectId: effect.effectId,
             required: true,
             status: effect.status,
-            resolution:
-              effect.status === 'confirmed'
-                ? 'resolved'
-                : effect.status === 'ambiguous'
-                  ? 'ambiguous'
-                  : 'blocking',
+            resolution: outcomeEffectResolution(effect.status),
             evidenceRefs: effect.evidenceRefs,
           })),
           outcomePolicyVersion: input.outcomePolicyVersion ?? 'mission-outcome-policy-v1',
@@ -292,6 +287,14 @@ export function createMissionOutcomeStudioView(
 }
 
 export const buildMissionOutcomeStudioView = createMissionOutcomeStudioView;
+
+function outcomeEffectResolution(
+  status: EffectV1['status'],
+): 'resolved' | 'blocking' | 'ambiguous' {
+  if (status === 'confirmed' || status === 'skipped' || status === 'failed') return 'resolved';
+  if (status === 'ambiguous' || status === 'conflict') return 'ambiguous';
+  return 'blocking';
+}
 
 function lineage(branch: BranchV1): readonly string[] {
   return branch.parentBranchId ? [branch.parentBranchId, branch.branchId] : [branch.branchId];

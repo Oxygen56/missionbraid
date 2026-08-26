@@ -9,6 +9,7 @@ import type {
   AttemptV1,
   BranchV1,
   ContractV1,
+  EffectV1,
   MissionV1,
   ProfileV1,
   ReceiptV1,
@@ -218,6 +219,42 @@ describe('Mission to Outcome Studio bridge', () => {
     expect(view.incidentScenario).toBeNull();
     expect(view.ciResult).toBeNull();
     expect(view.unknown).toContain('incidentScenario.expectedEvidence');
+  });
+
+  it('keeps known terminal tool failure visible without overriding a verified outcome', () => {
+    const effect = (status: EffectV1['status']): EffectV1 => ({
+      schemaVersion: 1,
+      effectId: `effect-${status}`,
+      missionId: mission.missionId,
+      attemptId: attempt.attemptId,
+      kind: 'tool.Bash',
+      resourceKey: `tool:${status}`,
+      controlLevel: 'enforced',
+      scope: 'shared_resource',
+      status,
+      evidenceRefs: [`tool-result:${status}`],
+      createdAt: now,
+    });
+
+    const terminalFailure = createMissionOutcomeStudioView({
+      ...completeInput(['verifier:c1']),
+      effects: [effect('failed')],
+    });
+    expect(terminalFailure.studioReceipt).toMatchObject({
+      completion: { verified: 'verified' },
+      effects: [{ status: 'failed', resolution: 'resolved' }],
+      unresolvedItems: [],
+    });
+
+    const inFlight = createMissionOutcomeStudioView({
+      ...completeInput(['verifier:c1']),
+      effects: [effect('dispatch_started')],
+    });
+    expect(inFlight.studioReceipt).toMatchObject({
+      completion: { verified: 'rejected' },
+      effects: [{ status: 'dispatch_started', resolution: 'blocking' }],
+      unresolvedItems: ['effect:effect-dispatch_started:blocking'],
+    });
   });
 
   it('keeps the predeclared regression scenario stable after an unrelated Kernel event', () => {
