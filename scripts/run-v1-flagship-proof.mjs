@@ -820,7 +820,7 @@ try {
       })),
       toolGateDecisions: reboundGateDecisions,
       retainedCiExitCode: retainedCi.status,
-      returnedCiExitCode: returnedCi.status,
+      blockedCiExitCode: blockedCi.status,
     },
     plan: {
       initialContractRevisionId: planBefore.contractRevision.contractRevisionId,
