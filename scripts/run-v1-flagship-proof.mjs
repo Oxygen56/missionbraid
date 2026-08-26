@@ -344,16 +344,36 @@ try {
     description: 'Refresh only the accepted Agent behavior Context on the restored frontier.',
     authorityChange: 'unchanged',
   };
-  const forkResponse = await requestJson(
-    `${app.url}/api/v1/missions/${encodeURIComponent(missionId)}/failure-intelligence/${encodeURIComponent(staleCandidate.candidateId)}/forks`,
-    {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ checkpointId: checkpoint.checkpointId, intervention }),
-      signal: AbortSignal.timeout(40 * 60_000),
-    },
-    201,
-  );
+  const diagnosticController = new AbortController();
+  const diagnosticGateApproval = approveExecutionForkGates({
+    baseUrl: app.url,
+    missionId,
+    signal: diagnosticController.signal,
+    timeoutMs: 40 * 60_000,
+  });
+  let diagnosticGateDecisions;
+  let forkResponse;
+  try {
+    const forkRequest = requestJson(
+      `${app.url}/api/v1/missions/${encodeURIComponent(missionId)}/failure-intelligence/${encodeURIComponent(staleCandidate.candidateId)}/forks`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ checkpointId: checkpoint.checkpointId, intervention }),
+        signal: diagnosticController.signal,
+      },
+      201,
+    );
+    forkResponse = await Promise.race([
+      forkRequest,
+      diagnosticGateApproval.then(() => {
+        throw new Error('Diagnostic Fork gate approver stopped before the Fork completed.');
+      }),
+    ]);
+  } finally {
+    diagnosticController.abort();
+    diagnosticGateDecisions = await diagnosticGateApproval;
+  }
   const fork = forkResponse.executionFork;
   if (fork?.phase !== 'finished' || forkResponse.receipt?.outcome !== 'verified') {
     throw new Error('The Context-only diagnostic Fork did not reach a verified Receipt.');
@@ -458,7 +478,7 @@ try {
     'declared upgraded Claude Profile-Rebound candidate',
   );
   const rerunController = new AbortController();
-  const rerunGateApproval = approveProfileReboundForkGates({
+  const rerunGateApproval = approveExecutionForkGates({
     baseUrl: app.url,
     missionId,
     signal: rerunController.signal,
@@ -744,6 +764,7 @@ try {
       preexistingUnknownCandidateId: unknownBefore?.candidateId ?? null,
       fullStatus: confirmed.status,
       ablatedStatus: downgraded.status,
+      toolGateDecisions: diagnosticGateDecisions,
       receiptId: forkResponse.receipt.receiptId,
     },
     outcomeRegression: {
@@ -947,24 +968,24 @@ async function missionSummary(baseUrl, missionId) {
   );
 }
 
-async function approveProfileReboundForkGates({ baseUrl, missionId, signal, timeoutMs }) {
+async function approveExecutionForkGates({ baseUrl, missionId, signal, timeoutMs }) {
   const deadline = Date.now() + timeoutMs;
   const handled = new Set();
   const decisions = [];
   while (!signal.aborted) {
     if (Date.now() >= deadline) {
-      throw new Error(`Profile-Rebound Tool Gate approval timed out for Mission ${missionId}.`);
+      throw new Error(`Execution Fork Tool Gate approval timed out for Mission ${missionId}.`);
     }
     const detail = await requestJson(`${baseUrl}/api/v1/missions/${encodeURIComponent(missionId)}`);
     if (signal.aborted) break;
     for (const gate of detail.toolGates ?? []) {
       if (handled.has(gate.gateId)) continue;
       if (!gate.attemptId.startsWith('fork-attempt-')) {
-        throw new Error(`Unexpected non-Fork pending Tool Gate ${gate.gateId} during rerun.`);
+        throw new Error(`Unexpected non-Fork pending Tool Gate ${gate.gateId}.`);
       }
       const originalWrite = gate.toolName === 'Write' && isOriginalWrite(gate.toolInput);
       if (originalWrite) {
-        throw new Error('A Profile-Rebound Fork attempted to repeat the original bootstrap Write.');
+        throw new Error('An Execution Fork attempted to repeat the original bootstrap Write.');
       }
       await decideGate(baseUrl, missionId, gate, 'approve');
       handled.add(gate.gateId);
