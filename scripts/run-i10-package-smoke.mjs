@@ -337,8 +337,8 @@ async function exerciseExtractedSourceTarball(packageRoot) {
   const typecheck = await run('pnpm', ['typecheck'], { cwd: packageRoot });
   const build = await run('pnpm', ['build'], { cwd: packageRoot });
   const tests = await run('pnpm', ['vitest', 'run'], { cwd: packageRoot });
-  const testSummary = tests.stdout
-    .split('\n')
+  const testSummary = stripAnsi(`${tests.stdout}\n${tests.stderr}`)
+    .split(/\r?\n/u)
     .map((line) => line.trim())
     .filter((line) => /^(?:Test Files|Tests)\s+/u.test(line));
   assert(testSummary.length >= 2, 'Extracted source Vitest output had no pass summary');
@@ -1407,6 +1407,10 @@ function waitForExit(child, timeoutMs) {
 
 function renderExit(exit) {
   return exit.signal === null ? `code ${String(exit.code)}` : `signal ${String(exit.signal)}`;
+}
+
+function stripAnsi(value) {
+  return value.replace(/\u001B\[[0-?]*[ -/]*[@-~]/gu, '');
 }
 
 function assert(condition, message) {
