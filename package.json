@@ -109,6 +109,7 @@
     "evidence/iteration-8-multi-agent-revision-local-2026-08-26.json",
     "evidence/iteration-9-outcome-ci-result.json",
     "evidence/iteration-9-outcome-regression-local-2026-08-26.json",
+    "evidence/v1-flagship-local-2026-08-26.json",
     "evidence/kandev-v0.91.0-provider-check-local-2026-08-24.json",
     "evidence/unified-workbench-codex-qoder-local-2026-08-24.json",
     "examples/minimal-adapter.ts",

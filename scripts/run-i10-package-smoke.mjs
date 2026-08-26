@@ -296,6 +296,7 @@ function assertRequiredPackagePaths(paths) {
     'docs/architecture.md',
     'docs/roadmap.md',
     'docs/source-candidate-1.0.md',
+    'evidence/v1-flagship-local-2026-08-26.json',
     'examples/minimal-adapter.ts',
     'README.md',
     'README.zh-CN.md',

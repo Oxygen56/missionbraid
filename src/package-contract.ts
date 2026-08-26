@@ -38,6 +38,7 @@ export const MISSIONBRAID_PACKAGE_CONTRACT_V1 = {
     'scripts',
     'docs',
     'evidence/README.md',
+    'evidence/v1-flagship-local-2026-08-26.json',
     'examples/minimal-adapter.ts',
     'examples/acp-adapter',
     'examples/process-provider-adapter',
