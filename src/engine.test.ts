@@ -1625,6 +1625,7 @@ process.stdin.on('data', chunk => { prompt += chunk; });
 process.stdin.on('end', () => {
   const checkpoint = join(process.cwd(), 'codex.txt');
   if (${JSON.stringify(mode)} === 'planner-credit') {
+    if (!prompt.startsWith('MISSIONBRAID_HANDOFF_V1\\n')) process.exit(88);
     const ack = prompt.match(/^MISSIONBRAID_ACK (.+)$/m)?.[0];
     if (ack) console.log(JSON.stringify({ type: 'assistant', text: ack }));
     console.log(JSON.stringify({ type: 'tool_call', name: 'write_file', id: 'tool-codex-target' }));

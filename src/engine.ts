@@ -8858,11 +8858,14 @@ function createAttemptPrompt(
     .join('\n');
   const constraints = spec.constraints.map((constraint) => `- ${constraint}`).join('\n');
   return [
+    // A cooperative Handoff acknowledgement is a protocol precondition, so it
+    // must precede the task body instead of competing with Mission details for
+    // the Runtime's first action.
+    capsuleText === undefined ? '' : capsuleText,
     `MissionBraid Mission ${contract.contractId}`,
     `Objective: ${contract.objective}`,
     constraints.length === 0 ? 'Constraints: none declared' : `Constraints:\n${constraints}`,
     `Original acceptance criteria:\n${criteria}`,
-    capsuleText === undefined ? '' : capsuleText,
     contextText === undefined ? '' : contextText,
     `Current stage (${stage.stageId}): ${stage.instruction}`,
     'Stay inside the provided workspace. Obey its AGENTS.md. Do not push, publish, deploy, install dependencies, access the network, or modify tests unless the Mission explicitly requires it.',
