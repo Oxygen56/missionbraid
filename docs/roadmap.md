@@ -9,7 +9,8 @@
 > Qoder/Qwen3.8-Max and Claude Code/deepseek-v4-pro executions through the
 > Workbench HTTP flow. The 1.0 source candidate contains implementation surfaces
 > for all ten planned iterations. Iteration 9 has retained same-host evidence for
-> a real Qoder upgraded-Profile 3/3 regression plus a fail-closed checker running
+> a real Qoder 3/3 rerun with the accepted Context intervention on a distinct
+> Planner-selected high-reasoning Profile, plus a fail-closed checker running
 > from outside the repository. Iteration 10 has an internal clean-install record
 > and a lockfile-bearing source bundle that passes frozen install, typecheck,
 > build, and full tests. Independent third-party reproduction, cross-host, npm
@@ -69,7 +70,7 @@ engineering outputs but cannot complete an iteration by themselves.
 | 6. Adaptive planning and cross-Harness handoff  | Profiles are selected explainably and Handoff occurs only when a Runtime change is needed | Validated locally; controlled interruption                   |
 | 7. Failure intelligence and diagnostic Branches | Evidence and single-variable probes distinguish likely failure layers                     | Same-host stale-Context proof; broader gate open             |
 | 8. Multi-agent Mission Graph and live revisions | Parallel Agents stay attached to one changing Mission and stale work is invalidated       | Same-host real-Runtime proof; controlled fixture             |
-| 9. Outcome, Eval, and Incident Studio           | Agent Revisions are compared, saved as regressions, and optionally exported to CI         | Real Qoder upgraded-Profile 3/3; outside-repo checker        |
+| 9. Outcome, Eval, and Incident Studio           | Agent Revisions are compared, saved as regressions, and optionally exported to CI         | 3/3 after Context intervention on a distinct Profile         |
 | 10. Open Runtime Workbench 1.0                  | External developers install, extend, and reproduce the complete workflow                  | Internal clean-install/source bundle; independent proof open |
 
 ## Iteration 1 — Mission continuity foundation

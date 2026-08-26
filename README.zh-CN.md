@@ -52,7 +52,7 @@ Runtime 共享一条持久 Mission 与一套开发闭环：
 | 产品         | 用一个 Workbench 绑定有效 Agent Revision、运行持久 Mission、实时检查上下文和工具、修改受支持的输入、从有价值的边界重跑、对比行为并验收结果。                                                                                                                                                                                |
 | 核心抽象     | **Mission** 持有目标、执行 Branch、证据、Effect 和完成状态；Harness 只是可替换的 Runtime。                                                                                                                                                                                                                                  |
 | 当前已经实现 | 规划的十次迭代已全部进入 1.0 source candidate：双语 Workbench、Mission Kernel、直接与公开外部 Adapter、Runtime Profile、实时 Event IR/Context Graph、工具与 Effect 控制、Checkpoint/Replay/Fork、自适应 Handoff、stale Context 诊断、Mission Plan、Outcome Studio、Verifier、Receipt，以及 clean-install package/迁移路径。 |
-| 证据边界     | I8 有真实本地 Qoder/Claude 的有界流程；I9 有真实 Qoder 升级 Profile 3/3 回归和仓库外失败关闭检查器；I10 有内部安装版产品流程及一个通过 frozen install 和检查的含 lockfile 源码包。npm 发布、独立第三方复现、跨主机证据与生产采用仍未建立。                                                                                  |
+| 证据边界     | I8 有真实本地 Qoder/Claude 的有界流程；I9 在接受 Context Intervention 后，于不同的 Planner-selected high-reasoning Profile 上完成真实 Qoder 3/3 重跑，并有仓库外失败关闭检查器；I10 有内部安装版产品流程及一个通过 frozen install 和检查的含 lockfile 源码包。npm 发布、独立第三方复现、跨主机证据与生产采用仍未建立。      |
 
 ## 为什么要做 MissionBraid
 
@@ -281,18 +281,18 @@ Provider 内部状态、通用多层诊断准确率、跨主机或分布式执�
 
 ## 十次产品迭代
 
-| 迭代 | 用户可见结果                                                                        | 状态                                        |
-| ---: | ----------------------------------------------------------------------------------- | ------------------------------------------- |
-|    1 | 一条 Mission 能从中断中恢复，完成 Codex → Qoder 接力，并以已验证 Receipt 结束       | 本地已实现                                  |
-|    2 | Runtime Profile 和 Native 事件通过统一 Event IR 变得可观察                          | 本地已验证                                  |
-|    3 | 开发者可以检查实时执行、上下文组装、工具流和工作区变更                              | 本地已验证                                  |
-|    4 | 一条受支持的工具调用可以在发出前停止，并在继续前修改                                | 本地已验证                                  |
-|    5 | 从保留的边界创建隔离的 Execution Fork，并提供 Playback/Cached/Counterfactual Replay | 本地已验证                                  |
-|    6 | 可复现的 Planner 选择 Profile，并只在受控中断后需要时执行 Handoff                   | 受控本地已验证                              |
-|    7 | 从可观察的 Context/工作区证据诊断一条 stale Context 故障                            | 真实 Qoder 受控证明；更广归因开放           |
-|    8 | Multi-Agent 工作成为持久 Mission Graph，并支持理解修订的协同                        | 同机真实 Runtime 受控证明                   |
-|    9 | Agent Revision 对比、Regression Scenario、Eval、Receipt 与 CI 导出                  | 真实 Qoder 升级 Profile 3/3；失败关闭检查器 |
-|   10 | 外部开发者可以安装、扩展并复现完整 Runtime Workbench                                | 内部 clean-install 与源码包已验证           |
+| 迭代 | 用户可见结果                                                                        | 状态                                                |
+| ---: | ----------------------------------------------------------------------------------- | --------------------------------------------------- |
+|    1 | 一条 Mission 能从中断中恢复，完成 Codex → Qoder 接力，并以已验证 Receipt 结束       | 本地已实现                                          |
+|    2 | Runtime Profile 和 Native 事件通过统一 Event IR 变得可观察                          | 本地已验证                                          |
+|    3 | 开发者可以检查实时执行、上下文组装、工具流和工作区变更                              | 本地已验证                                          |
+|    4 | 一条受支持的工具调用可以在发出前停止，并在继续前修改                                | 本地已验证                                          |
+|    5 | 从保留的边界创建隔离的 Execution Fork，并提供 Playback/Cached/Counterfactual Replay | 本地已验证                                          |
+|    6 | 可复现的 Planner 选择 Profile，并只在受控中断后需要时执行 Handoff                   | 受控本地已验证                                      |
+|    7 | 从可观察的 Context/工作区证据诊断一条 stale Context 故障                            | 真实 Qoder 受控证明；更广归因开放                   |
+|    8 | Multi-Agent 工作成为持久 Mission Graph，并支持理解修订的协同                        | 同机真实 Runtime 受控证明                           |
+|    9 | Agent Revision 对比、Regression Scenario、Eval、Receipt 与 CI 导出                  | 接受 Context Intervention 后于不同 Profile 重跑 3/3 |
+|   10 | 外部开发者可以安装、扩展并复现完整 Runtime Workbench                                | 内部 clean-install 与源码包已验证                   |
 
 十次迭代现已全部进入 1.0 source-candidate 实现层，但证据等级仍然明确分开。I8 有同机
 真实 Runtime 流程；I9 有同机真实 Qoder 回归与仓库外检查器；I10 有内部 clean-install

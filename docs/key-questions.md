@@ -8,8 +8,9 @@
 > record using real local Qoder/Qwen3.8-Max and Claude Code/deepseek-v4-pro
 > through Workbench HTTP. The 1.0 source candidate contains implementation
 > surfaces for all ten planned iterations. Iteration 9 has a retained same-host
-> real-Qoder 3/3 upgraded-Profile regression plus an outside-repository
-> fail-closed checker; Iteration 10 has one internal clean-install, store
+> real-Qoder 3/3 rerun with the accepted Context intervention on a distinct
+> Planner-selected high-reasoning Profile plus an outside-repository fail-closed
+> checker; Iteration 10 has one internal clean-install, store
 > migration, and lockfile-bearing source-bundle record. npm publication,
 > independent external reproduction, cross-host proof, and production evidence
 > remain open.

@@ -412,7 +412,8 @@ every hidden or unobserved input was equal. Its Context refresh applies only to
 that diagnostic Attempt; multi-layer attribution and diagnosis accuracy remain
 open. Iteration 8 now has an executable local path and a retained same-host
 controlled-Git-fixture real-Runtime record. Iteration 9 has a retained
-same-host real-Qoder 3/3 upgraded-Profile regression and an outside-repository
+same-host real-Qoder 3/3 rerun with the accepted Context intervention on a
+distinct Planner-selected high-reasoning Profile and an outside-repository
 fail-closed checker. Iteration 10 has one internal clean-install, migration, and
 lockfile-bearing source-bundle record rather than a registry, cross-host, or
 independent external result.
