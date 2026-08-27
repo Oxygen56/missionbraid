@@ -1,16 +1,16 @@
 {
   "schemaVersion": "missionbraid.dev/package-smoke/v1",
-  "generatedAt": "2026-08-26T14:30:08.254Z",
+  "generatedAt": "2026-08-27T03:04:01.287Z",
   "evidenceLevel": "internal-clean-install",
   "package": {
     "name": "missionbraid",
     "version": "1.0.0",
-    "tarballSha256": "a67511fb7555725a958d110378ef7fac21ae3212585eac30e32815c848559691",
-    "packedFileCount": 415,
+    "tarballSha256": "772c3ac218a75643529a67120071e58f40c811b59b011b81912b7607c98ca215",
+    "packedFileCount": 417,
     "sidecarAbsentFromPackage": true,
     "markdownLocalLinks": {
-      "markdownFileCount": 37,
-      "checkedLocalLinkCount": 214,
+      "markdownFileCount": 39,
+      "checkedLocalLinkCount": 312,
       "unresolvedLocalLinkCount": 0
     },
     "sourceCandidateBundle": {
@@ -18,12 +18,12 @@
       "filename": "missionbraid-1.0.0-source-candidate.tgz",
       "constructionMethod": "Extract the untouched npm-pack tarball, inject the exact repository pnpm-lock.yaml at package root, sort paths, normalize tar metadata, and gzip with a zero timestamp and normalized OS byte.",
       "standardTarball": "missionbraid-1.0.0.tgz",
-      "bundleSha256": "bfc4ce76657105cbc54db457337ba1be4178d2b68aa2451918020175239d0e1b",
+      "bundleSha256": "5213bce2cb5abb01629b9b8166d40e837bf9616b72e810debc85eaa5a7d24cf6",
       "lockfileSha256": "4f51931f6e6479f3828e8daf8b5fa06f038c5638d485492e987af34de0b98a59",
       "deterministicRebuildVerified": true,
       "rebuildHashes": [
-        "bfc4ce76657105cbc54db457337ba1be4178d2b68aa2451918020175239d0e1b",
-        "bfc4ce76657105cbc54db457337ba1be4178d2b68aa2451918020175239d0e1b"
+        "5213bce2cb5abb01629b9b8166d40e837bf9616b72e810debc85eaa5a7d24cf6",
+        "5213bce2cb5abb01629b9b8166d40e837bf9616b72e810debc85eaa5a7d24cf6"
       ],
       "artifactRetention": "not-retained; reproducible from the public standard tarball and lockfile",
       "reproduction": {
@@ -32,7 +32,7 @@
           "command": "pnpm install --frozen-lockfile",
           "exitCode": 0,
           "lockfile": "pnpm-lock.yaml",
-          "summary": "Done in 542ms using pnpm v11.18.0"
+          "summary": "Done in 544ms using pnpm v11.18.0"
         },
         "typecheck": {
           "command": "pnpm typecheck",
@@ -103,22 +103,22 @@
     "conformancePassed": true,
     "sourceImportsOnlyInstalledPackage": true,
     "cliMission": {
-      "missionId": "mission-00be2a20-de25-45dd-b422-e79ee230aca3",
+      "missionId": "mission-b431aea1-e057-4f28-8668-12fa17ac93b4",
       "status": "succeeded",
       "receiptOutcome": "verified",
       "identityChain": {
         "adapterEcho": {
           "adapterId": "consumer.clean-write-file",
-          "profileId": "profile-snapshot-52ccc00d0b34c4ec1dcb2671c08e",
-          "attemptId": "attempt-36859226-0e29-4f02-96b3-c90eb6d0938f"
+          "profileId": "profile-snapshot-f933bbf5acdfcfc7aef6a70b396f",
+          "attemptId": "attempt-639a1b0a-722f-4b5a-97c1-72cc21069c11"
         },
         "receiptRuntimeBinding": {
           "adapterId": "consumer.clean-write-file",
           "adapterVersion": "1.0.0",
-          "attemptId": "attempt-36859226-0e29-4f02-96b3-c90eb6d0938f",
+          "attemptId": "attempt-639a1b0a-722f-4b5a-97c1-72cc21069c11",
           "harness": "consumer-harness",
           "nativeProtocol": "clean-consumer/v1",
-          "profileId": "profile-snapshot-52ccc00d0b34c4ec1dcb2671c08e",
+          "profileId": "profile-snapshot-f933bbf5acdfcfc7aef6a70b396f",
           "transport": "direct"
         },
         "equalityChecks": {
@@ -130,7 +130,7 @@
       "startedFromInstalledBin": true
     },
     "workbenchMission": {
-      "missionId": "mission-a114f952-f888-4aad-a58c-a4c33b86174c",
+      "missionId": "mission-8c1c7904-c17a-4f68-bdcc-5d182bf131f5",
       "status": "succeeded",
       "receiptIssued": true,
       "startedFromInstalledBin": true,
@@ -144,30 +144,30 @@
           "transport": "direct"
         },
         "profileDefinitionId": "profile-definition-b6d79c15dbdcf8aaef425910d9f7",
-        "profileSnapshotId": "profile-snapshot-976a0dfec4c887dde1857e971f93",
-        "attemptId": "attempt-33269e16-c52b-46e9-9fa2-b380d21a8c18",
-        "bindingId": "binding-adcdab0a-62b2-40ea-9481-573c34ae8974",
+        "profileSnapshotId": "profile-snapshot-3c32e79b46326c81a653f7d0d1a1",
+        "attemptId": "attempt-79358982-7b71-40ad-92e5-be1fdbd89381",
+        "bindingId": "binding-18376aa1-e538-4347-bedc-560e5b018083",
         "attemptRuntimeBinding": {
           "adapterId": "consumer.clean-write-file",
           "adapterVersion": "1.0.0",
-          "attemptId": "attempt-33269e16-c52b-46e9-9fa2-b380d21a8c18",
+          "attemptId": "attempt-79358982-7b71-40ad-92e5-be1fdbd89381",
           "harness": "consumer-harness",
           "nativeProtocol": "clean-consumer/v1",
-          "profileId": "profile-snapshot-976a0dfec4c887dde1857e971f93",
+          "profileId": "profile-snapshot-3c32e79b46326c81a653f7d0d1a1",
           "transport": "direct"
         },
         "adapterEcho": {
           "adapterId": "consumer.clean-write-file",
-          "profileId": "profile-snapshot-976a0dfec4c887dde1857e971f93",
-          "attemptId": "attempt-33269e16-c52b-46e9-9fa2-b380d21a8c18"
+          "profileId": "profile-snapshot-3c32e79b46326c81a653f7d0d1a1",
+          "attemptId": "attempt-79358982-7b71-40ad-92e5-be1fdbd89381"
         },
         "receiptRuntimeBinding": {
           "adapterId": "consumer.clean-write-file",
           "adapterVersion": "1.0.0",
-          "attemptId": "attempt-33269e16-c52b-46e9-9fa2-b380d21a8c18",
+          "attemptId": "attempt-79358982-7b71-40ad-92e5-be1fdbd89381",
           "harness": "consumer-harness",
           "nativeProtocol": "clean-consumer/v1",
-          "profileId": "profile-snapshot-976a0dfec4c887dde1857e971f93",
+          "profileId": "profile-snapshot-3c32e79b46326c81a653f7d0d1a1",
           "transport": "direct"
         },
         "equalityChecks": {
@@ -179,30 +179,30 @@
         }
       },
       "executionFork": {
-        "checkpointId": "checkpoint-d8a81ae89b857422efc0d25838f474bdcd0d7d674e535b3b82d946096c0acbae",
+        "checkpointId": "checkpoint-8a9d73164c1f7ad1285ff62cb3a777a3202dfdda20c134c1c0965614380f0ef4",
         "childBranchId": "branch-installed-external-adapter-fork",
         "receiptOutcome": "verified",
         "sameAdapterHarnessObserved": true,
         "identityChain": {
           "adapterEcho": {
             "adapterId": "consumer.clean-write-file",
-            "profileId": "profile-snapshot-976a0dfec4c887dde1857e971f93",
-            "attemptId": "fork-attempt-execution-fork-5cffb2031436b2f7ac67ab820de75ad5da8920a3e80bc8f8bd613b85e5a8d26c"
+            "profileId": "profile-snapshot-3c32e79b46326c81a653f7d0d1a1",
+            "attemptId": "fork-attempt-execution-fork-3cde1a24024aa4791aac5000662e0b0cd03ce91ed3b95a53354f0defe6b2ab41"
           },
           "receiptRuntimeBinding": {
             "adapterId": "consumer.clean-write-file",
             "adapterVersion": "1.0.0",
-            "attemptId": "fork-attempt-execution-fork-5cffb2031436b2f7ac67ab820de75ad5da8920a3e80bc8f8bd613b85e5a8d26c",
+            "attemptId": "fork-attempt-execution-fork-3cde1a24024aa4791aac5000662e0b0cd03ce91ed3b95a53354f0defe6b2ab41",
             "harness": "consumer-harness",
             "nativeProtocol": "clean-consumer/v1",
-            "profileId": "profile-snapshot-976a0dfec4c887dde1857e971f93",
+            "profileId": "profile-snapshot-3c32e79b46326c81a653f7d0d1a1",
             "transport": "direct"
           },
           "targetLineage": {
-            "targetProfileId": "profile-snapshot-976a0dfec4c887dde1857e971f93",
+            "targetProfileId": "profile-snapshot-3c32e79b46326c81a653f7d0d1a1",
             "runtimeBinding": {
-              "attemptId": "fork-attempt-execution-fork-5cffb2031436b2f7ac67ab820de75ad5da8920a3e80bc8f8bd613b85e5a8d26c",
-              "profileId": "profile-snapshot-976a0dfec4c887dde1857e971f93",
+              "attemptId": "fork-attempt-execution-fork-3cde1a24024aa4791aac5000662e0b0cd03ce91ed3b95a53354f0defe6b2ab41",
+              "profileId": "profile-snapshot-3c32e79b46326c81a653f7d0d1a1",
               "harness": "consumer-harness",
               "adapterId": "consumer.clean-write-file",
               "adapterVersion": "1.0.0",
