@@ -2,6 +2,10 @@
 
 **English** | [简体中文](README.zh-CN.md)
 
+[![Outcome Regression Evidence](https://github.com/Oxygen56/missionbraid/actions/workflows/outcome-regression.yml/badge.svg)](https://github.com/Oxygen56/missionbraid/actions/workflows/outcome-regression.yml)
+[![Package clean consumer](https://github.com/Oxygen56/missionbraid/actions/workflows/package-smoke.yml/badge.svg)](https://github.com/Oxygen56/missionbraid/actions/workflows/package-smoke.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
+
 **One Mission. Native Runtimes. Inspectable Agent behavior.**
 
 MissionBraid is a local-first **Agent Runtime Workbench** for developers who
@@ -20,24 +24,19 @@ routing, and CI export are supporting capabilities used when the task actually
 needs them.
 
 > **Status:** pre-alpha, local-first, and run from source. All ten planned
-> product iterations are present at the 1.0 source-candidate implementation
-> layer. The current flagship record now connects the main Agent-development
-> capabilities in one Mission and one controlled run: real Qoder/Qwen3.8-Max
-> hands off to real Claude
-> Code/deepseek-v4-pro; the developer controls a native pre-tool boundary;
-> deterministic verification exposes stale Context; a queryable external Effect
-> survives a controller crash without a second POST; a Composite Checkpoint and
-> Context-only Execution Fork confirm the mechanism; the accepted incident runs
-> three verified trials on a Planner-selected upgraded Claude Profile and a
-> standalone checker accepts the retained result with exit 0 but blocks an
-> unresolved required Effect with exit 1; then a live Mission Plan revises only
-> affected Claude work, reuses verified Qoder work, consolidates, issues the
-> latest-revision Receipt, and reconstructs the same identities after restart.
-> The record is bound to a clean worktree at revision `5aac506`. Separate
-> per-iteration records and the internal clean-install/package record remain
-> available. Package-registry publication, independent third-party
-> reproduction, cross-host evidence, production adoption, and general
-> reliability evidence remain open.
+> product surfaces are implemented. One retained same-host controlled Mission
+> connects real Qoder/Qwen3.8-Max and Claude Code/deepseek-v4-pro through native
+> tool control, crash-safe Effect reconciliation, diagnostic Forks, three
+> Runtime regression trials, live multi-Agent Plan revision, deterministic
+> verification, Receipt, and restart recovery. The record is bound to source
+> revision `5aac506`; package-registry publication, independent reproduction,
+> cross-host evidence, production adoption, and general reliability remain open.
+
+**Start here:** [run locally](#run-the-current-workbench) ·
+[flagship case study](docs/flagship-case-study.md) ·
+[Agent engineering map](docs/engineering-capability-map.md) ·
+[architecture](docs/architecture.md) · [evidence](evidence/README.md) ·
+[Adapter SDK](docs/adapter-sdk.md) · [contributing](CONTRIBUTING.md)
 
 ![MissionBraid local Workbench overview](docs/assets/missionbraid-workbench-overview.png)
 
@@ -52,6 +51,16 @@ needs them.
 | Core abstraction  | A **Mission** owns intent, execution branches, evidence, effects, and completion. A Harness is a replaceable Runtime.                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | Implemented today | The 1.0 source candidate contains implementation surfaces for all ten planned iterations: the bilingual Workbench, Mission Kernel, direct and public external Adapters, Runtime Profiles, live Event IR/Context Graph, tool and Effect controls, Checkpoint/Replay/Fork, adaptive Handoff, stale-Context diagnosis, Mission Plan coordination, Outcome Studio, verifier, Receipts, and clean-install package/migration path.                                                                                                                  |
 | Evidence boundary | One clean-revision, same-host controlled-fixture run now connects real Qoder/Qwen3.8-Max and Claude Code/deepseek-v4-pro, native tool control, crash-reconciled external Effect, diagnostic Fork, three real regression trials, fail-closed standalone CI, live Plan revision/reuse, consolidation, Receipt, and restart under one Mission identity. Per-iteration and package records remain separate. npm publication, independent third-party reproduction, cross-host evidence, production adoption, and general reliability remain open. |
+
+### Where MissionBraid fits
+
+| Product layer         | What it primarily owns                            | MissionBraid's relationship                                                      |
+| --------------------- | ------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Native coding agent   | Reasoning, model interaction, and tool execution  | Runs unchanged behind a capability-aware Mission Adapter                         |
+| Workspace or launcher | Processes, terminals, repositories, and worktrees | Can remain a replaceable execution provider                                      |
+| Trace viewer          | Observation and search                            | MissionBraid adds intervention, lineage, external Effects, and outcome authority |
+| Agent framework       | Application-specific orchestration                | Can supply tools or workers while MissionBraid owns the development loop         |
+| **MissionBraid**      | Durable Mission truth across Runtime attempts     | Binds Agent Revision, Context, tools, Forks, Handoffs, verification, and Receipt |
 
 ## Why this exists
 
@@ -396,20 +405,26 @@ See the [detailed roadmap](docs/roadmap.md) and
 
 ## Run the current Workbench
 
-Requirements: Node.js 24–26, pnpm, Git, and either an authenticated built-in
-Runtime or a startup-loaded external Adapter. The documented native
-Codex→Qoder path requires both `codex` and `qodercli`.
-
 MissionBraid can be built as a locally installable npm tarball, but it has not
 been published to a package registry or tagged as a release. The public v1
 Adapter surface and clean-install check are documented in the
 [1.0 source-candidate release and reproduction guide](docs/source-candidate-1.0.md)
 and [Adapter SDK guide](docs/adapter-sdk.md).
 
+To verify the source package and public Adapter path without a native Runtime
+account:
+
 ```sh
 pnpm install --frozen-lockfile
-pnpm build
 pnpm test:package
+```
+
+To open the interactive Workbench, use Node.js 24–26, pnpm, Git, and either an
+authenticated built-in Runtime or a startup-loaded external Adapter. The
+documented native Codex→Qoder path requires both `codex` and `qodercli`.
+
+```sh
+pnpm build
 node dist/src/cli.js runtimes list --json
 
 MISSIONBRAID_DEMO_ROOT="$(mktemp -d)"
@@ -610,11 +625,14 @@ publication or independent external reproduction.
 ## Documentation
 
 - [1.0 source-candidate release and reproduction guide](docs/source-candidate-1.0.md)
+- [Unified flagship case study](docs/flagship-case-study.md)
+- [Agent engineering capability map](docs/engineering-capability-map.md)
 - [Product requirements](docs/product-requirements.md)
 - [Final architecture](docs/architecture.md)
 - [Ten-iteration roadmap](docs/roadmap.md)
 - [Project tour](docs/project-tour.md)
 - [Key product decisions and technical questions](docs/key-questions.md)
+- [Adapter SDK](docs/adapter-sdk.md)
 - [Evidence and claim boundaries](evidence/README.md)
 - [Controlled reproduction](docs/reproducing-evidence.md)
 - [Contributing](CONTRIBUTING.md)

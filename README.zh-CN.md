@@ -2,6 +2,10 @@
 
 [English](README.md) | **简体中文**
 
+[![Outcome Regression Evidence](https://github.com/Oxygen56/missionbraid/actions/workflows/outcome-regression.yml/badge.svg)](https://github.com/Oxygen56/missionbraid/actions/workflows/outcome-regression.yml)
+[![Package clean consumer](https://github.com/Oxygen56/missionbraid/actions/workflows/package-smoke.yml/badge.svg)](https://github.com/Oxygen56/missionbraid/actions/workflows/package-smoke.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
+
 **一条 Mission。原生 Runtime。可解释的 Agent 行为。**
 
 MissionBraid 是一个面向原生 Coding Agent 应用开发者的本地优先 **Agent Runtime
@@ -17,17 +21,17 @@ Runtime 共享一条持久 Mission 与一套开发闭环：
 正常路径会继续使用同一个 Harness。只有任务确实需要时，才使用 Branch、Handoff、
 自适应路由或 CI 导出。
 
-> **状态：** pre-alpha、本地优先、从源码运行。规划的十次产品迭代已全部进入
-> 1.0 source-candidate 实现层。当前的统一旗舰记录已将其中主要 Agent 开发能力串在同一条 Mission
-> 与同一次受控运行中：真实 Qoder/Qwen3.8-Max Handoff 给真实 Claude
-> Code/deepseek-v4-pro；开发者控制原生工具调用前边界；确定性验证器暴露 stale
-> Context；一个可查询的外部 Effect 在控制器崩溃后没有重复 POST；Composite Checkpoint
-> 和仅刷新 Context 的 Execution Fork 确认了该机制；保存后的 Incident 在 Planner 选择的
-> 升级 Claude Profile 上完成三次已验证 trial，独立运行的检查器对保留结果以状态 0
-> 通过、对存在未解决必需 Effect 的结果以状态 1 阻断；随后 Mission Plan 只重做受影响的
-> Claude 工作、复用已验证的 Qoder 工作、整合并签发最新修订 Receipt，重启后身份不变。
-> 该记录绑定于修订 `5aac506` 的干净工作树。分迭代记录和内部 clean-install/package 记录
-> 仍保留。npm 发布、独立第三方复现、跨主机证据、生产采用与普遍可靠性仍未建立。
+> **状态：** pre-alpha、本地优先、从源码运行。规划的十项产品能力均已实现。一条保留的
+> 同机受控 Mission 已将真实 Qoder/Qwen3.8-Max 与 Claude Code/deepseek-v4-pro 串入原生
+> 工具控制、崩溃后 Effect 对账、诊断 Fork、三次 Runtime 回归、在线多 Agent Plan 修订、
+> 确定性验证、Receipt 和重启恢复。记录绑定于源码修订 `5aac506`；Package Registry 发布、
+> 独立复现、跨主机证据、生产采用与普遍可靠性仍未建立。
+
+**从这里开始：** [本地运行](#运行当前-workbench) ·
+[旗舰案例](docs/flagship-case-study.md) ·
+[Agent 工程能力图](docs/engineering-capability-map.md) ·
+[产品架构](docs/architecture.md) · [证据](evidence/README.md) ·
+[Adapter SDK](docs/adapter-sdk.md) · [参与贡献](CONTRIBUTING.md)
 
 ![MissionBraid 本地 Workbench 总览](docs/assets/missionbraid-workbench-overview.png)
 
@@ -42,6 +46,16 @@ Runtime 共享一条持久 Mission 与一套开发闭环：
 | 核心抽象     | **Mission** 持有目标、执行 Branch、证据、Effect 和完成状态；Harness 只是可替换的 Runtime。                                                                                                                                                                                                                                                              |
 | 当前已经实现 | 规划的十次迭代已全部进入 1.0 source candidate：双语 Workbench、Mission Kernel、直接与公开外部 Adapter、Runtime Profile、实时 Event IR/Context Graph、工具与 Effect 控制、Checkpoint/Replay/Fork、自适应 Handoff、stale Context 诊断、Mission Plan、Outcome Studio、Verifier、Receipt，以及 clean-install package/迁移路径。                             |
 | 证据边界     | 一次干净修订、同机受控 Fixture 运行已在同一 Mission 中连接真实 Qoder/Qwen3.8-Max 与 Claude Code/deepseek-v4-pro、原生工具控制、崩溃后对账外部 Effect、诊断 Fork、三次真实回归、失败关闭的独立 CI 检查、在线 Plan 修订/复用、整合、Receipt 和重启。分迭代与 package 记录仍独立保留。npm 发布、独立第三方复现、跨主机证据、生产采用与普遍可靠性仍未建立。 |
+
+### MissionBraid 处在产品栈的哪一层
+
+| 产品层            | 主要负责什么                           | 与 MissionBraid 的关系                                            |
+| ----------------- | -------------------------------------- | ----------------------------------------------------------------- |
+| 原生 Coding Agent | 推理、模型交互和工具执行               | 通过能力感知的 Mission Adapter 原样运行                           |
+| 工作区或启动器    | 进程、终端、仓库和 Worktree            | 可以继续作为可替换的执行基座                                      |
+| Trace 查看器      | 观察与检索                             | MissionBraid 进一步提供干预、谱系、外部 Effect 与结果权威         |
+| Agent Framework   | 具体应用编排                           | 可以提供工具或 Worker，MissionBraid 持有开发闭环                  |
+| **MissionBraid**  | 跨 Runtime Attempt 的持久 Mission 真相 | 绑定 Agent Revision、Context、工具、Fork、Handoff、验证与 Receipt |
 
 ## 为什么要做 MissionBraid
 
@@ -315,18 +329,23 @@ Session fork/resume、可移植的刷新 Context、自然 Harness 故障迁移�
 
 ## 运行当前 Workbench
 
-要求：Node.js 24–26、pnpm、Git，以及一个已认证的内置 Runtime 或启动时加载的外部 Adapter。
-文档中的原生 Codex→Qoder 路径需要 `codex` 和 `qodercli`。
-
 MissionBraid 已能构建为可本地安装的 npm 压缩包，但尚未发布到 Package Registry，也没有
 创建带 Tag 的 Release。公开的 v1 Adapter 接口与全新目录安装验证见
 [1.0 source-candidate 发布与复现指南](docs/source-candidate-1.0.md)和
 [Adapter SDK 指南](docs/adapter-sdk.md)。
 
+不登录任何原生 Runtime，也可以先验证源码包和公开 Adapter 路径：
+
 ```sh
 pnpm install --frozen-lockfile
-pnpm build
 pnpm test:package
+```
+
+打开交互式 Workbench 需要 Node.js 24–26、pnpm、Git，以及一个已认证的内置 Runtime 或
+启动时加载的外部 Adapter。文档中的原生 Codex→Qoder 路径需要 `codex` 和 `qodercli`。
+
+```sh
+pnpm build
 node dist/src/cli.js runtimes list --json
 
 MISSIONBRAID_DEMO_ROOT="$(mktemp -d)"
@@ -466,11 +485,14 @@ Qoder 升级 Profile 3/3 与仓库外失败关闭检查器；第 10 次是内部
 ## 文档
 
 - [1.0 source-candidate 发布与复现指南](docs/source-candidate-1.0.md)
+- [统一旗舰案例](docs/flagship-case-study.md)
+- [Agent 工程能力图](docs/engineering-capability-map.md)
 - [产品需求](docs/product-requirements.md)
 - [最终架构](docs/architecture.md)
 - [十次迭代路线](docs/roadmap.md)
 - [项目导览](docs/project-tour.md)
 - [产品关键决策与技术问题](docs/key-questions.md)
+- [Adapter SDK](docs/adapter-sdk.md)
 - [证据与声明边界](evidence/README.md)
 - [受控复现](docs/reproducing-evidence.md)
 - [贡献指南](CONTRIBUTING.md)

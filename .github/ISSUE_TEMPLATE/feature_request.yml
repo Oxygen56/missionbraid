@@ -1,0 +1,39 @@
+name: Feature request
+description: Propose a user-visible Agent Runtime Workbench capability
+title: '[Feature]: '
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Agent-development problem
+      description: What real workflow is difficult today? Describe the problem before the proposed mechanism.
+    validations:
+      required: true
+  - type: textarea
+    id: workflow
+    attributes:
+      label: Desired workflow
+      description: What should the developer be able to do from Mission creation to verified outcome?
+    validations:
+      required: true
+  - type: textarea
+    id: runtime_boundary
+    attributes:
+      label: Runtime and authority boundary
+      description: Which Harness, tool, workspace, or external Effect is involved, and which state remains outside MissionBraid's control?
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Verifiable outcome
+      description: What evidence would show that the capability works without relying on model self-report?
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Submission checks
+      options:
+        - label: I searched existing issues and roadmap items for this request.
+          required: true

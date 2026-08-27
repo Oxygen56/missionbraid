@@ -14,7 +14,211 @@ pnpm build
 ```
 
 Use only the included disposable fixtures. Controller state must remain outside
-the target workspace.
+the target workspace. Run source-bound proofs from a clean checkout when the
+result is intended for comparison with a retained record. The scripts can
+record a dirty tree, but that is a different evidence boundary.
+
+Every command below writes to a fresh absolute path outside the repository.
+Keep that rule when adapting the examples: it prevents a generated result from
+changing the source fingerprint it is meant to describe, and it avoids
+overwriting a retained record.
+
+## Unified v1 flagship Mission
+
+The published result is the
+[unified flagship record](../evidence/v1-flagship-local-2026-08-26.json). This is
+the primary connected product proof rather than a claim that every possible
+Mission follows the same path.
+
+The runner requires installed and authenticated `qodercli` and `claude` CLIs,
+access to Qoder `Qwen3.8-Max` and Claude Code `deepseek-v4-pro`, Git, and a
+supported local Chrome or Chromium executable. If browser discovery cannot find
+Chrome automatically, set `MISSIONBRAID_BROWSER_EXECUTABLE` to its absolute
+executable path.
+
+```sh
+command -v qodercli
+qodercli --version
+command -v claude
+claude --version
+
+MISSIONBRAID_FLAGSHIP_RESULT_ROOT="$(mktemp -d)"
+MISSIONBRAID_FLAGSHIP_OUTPUT="$MISSIONBRAID_FLAGSHIP_RESULT_ROOT/v1-flagship.json"
+test ! -e "$MISSIONBRAID_FLAGSHIP_OUTPUT"
+node scripts/run-v1-flagship-proof.mjs "$MISSIONBRAID_FLAGSHIP_OUTPUT"
+```
+
+The runner creates its own disposable Git workspace, Mission state, browser
+profile, hidden verifier, controlled Qoder process boundary, and queryable local
+HTTP Effect target. It performs a fresh build and exits nonzero as soon as a
+required invariant is absent.
+
+A successful run exits `0` and writes the declared v1 flagship schema with all
+of these connected observations:
+
+- a real Qoder Attempt reaches the declared controlled failure, a recorded
+  planner override selects the Claude stage, and the Handoff acknowledgement is
+  persisted before Claude's first observed tool request;
+- a real native Claude Write request is modified before dispatch, the Agent's
+  apparent completion is rejected by deterministic verification because the
+  bound Context is stale, and the other declared criteria pass;
+- a local external Effect is accepted once, the controller is killed, and the
+  restarted controller reconciles by lookup without a second POST;
+- a Composite Checkpoint and Context-only Execution Fork produce a verified
+  diagnostic Branch, confirm the declared stale-Context mechanism, and inherit
+  the confirmed Effect as no-repeat;
+- three fresh upgraded-Claude Profile-Rebound trials are retained, the positive
+  standalone Outcome check exits `0`, and the unresolved-Effect negative check
+  exits `1`;
+- real Qoder and Claude Plan nodes reach a parallel frontier, a prompt-only
+  Contract revision fences the stale Claude work, reuses the unaffected verified
+  Qoder Artifact, consolidates in a separate Attempt, and closes with a Receipt
+  for the latest revisions; and
+- restart preserves the Mission head, Receipt, Checkpoint, Fork, Plan, scenario,
+  rerun identities, and external Effect call count.
+
+The run is same-host local evidence for one controlled fixture. Its Qoder
+termination and failing tool probe are induced observation boundaries, not
+natural failures or a reliability benchmark. The initial Claude target comes
+from a persisted manual override request. Branch selection later in the script
+is fixture-declared `human` authority data submitted by the proof controller;
+it is not evidence of a person making a live selection. The record does not
+establish provider-internal Context capture, arbitrary Mission coverage,
+cross-host operation, independent third-party reproduction, organizational
+approval, npm publication, production adoption, or production reliability.
+
+## Iteration 8 live multi-Agent revision
+
+The published result is the
+[Iteration 8 machine-readable record](../evidence/iteration-8-multi-agent-revision-local-2026-08-26.json).
+The runner requires installed and authenticated `qodercli` and `claude` CLIs
+with access to Qoder `Qwen3.8-Max` and Claude Code `deepseek-v4-pro`.
+
+```sh
+command -v qodercli
+qodercli --version
+command -v claude
+claude --version
+
+MISSIONBRAID_I8_RESULT_ROOT="$(mktemp -d)"
+MISSIONBRAID_I8_OUTPUT="$MISSIONBRAID_I8_RESULT_ROOT/iteration-8-multi-agent-revision.json"
+test ! -e "$MISSIONBRAID_I8_OUTPUT"
+node scripts/run-i8-multi-agent-revision-proof.mjs "$MISSIONBRAID_I8_OUTPUT"
+```
+
+The script builds the current source, prepares a disposable controlled Git
+fixture, and runs the Mission through Workbench HTTP APIs. A successful run
+exits `0` and records that:
+
+- the explicit Plan was created and started through the product entry;
+- Qoder's tool Artifact verified while the original Claude prompt Attempt was
+  still active;
+- a prompt-only Contract revision invalidated the affected prompt and join
+  nodes, fenced the stale Claude Attempt from further Effects, and preserved the
+  unaffected Qoder Artifact without rerunning its node;
+- a fresh Claude Attempt completed the revised prompt work, a separate
+  consolidation Attempt preserved the source histories, all deterministic
+  verifiers passed, and the latest Contract and Plan revisions received a
+  verified Receipt with no unresolved items; and
+- Workbench restart reconstructed the same Mission head, Receipt, Plan
+  execution, and valid Kernel event chain.
+
+The Contract change and its timing are controlled by the proof runner. This is
+one same-host run with real Qoder and Claude Code processes in a disposable Git
+fixture; it is not independent reproduction, distributed or cross-host
+coordination, provider-internal state capture, a natural concurrent-edit
+incident, production adoption, or general reliability evidence.
+
+## Iteration 9 Outcome regression
+
+The published outputs are the
+[Iteration 9 regression record](../evidence/iteration-9-outcome-regression-local-2026-08-26.json)
+and its adjacent
+[Outcome CI result](../evidence/iteration-9-outcome-ci-result.json). The runner
+requires an installed and authenticated `qodercli` with access to
+`Qwen3.8-Max`; it uses medium and high reasoning Profiles declared by the
+fixture.
+
+```sh
+command -v qodercli
+qodercli --version
+
+MISSIONBRAID_I9_RESULT_ROOT="$(mktemp -d)"
+MISSIONBRAID_I9_OUTPUT="$MISSIONBRAID_I9_RESULT_ROOT/iteration-9-outcome-regression.json"
+test ! -e "$MISSIONBRAID_I9_OUTPUT"
+test ! -e "$MISSIONBRAID_I9_RESULT_ROOT/iteration-9-outcome-ci-result.json"
+node scripts/run-i9-outcome-regression-proof.mjs "$MISSIONBRAID_I9_OUTPUT"
+```
+
+Supplying the output path also writes
+`iteration-9-outcome-ci-result.json` beside it. A successful run exits `0` and
+records that:
+
+- the original real Qoder process reports success but the out-of-process
+  deterministic verifier rejects the stale-Context result;
+- a Context-only diagnostic Fork under the same Contract verifies, and Outcome
+  Studio keeps the original and revised Agent Revisions distinct;
+- the incident is saved as an executable scenario before the trials, with a
+  predeclared three-trial, 100% threshold;
+- three new Kernel-persisted Branch, Attempt, Binding, and Runtime runs use one
+  distinct Planner-selected high-reasoning Qoder Profile and all three verify;
+- the standalone checker exits `0` for the retained passed result and exits `1`
+  for both generated failed and unknown controls; and
+- restart preserves the Mission, executable incident, rerun, and CI result.
+
+The script submits a Branch-selection record whose authority field is `human`,
+but the proof controller supplies that field; the run does not observe a live
+person making the choice. The accepted Context intervention and the Runtime
+Profile both differ from the original Attempt, so the result does not establish
+Profile-only causality. It is same-host controlled-fixture evidence, not hosted
+CI, provider-internal Context capture, independent or cross-host reproduction,
+deployment approval, publication authority, production adoption, or general
+production reliability.
+
+## Iteration 10 package and external-Adapter smoke
+
+The published result is the
+[Iteration 10 package smoke record](https://github.com/Oxygen56/missionbraid/blob/main/evidence/iteration-10-package-smoke-local-2026-08-26.json).
+This runner does not require a native Codex, Qoder, or Claude account. It
+requires Node.js 24–26, pnpm, npm, Git, `tar`, a supported Chrome or Chromium
+executable, and access to the dependencies pinned by the lockfile through the
+local package store or network.
+
+```sh
+MISSIONBRAID_I10_RESULT_ROOT="$(mktemp -d)"
+MISSIONBRAID_I10_OUTPUT="$MISSIONBRAID_I10_RESULT_ROOT/iteration-10-package-smoke.json"
+test ! -e "$MISSIONBRAID_I10_OUTPUT"
+pnpm test:package -- --output "$MISSIONBRAID_I10_OUTPUT"
+```
+
+The smoke runner builds and packs the local source, checks package contents and
+local Markdown links, creates two byte-identical source-candidate bundles,
+installs the package into a fresh external-consumer directory, and exercises
+the installed CLI and Workbench. It removes its temporary working tree unless
+`--keep` is explicitly supplied.
+
+A successful run exits `0` and records that:
+
+- the package manifest contract and stable public v1 exports are usable from a
+  clean consumer;
+- direct, ACP-over-stdio, and process-provider Adapter examples pass the shipped
+  conformance suite;
+- one consumer-authored external Adapter is discovered and executes verified
+  Missions through both the installed CLI and Workbench, including an isolated
+  same-Adapter Execution Fork;
+- a schema-v1 store migrates to schema v2 without changing the retained Mission
+  event chain;
+- the extracted source-candidate bundle completes frozen install, typecheck,
+  build, and the full test suite without falling back to the repository; and
+- the installed daemon serves the Workbench and Mission APIs, then shuts down
+  cleanly with its supplied state directory initialized.
+
+This is an internal clean-install artifact run using controlled example and
+consumer-style Adapters. ACP conformance is not universal ACP interoperability,
+the process-provider example is not Kandev-backed Mission execution, and the
+record does not establish npm registry publication, current-revision source
+binding, an independent operator or Adapter implementation, cross-host
+installation, production adoption, or production readiness.
 
 ## E0 Runtime-process interruption path
 
